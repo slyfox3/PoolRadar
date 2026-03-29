@@ -110,9 +110,9 @@ button { font-family: inherit; font-size: inherit; }
 .match-toggles { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 
 /* Player group */
-.player-group { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #334155; }
-.player-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-.player-group-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.player-group { display: contents; }
+.player-group-divider { grid-column: 1 / -1; border-bottom: 1px solid #334155; margin: 6px 0; }
+.player-group-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; grid-column: 1 / -1; }
 .player-group-name { font-weight: 600; font-size: 14px; }
 .player-group-name.is-fav { color: #fbbf24; }
 .player-group-stats { font-size: 12px; color: #64748b; }
@@ -133,7 +133,7 @@ button { font-family: inherit; font-size: inherit; }
 .match-opponent { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .match-opponent.is-fav { color: #fbbf24; }
 .match-opp-rating { color: #64748b; font-size: 11px; }
-.mr-label { font-weight: 700; font-size: 12px; text-align: right; }
+.mr-label { font-weight: 700; font-size: 12px; text-align: right; font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace; padding-right: 5px; }
 .mr-s1 { font-weight: 700; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 .mr-sep { font-weight: 700; font-size: 12px; text-align: center; }
 .mr-s2 { font-weight: 700; font-size: 12px; text-align: left; font-variant-numeric: tabular-nums; }
@@ -146,17 +146,18 @@ button { font-family: inherit; font-size: inherit; }
 .player-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 16px; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; }
 
-/* Flat match table (by match#) */
-.flat-match { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid #334155; font-size: 13px; }
-.flat-match:last-child { border-bottom: none; }
-.flat-match .fm-num { color: #64748b; font-size: 11px; min-width: 28px; text-align: right; flex-shrink: 0; }
-.flat-match .fm-p1, .flat-match .fm-p2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Flat match grid (by match#) */
+.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto 16px 8px 16px auto auto; column-gap: 0; align-items: center; font-size: 13px; }
+.flat-match { display: contents; }
+.flat-match .fm-num { color: #64748b; font-size: 11px; text-align: right; padding: 5px 6px 5px 0; border-bottom: 1px solid #334155; }
+.flat-match .fm-p1, .flat-match .fm-p2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: 1px solid #334155; padding: 5px 0; }
 .flat-match .fm-p1.is-fav, .flat-match .fm-p2.is-fav { color: #fbbf24; }
-.flat-match .fm-score { font-variant-numeric: tabular-nums; min-width: 50px; text-align: center; flex-shrink: 0; }
 .flat-match .fm-winner { font-weight: 700; }
-.flat-match .fm-place { color: #64748b; font-size: 11px; min-width: 40px; text-align: right; flex-shrink: 0; }
-.flat-match .fm-add { flex-shrink: 0; }
+.flat-match .fm-add { border-bottom: 1px solid #334155; padding: 5px 0; }
 .flat-match .fm-rating { color: #64748b; font-size: 11px; }
+.flat-match .fm-p1 { padding-right: 4px; }
+.flat-match .fm-p2 { padding-left: 4px; }
+.flat-match .mr-s1, .flat-match .mr-sep, .flat-match .mr-s2 { border-bottom: 1px solid #334155; padding: 5px 0; }
 
 /* Add-fav button inline */
 .add-fav-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0 2px; font-size: 13px; }
@@ -841,6 +842,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function loadPlayerList(slug) {
     currentSlug = slug;
+    updateUrlBar(slug);
     clearDetailTimer();
     showStatus('<span class="spinner"></span> Loading player list...', 'info');
 
@@ -932,6 +934,7 @@ button { font-family: inherit; font-size: inherit; }
   function loadTournament(slug) {
     currentSlug = slug;
     currentPlayerList = null;
+    updateUrlBar(slug);
     clearDetailTimer();
     showStatus('<span class="spinner"></span> Loading matches...', 'info');
 
@@ -1104,21 +1107,20 @@ button { font-family: inherit; font-size: inherit; }
       playerOrder = playerOrder.filter(function(name) { return isPlayerFav(playerMap[name].player); });
     }
 
-    var html = '';
+    var html = '<div class="match-rows">';
     for (var pi = 0; pi < playerOrder.length; pi++) {
       var name = playerOrder[pi];
       var pd = playerMap[name];
       var isFav = isPlayerFav(pd.player);
+      if (pi > 0) html += '<div class="player-group-divider"></div>';
       html += '<div class="player-group">';
       html += '<div class="player-group-header">';
       html += playerFavBtn(pd.player);
       html += '<span class="player-group-name' + (isFav ? ' is-fav' : '') + '">' + esc(pd.player.name) + '</span>';
       if (pd.player.rating) html += '<span class="player-group-stats">(' + pd.player.rating + ')</span>';
       if (pd.player.place) html += '<span class="player-group-stats">Place: ' + esc(pd.player.place) + '</span>';
-      html += '<span class="player-group-record"><span class="record-w">W' + pd.wins + '</span>-<span class="record-l">L' + pd.losses + '</span></span>';
       html += '</div>';
 
-      html += '<div class="match-rows">';
       for (var mi = 0; mi < pd.matches.length; mi++) {
         var pm = pd.matches[mi];
         var oppFav = isPlayerFav(pm.opp);
@@ -1144,9 +1146,8 @@ button { font-family: inherit; font-size: inherit; }
         html += '</div>';
       }
       html += '</div>';
-
-      html += '</div>';
     }
+    html += '</div>';
     return html;
   }
 
@@ -1168,30 +1169,34 @@ button { font-family: inherit; font-size: inherit; }
   function renderFlatMatches(matches) {
     // Sort by match number descending (latest first)
     var sorted = matches.slice().sort(function(a, b) { return b.num - a.num; });
-    var html = '';
+    var html = '<div class="flat-matches">';
     for (var i = 0; i < sorted.length; i++) {
       var m = sorted[i];
       var p1Fav = isPlayerFav(m.p1);
       var p2Fav = isPlayerFav(m.p2);
       var p1Win = m.p1Won;
       var p2Win = m.p2Won;
+      var cls = m.status === 'COMPLETED' ? (p1Win ? 'mr-win' : 'mr-loss') : (m.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
       html += '<div class="flat-match">';
       html += '<span class="fm-num">#' + m.num + '</span>';
       html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
       html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (p1Win ? ' fm-winner' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
       if (m.status === 'COMPLETED') {
-        html += '<span class="fm-score"><span' + (p1Win ? ' style="font-weight:700"' : '') + '>' + m.s1 + '</span> - <span' + (p2Win ? ' style="font-weight:700"' : '') + '>' + m.s2 + '</span></span>';
+        html += '<span class="mr-s1 ' + cls + '"' + (p1Win ? ' style="font-weight:700"' : '') + '>' + m.s1 + '</span>';
+        html += '<span class="mr-sep ' + cls + '">-</span>';
+        html += '<span class="mr-s2 ' + cls + '"' + (p2Win ? ' style="font-weight:700"' : '') + '>' + m.s2 + '</span>';
       } else if (m.status === 'IN_PROGRESS') {
-        html += '<span class="fm-score" style="color:#60a5fa">LIVE ' + (m.s1 != null ? m.s1 + ' - ' + m.s2 : '') + '</span>';
+        html += '<span class="mr-s1 mr-live">' + (m.s1 != null ? m.s1 : '') + '</span>';
+        html += '<span class="mr-sep mr-live">' + (m.s1 != null ? '-' : '') + '</span>';
+        html += '<span class="mr-s2 mr-live">' + (m.s2 != null ? m.s2 : '') + '</span>';
       } else {
-        html += '<span class="fm-score" style="color:#64748b">&mdash;</span>';
+        html += '<span class="mr-s1 mr-none">&mdash;</span><span class="mr-sep"></span><span class="mr-s2"></span>';
       }
       html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
       html += '<span class="fm-p2' + (p2Fav ? ' is-fav' : '') + (p2Win ? ' fm-winner' : '') + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
-      var place = m.p1.place || m.p2.place || '';
-      html += '<span class="fm-place">' + esc(place) + '</span>';
       html += '</div>';
     }
+    html += '</div>';
     return html;
   }
 
@@ -1355,6 +1360,12 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   // URL params
   // =====================================================
+  function updateUrlBar(slug) {
+    var url = new URL(window.location);
+    url.searchParams.set('digitalpool', slug);
+    history.replaceState(null, '', url);
+  }
+
   function loadSmartTournament(slug) {
     // Check tournament status first, then route to match detail or player list
     gql('query($s:String!){tournaments(where:{slug:{_eq:$s}},limit:1){status}}', { s: slug })
