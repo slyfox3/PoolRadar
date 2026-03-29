@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PoolRadar</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #0f172a; color: #e2e8f0; font-size: 14px; }
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font-family: inherit; font-size: inherit; }
+
+/* Header */
+.header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
+.header h1 { margin: 0; font-size: 20px; color: #f8fafc; flex-shrink: 0; }
+.header-spacer { flex: 1; }
+.header .url-input { flex: 1; min-width: 0; max-width: 520px; padding: 7px 12px; border: 1px solid #475569; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 14px; }
+.header .url-input::placeholder { color: #64748b; }
+.header .url-input:focus { outline: none; border-color: #60a5fa; }
+.help-icon, .gh-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: none; border: none; cursor: pointer; padding: 0; color: #94a3b8; transition: color 0.15s; flex-shrink: 0; }
+.help-icon:hover { color: #f97316; }
+.gh-icon:hover { color: #f8fafc; }
+.help-icon svg, .gh-icon svg { width: 22px; height: 22px; }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-overlay.hidden { display: none; }
+.modal { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 24px 28px; max-width: 480px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.4); position: relative; }
+.modal h2 { margin: 0 0 14px 0; font-size: 17px; color: #f8fafc; }
+.modal p { margin: 8px 0; font-size: 13px; color: #94a3b8; line-height: 1.6; }
+.modal-close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 20px; color: #64748b; cursor: pointer; padding: 4px; }
+.modal-close:hover { color: #f8fafc; }
+
+/* Layout */
+.app { display: flex; height: calc(100vh - 57px); }
+.sidebar { width: 220px; min-width: 220px; background: #1e293b; border-right: 1px solid #334155; overflow-y: auto; padding: 12px; flex-shrink: 0; transition: width 0.15s, min-width 0.15s, padding 0.15s; }
+.sidebar.collapsed { width: 0; min-width: 0; padding: 0; overflow: hidden; border-right: none; }
+.sidebar-toggle { background: none; border: none; color: #64748b; cursor: pointer; font-size: 11px; padding: 4px 0; margin-bottom: 8px; display: block; width: 100%; text-align: left; }
+.sidebar-toggle:hover { color: #e2e8f0; }
+.sidebar-expand { display: none; background: #1e293b; border: none; border-right: 1px solid #334155; color: #fbbf24; cursor: pointer; padding: 8px 6px; font-size: 16px; flex-shrink: 0; }
+.sidebar-expand:hover { background: #334155; }
+.sidebar-expand.visible { display: block; }
+
+/* Date range */
+.date-pickers input[type="date"] { background: #0f172a; border: 1px solid #475569; border-radius: 4px; color: #e2e8f0; padding: 4px 8px; font-size: 12px; font-family: inherit; width: 100%; }
+.date-pickers input[type="date"]:focus { outline: none; border-color: #60a5fa; }
+.main { flex: 1; overflow-y: auto; padding: 16px; min-width: 0; }
+
+/* Sidebar */
+.sidebar h3 { margin: 0 0 8px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+.fav-section { margin-bottom: 16px; }
+.fav-item { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; font-size: 13px; color: #cbd5e1; }
+.fav-item:hover { background: #334155; }
+.fav-item.selected { background: #1e3a5f; border-left: 2px solid #fbbf24; padding-left: 4px; }
+.fav-item .fav-name { cursor: pointer; }
+.fav-item .fav-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-item .fav-nick { color: #64748b; font-size: 11px; }
+.fav-item { position: relative; }
+.fav-card { display: none; position: fixed; background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 8px 10px; font-size: 11px; color: #94a3b8; line-height: 1.6; white-space: nowrap; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none; }
+.fav-card .fc-label { color: #64748b; }
+.fav-card .fc-value { color: #cbd5e1; }
+.fav-remove { background: none; border: none; color: #64748b; cursor: pointer; padding: 0 2px; font-size: 14px; flex-shrink: 0; }
+.fav-remove:hover { color: #f87171; }
+.fav-star { color: #fbbf24; flex-shrink: 0; font-size: 12px; }
+.fav-empty { font-size: 12px; color: #475569; font-style: italic; padding: 4px 6px; }
+.add-player-row { margin-bottom: 6px; }
+.add-player-row input { width: 100%; padding: 4px 8px; border: 1px solid #475569; border-radius: 4px; background: #0f172a; color: #e2e8f0; font-size: 12px; font-family: inherit; }
+.add-player-row input:focus { outline: none; border-color: #60a5fa; }
+.add-player-status { font-size: 11px; margin-top: 3px; min-height: 14px; }
+.add-player-status.error { color: #f87171; }
+.add-player-status.success { color: #4ade80; }
+.add-player-status.loading { color: #60a5fa; }
+
+/* Mobile favorites toggle */
+.mobile-fav-toggle { display: none; padding: 10px 16px; background: #1e293b; border-bottom: 1px solid #334155; cursor: pointer; font-size: 13px; color: #94a3b8; }
+.mobile-fav-toggle:hover { background: #334155; }
+
+/* Tournament Feed */
+.feed-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+.feed-table th { background: #334155; color: #94a3b8; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; user-select: none; white-space: nowrap; }
+.feed-table th:hover { background: #475569; color: #e2e8f0; }
+.feed-table th .sort-arrow { font-size: 10px; margin-left: 3px; }
+.feed-table td { padding: 8px 10px; border-bottom: 1px solid #1e293b; font-size: 13px; cursor: pointer; }
+.feed-table tr:hover td { background: #1e293b; }
+.feed-table tr.active td { background: #1e3a5f; }
+.feed-table .fav-names { color: #fbbf24; font-size: 12px; }
+
+/* Match Detail */
+.match-detail { background: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; }
+.match-header { margin-bottom: 12px; }
+.match-title { font-size: 17px; font-weight: 700; color: #f8fafc; margin: 0 0 4px 0; }
+.match-meta { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+.match-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.match-actions .refresh-timer { font-size: 11px; color: #64748b; margin-left: auto; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 4px; border: 1px solid #475569; background: #334155; color: #cbd5e1; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.btn:hover { background: #475569; color: #f8fafc; }
+.btn-fav { border-color: #854d0e; background: #422006; color: #fbbf24; }
+.btn-fav:hover { background: #854d0e; }
+.btn-link { border: none; background: none; color: #60a5fa; padding: 4px 6px; }
+.btn-link:hover { color: #93bbfd; background: none; text-decoration: underline; }
+
+/* Toggle buttons */
+.toggle-group { display: inline-flex; border: 1px solid #475569; border-radius: 5px; overflow: hidden; }
+.toggle-btn { padding: 4px 10px; border: none; background: #1e293b; color: #94a3b8; cursor: pointer; font-size: 12px; }
+.toggle-btn.active { background: #334155; color: #fbbf24; font-weight: 600; }
+.toggle-btn:hover:not(.active) { background: #273549; }
+.match-toggles { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+
+/* Player group */
+.player-group { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #334155; }
+.player-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.player-group-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.player-group-name { font-weight: 600; font-size: 14px; }
+.player-group-name.is-fav { color: #fbbf24; }
+.player-group-stats { font-size: 12px; color: #64748b; }
+.player-group-record { font-size: 12px; font-weight: 600; }
+.record-w { color: #4ade80; }
+.record-l { color: #f87171; }
+
+/* Match rows — CSS grid so scores align across rows */
+.match-rows { display: inline-grid; grid-template-columns: 28px auto auto auto auto 16px 8px 16px; column-gap: 0; align-items: center; font-size: 13px; }
+.match-num { padding-right: 6px; }
+.match-vs-label { padding-right: 4px; }
+.match-opponent { padding-right: 6px; }
+.mr-label { padding-left: 4px; padding-right: 1px; }
+.mr-sep { padding: 0; }
+.match-row { display: contents; }
+.match-num { color: #64748b; font-size: 11px; text-align: right; padding: 3px 0; }
+.match-vs-label { color: #64748b; font-size: 11px; }
+.match-opponent { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-opponent.is-fav { color: #fbbf24; }
+.match-opp-rating { color: #64748b; font-size: 11px; }
+.mr-label { font-weight: 700; font-size: 12px; text-align: right; }
+.mr-s1 { font-weight: 700; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.mr-sep { font-weight: 700; font-size: 12px; text-align: center; }
+.mr-s2 { font-weight: 700; font-size: 12px; text-align: left; font-variant-numeric: tabular-nums; }
+.mr-win { color: #4ade80; }
+.mr-loss { color: #f87171; }
+.mr-live { color: #60a5fa; }
+.mr-none { color: #64748b; }
+
+/* Player list grid for future events */
+.player-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 16px; }
+.player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; }
+
+/* Flat match table (by match#) */
+.flat-match { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid #334155; font-size: 13px; }
+.flat-match:last-child { border-bottom: none; }
+.flat-match .fm-num { color: #64748b; font-size: 11px; min-width: 28px; text-align: right; flex-shrink: 0; }
+.flat-match .fm-p1, .flat-match .fm-p2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flat-match .fm-p1.is-fav, .flat-match .fm-p2.is-fav { color: #fbbf24; }
+.flat-match .fm-score { font-variant-numeric: tabular-nums; min-width: 50px; text-align: center; flex-shrink: 0; }
+.flat-match .fm-winner { font-weight: 700; }
+.flat-match .fm-place { color: #64748b; font-size: 11px; min-width: 40px; text-align: right; flex-shrink: 0; }
+.flat-match .fm-add { flex-shrink: 0; }
+.flat-match .fm-rating { color: #64748b; font-size: 11px; }
+
+/* Add-fav button inline */
+.add-fav-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0 2px; font-size: 13px; }
+.add-fav-btn:hover { color: #fbbf24; }
+.remove-fav-btn { background: none; border: none; color: #fbbf24; cursor: pointer; padding: 0 2px; font-size: 13px; }
+.remove-fav-btn:hover { color: #f87171; }
+
+/* Status */
+.status-msg { padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
+.status-error { background: #7f1d1d; color: #fca5a5; }
+.status-info { background: #1e3a5f; color: #93c5fd; }
+.empty-state { text-align: center; padding: 60px 20px; color: #475569; }
+.empty-state p { margin: 8px 0; }
+
+/* Loading */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #334155; border-top-color: #60a5fa; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header { flex-wrap: wrap; gap: 8px; }
+  .header h1 { font-size: 17px; }
+  .header .url-input { order: 10; flex-basis: 100%; max-width: none; }
+  .app { flex-direction: column; }
+  .sidebar { display: none; width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid #334155; max-height: 40vh; }
+  .sidebar.mobile-open { display: block; }
+  .mobile-fav-toggle { display: block; }
+  .flat-match { font-size: 12px; }
+  .flat-match .fm-place { display: none; }
+  .fav-card { left: 0; top: 100%; margin-left: 0; margin-top: 4px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>PoolRadar</h1>
+  <button class="help-icon" onclick="document.getElementById('help-modal').classList.remove('hidden')" title="Help">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  </button>
+  <a class="gh-icon" href="https://github.com/slyfox3/PoolRadar" target="_blank" title="GitHub">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+  </a>
+  <input type="text" class="url-input" id="url-input" placeholder="Paste DigitalPool tournament URL..." />
+</div>
+
+<div id="help-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal">
+    <button class="modal-close" onclick="document.getElementById('help-modal').classList.add('hidden')">&times;</button>
+    <h2>PoolRadar</h2>
+    <p>Track your favorite pool players, venues, and tournament directors across DigitalPool tournaments.</p>
+    <p><strong>Getting started:</strong> Paste a DigitalPool tournament URL in the top bar. Click any player name to add them as a favorite. Click the venue or TD buttons to save those too.</p>
+    <p><strong>Favorites feed:</strong> Once you have favorites, the tournament feed auto-populates with recent tournaments (+/- 3 days) involving your favorites.</p>
+    <p><strong>Duplicate accounts:</strong> PoolRadar automatically detects and groups duplicate DigitalPool accounts by matching Fargo ID and name slug variations.</p>
+    <p><strong>Live updates:</strong> Match detail auto-refreshes every 60 seconds for in-progress tournaments.</p>
+    <p>All data is stored in your browser. No server, no account needed.</p>
+  </div>
+</div>
+
+<div class="mobile-fav-toggle" id="mobile-fav-toggle" onclick="toggleMobileFavs()">
+  Favorites (<span id="mobile-fav-count">0</span>)
+</div>
+
+<div class="app">
+  <button class="sidebar-expand" id="sidebar-expand" onclick="toggleSidebar()" title="Show favorites">&#9733;</button>
+  <div class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()">&laquo; Hide favorites</button>
+    <div class="fav-section">
+      <h3>Players</h3>
+      <div class="add-player-row">
+        <input type="text" id="add-player-input" placeholder="Add player name..." />
+        <div id="add-player-status" class="add-player-status"></div>
+      </div>
+      <div id="fav-players"></div>
+    </div>
+    <div class="fav-section">
+      <h3>Venues</h3>
+      <div id="fav-venues"></div>
+    </div>
+    <div class="fav-section">
+      <h3>TDs</h3>
+      <div id="fav-tds"></div>
+    </div>
+    <div class="fav-section">
+      <h3>Show from</h3>
+      <div class="date-pickers">
+        <input type="date" id="date-from" onchange="setDateCustom()" />
+      </div>
+    </div>
+  </div>
+  <div class="main" id="main">
+    <div id="status"></div>
+    <div id="feed-section">
+      <table class="feed-table" id="feed-table">
+        <thead>
+          <tr>
+            <th data-col="date" onclick="sortFeed('date')">Date <span class="sort-arrow"></span></th>
+            <th data-col="name" onclick="sortFeed('name')">Tournament <span class="sort-arrow"></span></th>
+            <th data-col="venue" onclick="sortFeed('venue')">Venue <span class="sort-arrow"></span></th>
+            <th data-col="favs" onclick="sortFeed('favs')">Favorites <span class="sort-arrow"></span></th>
+          </tr>
+        </thead>
+        <tbody id="feed-body"></tbody>
+      </table>
+    </div>
+    <div id="detail-section" class="hidden"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  var GQL = 'https://api-cached.digitalpool.com/';
+
+  // =====================================================
+  // LocalStorage helpers
+  // =====================================================
+  var DEFAULT_FAVS = { players: [], venues: [], tds: [] };
+  function loadFavs() {
+    try {
+      var stored = localStorage.getItem('poolradar_favs');
+      if (!stored) return JSON.parse(JSON.stringify(DEFAULT_FAVS));
+      return JSON.parse(stored) || JSON.parse(JSON.stringify(DEFAULT_FAVS));
+    } catch(e) { return JSON.parse(JSON.stringify(DEFAULT_FAVS)); }
+  }
+  function saveFavs(f) { localStorage.setItem('poolradar_favs', JSON.stringify(f)); }
+  var favs = loadFavs();
+
+  // =====================================================
+  // GraphQL helper
+  // =====================================================
+  function gql(query, variables) {
+    return fetch(GQL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: query, variables: variables || {} }),
+    }).then(function(r) { return r.json(); });
+  }
+
+  // =====================================================
+  // Dup detection: search player/venue/TD and group dupes
+  // =====================================================
+  function findPlayerDupes(name) {
+    return gql('query($n:String!){players(where:{name:{_ilike:$n}},limit:20){id name name_slug fargo_id fargo_rating region country}}', { n: name })
+      .then(function(res) {
+        var players = (res.data && res.data.players) || [];
+        // Exact name matches = same person (fargo_id not reliable for grouping)
+        var exact = players.filter(function(p) { return p.name.toLowerCase() === name.toLowerCase(); });
+        if (exact.length === 0) exact = players;
+        var ids = exact.map(function(p) { return p.id; });
+        var slugs = exact.map(function(p) { return p.name_slug; }).filter(Boolean);
+        var region = null;
+        var country = null;
+        for (var i = 0; i < exact.length; i++) {
+          if (exact[i].region) region = exact[i].region;
+          if (exact[i].country) country = exact[i].country;
+        }
+        return { name: exact[0] ? exact[0].name : name, playerIds: ids, slugs: slugs, region: region, country: country };
+      });
+  }
+
+  function findVenueDupes(name, city, region) {
+    var where = '{name:{_ilike:"%' + name.replace(/"/g, '\\"') + '%"}}';
+    return gql('query{venues(where:' + where + ',limit:20){id name slug city region}}')
+      .then(function(res) {
+        var venues = (res.data && res.data.venues) || [];
+        // Prefer same city/region if provided
+        var filtered = venues;
+        if (city) {
+          var byCity = venues.filter(function(v) { return v.city && v.city.toLowerCase() === city.toLowerCase(); });
+          if (byCity.length > 0) filtered = byCity;
+        }
+        var ids = filtered.map(function(v) { return v.id; });
+        var slugs = filtered.map(function(v) { return v.slug; }).filter(Boolean);
+        var v0 = filtered[0] || venues[0];
+        return { name: v0 ? v0.name : name, venueIds: ids, slugs: slugs, city: v0 ? v0.city : city, region: v0 ? v0.region : region };
+      });
+  }
+
+  function findTdDupes(name) {
+    return gql('query($n:String!){users(where:{display_name:{_ilike:$n}},limit:20){id display_name slug}}', { n: name })
+      .then(function(res) {
+        var users = (res.data && res.data.users) || [];
+        var exact = users.filter(function(u) { return u.display_name.toLowerCase() === name.toLowerCase(); });
+        if (exact.length === 0) exact = users;
+        var ids = exact.map(function(u) { return u.id; });
+        var slugs = exact.map(function(u) { return u.slug; }).filter(Boolean);
+        return { name: exact[0] ? exact[0].display_name : name, userIds: ids, slugs: slugs };
+      });
+  }
+
+  // =====================================================
+  // Favorites management
+  // =====================================================
+  function isFavPlayer(playerId) {
+    for (var i = 0; i < favs.players.length; i++) {
+      if (favs.players[i].playerIds.indexOf(playerId) !== -1) return true;
+    }
+    return false;
+  }
+  function isFavPlayerByName(name) {
+    var ln = name.toLowerCase();
+    for (var i = 0; i < favs.players.length; i++) {
+      if (favs.players[i].name.toLowerCase() === ln) return true;
+    }
+    return false;
+  }
+  function isFavVenue(venueId) {
+    for (var i = 0; i < favs.venues.length; i++) {
+      if (favs.venues[i].venueIds.indexOf(venueId) !== -1) return true;
+    }
+    return false;
+  }
+  function isFavTd(userId) {
+    for (var i = 0; i < favs.tds.length; i++) {
+      if (favs.tds[i].userIds.indexOf(userId) !== -1) return true;
+    }
+    return false;
+  }
+
+  function addFavPlayer(name) {
+    if (isFavPlayerByName(name)) return Promise.resolve();
+    return findPlayerDupes(name).then(function(dup) {
+      dup.nickname = '';
+      favs.players.push(dup);
+      sortFavs();
+      saveFavs(favs);
+      renderFavs();
+      return dup;
+    });
+  }
+
+  function sortFavs() {
+    var cmp = function(a, b) { return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()); };
+    favs.players.sort(cmp);
+    favs.venues.sort(cmp);
+    favs.tds.sort(cmp);
+    // Clear selections since indices changed
+    selectedFavs = { players: [], venues: [], tds: [] };
+  }
+
+  function removeFavPlayer(idx) {
+    favs.players.splice(idx, 1);
+    cleanSelectionsAfterRemove('players', idx);
+    saveFavs(favs);
+    renderFavs();
+    reRenderCurrentView();
+  }
+  function addFavVenue(name, venueId, city, region) {
+    if (isFavVenue(venueId)) return Promise.resolve();
+    return findVenueDupes(name, city, region).then(function(dup) {
+      favs.venues.push(dup);
+      sortFavs();
+      saveFavs(favs);
+      renderFavs();
+      return dup;
+    });
+  }
+  function removeFavVenue(idx) {
+    favs.venues.splice(idx, 1);
+    cleanSelectionsAfterRemove('venues', idx);
+    saveFavs(favs);
+    renderFavs();
+    reRenderCurrentView();
+  }
+  function addFavTd(name, userId) {
+    if (isFavTd(userId)) return Promise.resolve();
+    return findTdDupes(name).then(function(dup) {
+      favs.tds.push(dup);
+      sortFavs();
+      saveFavs(favs);
+      renderFavs();
+      return dup;
+    });
+  }
+  function removeFavTd(idx) {
+    favs.tds.splice(idx, 1);
+    cleanSelectionsAfterRemove('tds', idx);
+    saveFavs(favs);
+    renderFavs();
+    reRenderCurrentView();
+  }
+
+  function removeFavPlayerByName(name) {
+    var ln = name.toLowerCase();
+    for (var i = 0; i < favs.players.length; i++) {
+      if (favs.players[i].name.toLowerCase() === ln) { removeFavPlayer(i); return; }
+    }
+  }
+
+  // =====================================================
+  // Sidebar selection / filtering
+  // =====================================================
+  var selectedFavs = { players: [], venues: [], tds: [] }; // indices
+
+  function toggleFavSelection(type, idx) {
+    var arr = selectedFavs[type];
+    var pos = arr.indexOf(idx);
+    if (pos === -1) arr.push(idx);
+    else arr.splice(pos, 1);
+    renderFavs();
+    renderFeed();
+  }
+
+  function hasAnySelection() {
+    return selectedFavs.players.length > 0 || selectedFavs.venues.length > 0 || selectedFavs.tds.length > 0;
+  }
+
+  // Get the set of favNames that are currently selected for filtering
+  function getSelectedFavNames() {
+    var names = [];
+    for (var i = 0; i < selectedFavs.players.length; i++) {
+      var idx = selectedFavs.players[i];
+      if (favs.players[idx]) names.push((favs.players[idx].nickname || favs.players[idx].name).toLowerCase());
+    }
+    for (var i = 0; i < selectedFavs.venues.length; i++) {
+      var idx = selectedFavs.venues[i];
+      if (favs.venues[idx]) names.push(favs.venues[idx].name.toLowerCase());
+    }
+    for (var i = 0; i < selectedFavs.tds.length; i++) {
+      var idx = selectedFavs.tds[i];
+      if (favs.tds[idx]) names.push(favs.tds[idx].name.toLowerCase());
+    }
+    return names;
+  }
+
+  // Clean up selections when a fav is removed at a given index
+  function cleanSelectionsAfterRemove(type, removedIdx) {
+    var arr = selectedFavs[type];
+    selectedFavs[type] = [];
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] < removedIdx) selectedFavs[type].push(arr[i]);
+      else if (arr[i] > removedIdx) selectedFavs[type].push(arr[i] - 1);
+      // arr[i] === removedIdx is dropped
+    }
+  }
+
+  // =====================================================
+  // Render Favorites sidebar
+  // =====================================================
+  function renderFavs() {
+    var totalCount = favs.players.length + favs.venues.length + favs.tds.length;
+    document.getElementById('mobile-fav-count').textContent = totalCount;
+
+    var pEl = document.getElementById('fav-players');
+    var vEl = document.getElementById('fav-venues');
+    var tEl = document.getElementById('fav-tds');
+    pEl.innerHTML = '';
+    vEl.innerHTML = '';
+    tEl.innerHTML = '';
+
+    if (favs.players.length === 0) pEl.innerHTML = '<div class="fav-empty">None yet</div>';
+    for (var i = 0; i < favs.players.length; i++) {
+      var p = favs.players[i];
+      var isSel = selectedFavs.players.indexOf(i) !== -1;
+      var card = '<div class="fav-card">';
+      if (p.region || p.country) card += '<div><span class="fc-label">Location:</span> <span class="fc-value">' + esc([p.region, p.country].filter(Boolean).join(', ')) + '</span></div>';
+      if (p.slugs && p.slugs.length > 1) card += '<div><span class="fc-label">Accounts:</span> <span class="fc-value">' + esc(p.slugs.join(', ')) + '</span></div>';
+      card += '</div>';
+      var div = document.createElement('div');
+      div.className = 'fav-item' + (isSel ? ' selected' : '');
+      div.innerHTML = '<span class="fav-star">&#9733;</span>'
+        + '<span class="fav-name" data-type="players" data-idx="' + i + '">' + esc(p.name) + (p.nickname ? ' <span class="fav-nick">(' + esc(p.nickname) + ')</span>' : '') + '</span>'
+        + '<button class="fav-remove" data-type="player" data-idx="' + i + '" title="Remove">&times;</button>'
+        + card;
+      pEl.appendChild(div);
+    }
+
+    if (favs.venues.length === 0) vEl.innerHTML = '<div class="fav-empty">None yet</div>';
+    for (var i = 0; i < favs.venues.length; i++) {
+      var v = favs.venues[i];
+      var isSel = selectedFavs.venues.indexOf(i) !== -1;
+      var card = '<div class="fav-card">';
+      if (v.city || v.region) card += '<div><span class="fc-label">Location:</span> <span class="fc-value">' + esc([v.city, v.region].filter(Boolean).join(', ')) + '</span></div>';
+      if (v.venueIds && v.venueIds.length > 1) card += '<div><span class="fc-label">Accounts:</span> <span class="fc-value">' + v.venueIds.length + ' linked venues</span></div>';
+      card += '</div>';
+      var div = document.createElement('div');
+      div.className = 'fav-item' + (isSel ? ' selected' : '');
+      div.innerHTML = '<span class="fav-star">&#9733;</span>'
+        + '<span class="fav-name" data-type="venues" data-idx="' + i + '">' + esc(v.name) + (v.city ? ' <span class="fav-nick">' + esc(v.city) + '</span>' : '') + '</span>'
+        + '<button class="fav-remove" data-type="venue" data-idx="' + i + '" title="Remove">&times;</button>'
+        + card;
+      vEl.appendChild(div);
+    }
+
+    if (favs.tds.length === 0) tEl.innerHTML = '<div class="fav-empty">None yet</div>';
+    for (var i = 0; i < favs.tds.length; i++) {
+      var t = favs.tds[i];
+      var isSel = selectedFavs.tds.indexOf(i) !== -1;
+      var card = '<div class="fav-card">';
+      if (t.slugs && t.slugs.length > 1) card += '<div><span class="fc-label">Accounts:</span> <span class="fc-value">' + esc(t.slugs.join(', ')) + '</span></div>';
+      card += '</div>';
+      var div = document.createElement('div');
+      div.className = 'fav-item' + (isSel ? ' selected' : '');
+      div.innerHTML = '<span class="fav-star">&#9733;</span>'
+        + '<span class="fav-name" data-type="tds" data-idx="' + i + '">' + esc(t.name) + '</span>'
+        + '<button class="fav-remove" data-type="td" data-idx="' + i + '" title="Remove">&times;</button>'
+        + card;
+      tEl.appendChild(div);
+    }
+  }
+
+  document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('fav-remove')) {
+      var type = e.target.dataset.type;
+      var idx = parseInt(e.target.dataset.idx, 10);
+      if (type === 'player') removeFavPlayer(idx);
+      else if (type === 'venue') removeFavVenue(idx);
+      else if (type === 'td') removeFavTd(idx);
+      renderFeed();
+    }
+    // Click on fav name to toggle selection filter
+    var nameEl = e.target.closest('.fav-name');
+    if (nameEl && nameEl.dataset.type) {
+      toggleFavSelection(nameEl.dataset.type, parseInt(nameEl.dataset.idx, 10));
+    }
+  });
+
+  // =====================================================
+  // Tournament Feed
+  // =====================================================
+  var feedData = [];
+  var feedSort = { col: 'date', asc: false };
+  var feedLoading = false;
+
+  // Default: -10 days to year 2200 (all future)
+  var feedDateFrom = new Date();
+  feedDateFrom.setDate(feedDateFrom.getDate() - 10);
+  var feedDateTo = new Date();
+  feedDateTo.setMonth(feedDateTo.getMonth() + 6);
+
+  function initDateInputs() {
+    document.getElementById('date-from').value = feedDateFrom.toISOString().slice(0, 10);
+  }
+
+  window.setDateCustom = function() {
+    var fromVal = document.getElementById('date-from').value;
+    if (fromVal) feedDateFrom = new Date(fromVal + 'T00:00:00');
+    loadFeed();
+  };
+
+  function loadFeed() {
+    if (favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0) {
+      feedData = [];
+      renderFeed();
+      return;
+    }
+
+    feedLoading = true;
+    renderFeed();
+
+    var from = feedDateFrom;
+    var to = feedDateTo;
+    var fromStr = from.toISOString();
+    var toStr = to.toISOString();
+
+
+    var promises = [];
+    var tournamentMap = {};
+
+    function ensureTournament(t) {
+      if (!tournamentMap[t.id]) {
+        tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [] };
+      }
+      return tournamentMap[t.id];
+    }
+
+    // By player (search by player_id AND by name to catch unlinked registrations)
+    if (favs.players.length > 0) {
+      var allPlayerIds = [];
+      var allPlayerNames = [];
+      for (var i = 0; i < favs.players.length; i++) {
+        allPlayerIds = allPlayerIds.concat(favs.players[i].playerIds);
+        allPlayerNames.push(favs.players[i].name);
+      }
+      promises.push(
+        gql('query($ids:[Int!]!,$names:[String!]!,$from:timestamptz!,$to:timestamptz!){tournament_players(where:{_or:[{player_id:{_in:$ids}},{name:{_in:$names}}],tournament:{start_date_time:{_gte:$from,_lte:$to}}},limit:200){player_id name tournament{id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}}',
+          { ids: allPlayerIds, names: allPlayerNames, from: fromStr, to: toStr })
+        .then(function(res) {
+          var tps = (res.data && res.data.tournament_players) || [];
+          for (var j = 0; j < tps.length; j++) {
+            var t = tps[j].tournament;
+            ensureTournament(t);
+            // Find which fav player matched (by player_id or by name)
+            for (var fi = 0; fi < favs.players.length; fi++) {
+              var matched = false;
+              if (tps[j].player_id && favs.players[fi].playerIds.indexOf(tps[j].player_id) !== -1) matched = true;
+              if (!matched && tps[j].name && tps[j].name.toLowerCase() === favs.players[fi].name.toLowerCase()) matched = true;
+              if (matched) {
+                var fn = favs.players[fi].nickname || favs.players[fi].name;
+                if (tournamentMap[t.id].favNames.indexOf(fn) === -1) tournamentMap[t.id].favNames.push(fn);
+                if (tournamentMap[t.id].favPlayerNames.indexOf(fn) === -1) tournamentMap[t.id].favPlayerNames.push(fn);
+              }
+            }
+          }
+        })
+      );
+    }
+
+    // By venue
+    if (favs.venues.length > 0) {
+      var allVenueIds = [];
+      for (var i = 0; i < favs.venues.length; i++) {
+        allVenueIds = allVenueIds.concat(favs.venues[i].venueIds);
+      }
+      promises.push(
+        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{venue_id:{_in:$ids},start_date_time:{_gte:$from,_lte:$to}},limit:200,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
+          { ids: allVenueIds, from: fromStr, to: toStr })
+        .then(function(res) {
+          var ts = (res.data && res.data.tournaments) || [];
+          for (var j = 0; j < ts.length; j++) {
+            var t = ts[j];
+            ensureTournament(t);
+            if (t.venue) {
+              for (var fi = 0; fi < favs.venues.length; fi++) {
+                if (favs.venues[fi].venueIds.indexOf(t.venue.id) !== -1) {
+                  var vn = favs.venues[fi].name;
+                  if (tournamentMap[t.id].favNames.indexOf(vn) === -1) tournamentMap[t.id].favNames.push(vn);
+                }
+              }
+            }
+          }
+        })
+      );
+    }
+
+    // By TD (organizer/director)
+    if (favs.tds.length > 0) {
+      var allTdIds = [];
+      for (var i = 0; i < favs.tds.length; i++) {
+        allTdIds = allTdIds.concat(favs.tds[i].userIds);
+      }
+      promises.push(
+        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{_or:[{organizer_id:{_in:$ids}},{director_id:{_in:$ids}}],start_date_time:{_gte:$from,_lte:$to}},limit:200,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
+          { ids: allTdIds, from: fromStr, to: toStr })
+        .then(function(res) {
+          var ts = (res.data && res.data.tournaments) || [];
+          for (var j = 0; j < ts.length; j++) {
+            var t = ts[j];
+            ensureTournament(t);
+            for (var fi = 0; fi < favs.tds.length; fi++) {
+              var tdIds = favs.tds[fi].userIds;
+              if ((t.organizer && tdIds.indexOf(t.organizer.id) !== -1) || (t.director && tdIds.indexOf(t.director.id) !== -1)) {
+                var tn = favs.tds[fi].name;
+                if (tournamentMap[t.id].favNames.indexOf(tn) === -1) tournamentMap[t.id].favNames.push(tn);
+              }
+            }
+          }
+        })
+      );
+    }
+
+    Promise.all(promises).then(function() {
+      feedData = [];
+      for (var id in tournamentMap) feedData.push(tournamentMap[id]);
+      feedLoading = false;
+      renderFeed();
+    }).catch(function(err) {
+      feedLoading = false;
+      showStatus('Failed to load feed: ' + err.message, 'error');
+    });
+  }
+
+  function renderFeed() {
+    var tbody = document.getElementById('feed-body');
+    tbody.innerHTML = '';
+
+    // Update sort arrows
+    var ths = document.querySelectorAll('.feed-table th');
+    for (var ti = 0; ti < ths.length; ti++) {
+      var arrow = ths[ti].querySelector('.sort-arrow');
+      if (ths[ti].dataset.col === feedSort.col) {
+        arrow.textContent = feedSort.asc ? '\u25B2' : '\u25BC';
+      } else {
+        arrow.textContent = '';
+      }
+    }
+
+    if (feedLoading) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#64748b;"><span class="spinner"></span> Loading...</td></tr>';
+      return;
+    }
+
+    if (favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#475569;">Paste a tournament URL above to get started</td></tr>';
+      return;
+    }
+
+    if (feedData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#475569;">No tournaments found in this date range</td></tr>';
+      return;
+    }
+
+    // Filter by sidebar selection
+    var filtered = feedData;
+    if (hasAnySelection()) {
+      var selNames = getSelectedFavNames();
+      filtered = feedData.filter(function(t) {
+        for (var i = 0; i < t.favNames.length; i++) {
+          if (selNames.indexOf(t.favNames[i].toLowerCase()) !== -1) return true;
+        }
+        return false;
+      });
+    }
+
+    if (filtered.length === 0 && feedData.length > 0 && hasAnySelection()) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#475569;">No tournaments match the selected favorites</td></tr>';
+      return;
+    }
+
+    // Check if results span multiple years
+    var feedSpansYears = false;
+    if (filtered.length > 1) {
+      var years = {};
+      for (var fi = 0; fi < filtered.length; fi++) {
+        years[new Date(filtered[fi].date).getFullYear()] = true;
+      }
+      feedSpansYears = Object.keys(years).length > 1;
+    }
+
+    // Sort
+    var sorted = filtered.slice();
+    sorted.sort(function(a, b) {
+      var va, vb;
+      if (feedSort.col === 'date') { va = a.date || ''; vb = b.date || ''; }
+      else if (feedSort.col === 'name') { va = a.name.toLowerCase(); vb = b.name.toLowerCase(); }
+      else if (feedSort.col === 'venue') { va = (a.venue ? a.venue.name : '').toLowerCase(); vb = (b.venue ? b.venue.name : '').toLowerCase(); }
+      else if (feedSort.col === 'favs') { va = a.favPlayerNames.join(', ').toLowerCase(); vb = b.favPlayerNames.join(', ').toLowerCase(); }
+      else { va = ''; vb = ''; }
+      if (va < vb) return feedSort.asc ? -1 : 1;
+      if (va > vb) return feedSort.asc ? 1 : -1;
+      return 0;
+    });
+
+    for (var i = 0; i < sorted.length; i++) {
+      var t = sorted[i];
+      var d = new Date(t.date);
+      var isFuture = d > new Date() && t.status !== 'IN_PROGRESS';
+      var tr = document.createElement('tr');
+      tr.dataset.slug = t.slug;
+      tr.dataset.status = t.status;
+      if (currentSlug === t.slug) tr.className = 'active';
+      if (isFuture) tr.style.color = '#64748b';
+      var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + (feedSpansYears ? '/' + d.getFullYear() : '');
+      var tag = '';
+      if (t.status === 'IN_PROGRESS') tag = ' <span style="color:#60a5fa;font-size:11px">(live)</span>';
+      else if (isFuture) tag = ' <span style="font-size:11px">(future)</span>';
+      var venueName = t.venue ? t.venue.name : '';
+      tr.innerHTML = '<td>' + esc(dateStr) + tag + '</td>'
+        + '<td>' + esc(t.name) + '</td>'
+        + '<td>' + esc(venueName) + '</td>'
+        + '<td class="' + (isFuture ? '' : 'fav-names') + '">' + esc(t.favPlayerNames.join(', ')) + '</td>';
+      tr.addEventListener('click', (function(slug, status) {
+        return function() {
+          if (status === 'NOT_STARTED' || status === 'SCHEDULED') loadPlayerList(slug);
+          else loadTournament(slug);
+        };
+      })(t.slug, t.status));
+      tbody.appendChild(tr);
+    }
+  }
+
+  window.sortFeed = function(col) {
+    if (feedSort.col === col) feedSort.asc = !feedSort.asc;
+    else { feedSort.col = col; feedSort.asc = true; }
+    renderFeed();
+  };
+
+  // =====================================================
+  // Match Detail
+  // =====================================================
+  var currentSlug = null;
+  var currentPlayerList = null;
+  var currentMatches = null;
+  var currentTournament = null;
+  var detailCountdown = 60;
+  var detailInterval = null;
+  var showFavsOnly = true;
+  var groupByPlayer = true;
+  var playerListSort = 'name';
+
+  function loadPlayerList(slug) {
+    currentSlug = slug;
+    clearDetailTimer();
+    showStatus('<span class="spinner"></span> Loading player list...', 'info');
+
+    var rows = document.querySelectorAll('.feed-table tbody tr');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].className = rows[i].dataset.slug === slug ? 'active' : '';
+    }
+
+    gql('query($s:String!){tournament_players(where:{tournament:{slug:{_eq:$s}}},order_by:{name:asc}){id name skill_level player_id player{id name name_slug fargo_id}}tournaments(where:{slug:{_eq:$s}},limit:1){name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}', { s: slug })
+    .then(function(res) {
+      var players = (res.data && res.data.tournament_players) || [];
+      var tArr = (res.data && res.data.tournaments) || [];
+      var t = tArr[0] || {};
+      currentTournament = { name: t.name || '', date: t.start_date_time, status: t.status || 'NOT_STARTED', venue: t.venue, organizer: t.organizer, director: t.director, slug: slug };
+      currentMatches = [];
+      currentPlayerList = players;
+      clearStatus();
+      renderPlayerList(players);
+      document.getElementById('detail-section').classList.remove('hidden');
+    }).catch(function(err) {
+      showStatus('Failed to load player list: ' + err.message, 'error');
+    });
+  }
+
+  function renderPlayerList(players) {
+    var section = document.getElementById('detail-section');
+    var t = currentTournament;
+    var d = t.date ? new Date(t.date) : null;
+    var dateStr = d ? d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : '';
+    var venueStr = t.venue ? t.venue.name + (t.venue.city ? ', ' + t.venue.city : '') + (t.venue.region ? ', ' + t.venue.region : '') : '';
+    var tdName = t.director ? t.director.display_name : (t.organizer ? t.organizer.display_name : '');
+    var tdId = t.director ? t.director.id : (t.organizer ? t.organizer.id : null);
+    var isVenueFav = t.venue && isFavVenue(t.venue.id);
+    var isTdFav = tdId && isFavTd(tdId);
+
+    var html = '<div class="match-detail">';
+    html += '<div class="match-header">';
+    html += '<div class="match-title">' + esc(t.name) + '</div>';
+    html += '<div class="match-meta">' + esc(dateStr) + ' &middot; <span style="color:#64748b">(upcoming)</span></div>';
+    if (venueStr) {
+      var vBtn = isVenueFav
+        ? '<button class="remove-fav-btn" onclick="removeVenueFromDetail()" title="Remove favorite">&#9733;</button> '
+        : '<button class="add-fav-btn" onclick="addVenueFromDetail()" title="Add favorite">&#9734;</button> ';
+      html += '<div class="match-meta">Venue: ' + vBtn + esc(venueStr) + '</div>';
+    }
+    if (tdName) {
+      var tBtn = (tdId && isTdFav)
+        ? '<button class="remove-fav-btn" onclick="removeTdFromDetail()" title="Remove favorite">&#9733;</button> '
+        : '<button class="add-fav-btn" onclick="addTdFromDetail()" title="Add favorite">&#9734;</button> ';
+      html += '<div class="match-meta">Tournament Director: ' + tBtn + esc(tdName) + '</div>';
+    }
+    html += '</div>';
+
+    html += '<div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;">';
+    html += '<span style="font-size:12px;color:#64748b;">' + players.length + ' registered players</span>';
+    html += '<div class="toggle-group">';
+    html += '<button class="toggle-btn' + (playerListSort === 'name' ? ' active' : '') + '" onclick="setPlayerListSort(\'name\')">Name</button>';
+    html += '<button class="toggle-btn' + (playerListSort === 'rating' ? ' active' : '') + '" onclick="setPlayerListSort(\'rating\')">Rating</button>';
+    html += '</div>';
+    html += '</div>';
+
+    var sorted = players.slice();
+    if (playerListSort === 'rating') {
+      sorted.sort(function(a, b) { return (b.skill_level || 0) - (a.skill_level || 0); });
+    } else {
+      sorted.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+    }
+
+    html += '<div class="player-list-grid">';
+    for (var i = 0; i < sorted.length; i++) {
+      var p = sorted[i];
+      var pid = p.player_id || (p.player ? p.player.id : null);
+      var pObj = { id: p.id, name: p.name, playerId: pid };
+      var isFav = isPlayerFav(pObj);
+      html += '<div class="player-list-item">';
+      html += isFav
+        ? '<button class="remove-fav-btn" data-action="remove-fav" data-name="' + esc(p.name) + '" title="Remove favorite">&#9733;</button>'
+        : '<button class="add-fav-btn" data-action="add-fav" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Add favorite">&#9734;</button>';
+      html += '<span' + (isFav ? ' style="color:#fbbf24"' : '') + '>' + esc(p.name) + '</span>';
+      if (p.skill_level) html += ' <span class="match-opp-rating">(' + p.skill_level + ')</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '</div>';
+    section.innerHTML = html;
+  }
+
+  function loadTournament(slug) {
+    currentSlug = slug;
+    currentPlayerList = null;
+    clearDetailTimer();
+    showStatus('<span class="spinner"></span> Loading matches...', 'info');
+
+    // Highlight active row in feed
+    var rows = document.querySelectorAll('.feed-table tbody tr');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].className = rows[i].dataset.slug === slug ? 'active' : '';
+    }
+
+    fetchMatches(slug).then(function(result) {
+      currentMatches = result.matches;
+      currentTournament = result.tournament;
+      clearStatus();
+      renderDetail();
+      document.getElementById('detail-section').classList.remove('hidden');
+      // Start auto-refresh if in progress
+      if (currentTournament.status === 'IN_PROGRESS') startDetailTimer();
+    }).catch(function(err) {
+      showStatus('Failed to load matches: ' + err.message, 'error');
+    });
+  }
+
+  function fetchMatches(slug) {
+    return gql(
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      { s: slug }
+    ).then(function(res) {
+      var brackets = (res.data && res.data.tournament_brackets) || [];
+      var tournament = { name: '', date: '', status: '', venue: null, organizer: null, director: null, slug: slug };
+      var matches = [];
+
+      if (brackets.length > 0 && brackets[0].tournament) {
+        var t = brackets[0].tournament;
+        tournament.name = t.name;
+        tournament.date = t.start_date_time;
+        tournament.status = t.status;
+        tournament.venue = t.venue;
+        tournament.organizer = t.organizer;
+        tournament.director = t.director;
+      }
+
+      for (var i = 0; i < brackets.length; i++) {
+        var m = brackets[i];
+        if (m.is_bye) continue;
+        if (!m.challenger1 || !m.challenger2) continue;
+        if (m.challenger1_is_forfeit || m.challenger1_is_withdraw || m.challenger2_is_forfeit || m.challenger2_is_withdraw) continue;
+
+        matches.push({
+          num: m.match_number,
+          p1: { id: m.challenger1.id, name: m.challenger1.name, rating: m.challenger1.skill_level, fargoId: m.challenger1.fargo_id, place: m.challenger1.place, playerId: m.challenger1.player_id },
+          p2: { id: m.challenger2.id, name: m.challenger2.name, rating: m.challenger2.skill_level, fargoId: m.challenger2.fargo_id, place: m.challenger2.place, playerId: m.challenger2.player_id },
+          s1: m.challenger1_score,
+          s2: m.challenger2_score,
+          p1Won: !!m.challenger1_is_winner,
+          p2Won: !!m.challenger2_is_winner,
+          status: m.status,
+        });
+      }
+
+      return { matches: matches, tournament: tournament };
+    });
+  }
+
+  function renderDetail() {
+    if (!currentMatches || !currentTournament) return;
+    var section = document.getElementById('detail-section');
+    var t = currentTournament;
+    var d = t.date ? new Date(t.date) : null;
+    var dateStr = d ? d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : '';
+    var venueStr = t.venue ? t.venue.name + (t.venue.city ? ', ' + t.venue.city : '') + (t.venue.region ? ', ' + t.venue.region : '') : '';
+    var tdName = t.director ? t.director.display_name : (t.organizer ? t.organizer.display_name : '');
+    var tdId = t.director ? t.director.id : (t.organizer ? t.organizer.id : null);
+
+    var isVenueFav = t.venue && isFavVenue(t.venue.id);
+    var isTdFav = tdId && isFavTd(tdId);
+
+    var html = '<div class="match-detail">';
+    html += '<div class="match-header">';
+    html += '<div class="match-title">' + esc(t.name) + ' <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a></div>';
+    html += '<div class="match-meta">' + esc(dateStr) + '</div>';
+    if (venueStr) {
+      var venueFavBtn = '';
+      if (t.venue) {
+        if (isVenueFav) {
+          venueFavBtn = '<button class="remove-fav-btn" onclick="removeVenueFromDetail()" title="Remove favorite">&#9733;</button> ';
+        } else {
+          venueFavBtn = '<button class="add-fav-btn" onclick="addVenueFromDetail()" title="Add favorite">&#9734;</button> ';
+        }
+      }
+      html += '<div class="match-meta">Venue: ' + venueFavBtn + esc(venueStr) + '</div>';
+    }
+    if (tdName) {
+      var tdFavBtn = '';
+      if (tdId) {
+        if (isTdFav) {
+          tdFavBtn = '<button class="remove-fav-btn" onclick="removeTdFromDetail()" title="Remove favorite">&#9733;</button> ';
+        } else {
+          tdFavBtn = '<button class="add-fav-btn" onclick="addTdFromDetail()" title="Add favorite">&#9734;</button> ';
+        }
+      }
+      html += '<div class="match-meta">Tournament Director: ' + tdFavBtn + esc(tdName) + '</div>';
+    }
+    html += '<div class="match-actions">';
+    if (t.status === 'IN_PROGRESS') {
+      html += '<span class="refresh-timer">&#8635; <span id="countdown">' + detailCountdown + '</span>s</span>';
+    }
+    html += '</div></div>';
+
+    // Toggles
+    html += '<div class="match-toggles">';
+    html += '<div class="toggle-group">';
+    html += '<button class="toggle-btn' + (showFavsOnly ? ' active' : '') + '" onclick="toggleFavsOnly(true)">&#9733; Favs</button>';
+    html += '<button class="toggle-btn' + (!showFavsOnly ? ' active' : '') + '" onclick="toggleFavsOnly(false)">All</button>';
+    html += '</div>';
+    html += '<div class="toggle-group">';
+    html += '<button class="toggle-btn' + (groupByPlayer ? ' active' : '') + '" onclick="toggleGroupBy(true)">By Player</button>';
+    html += '<button class="toggle-btn' + (!groupByPlayer ? ' active' : '') + '" onclick="toggleGroupBy(false)">By Match #</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Filter matches
+    var matches = currentMatches;
+    if (showFavsOnly) {
+      matches = matches.filter(function(m) {
+        return isPlayerFav(m.p1) || isPlayerFav(m.p2);
+      });
+    }
+
+    if (matches.length === 0) {
+      if (showFavsOnly && currentMatches.length > 0) {
+        showFavsOnly = false;
+        return renderDetail();
+      } else {
+        html += '<div style="text-align:center;padding:20px;color:#475569;">No matches yet.</div>';
+      }
+    } else if (groupByPlayer) {
+      html += renderGroupedByPlayer(matches);
+    } else {
+      html += renderFlatMatches(matches);
+    }
+
+    html += '</div>';
+    section.innerHTML = html;
+  }
+
+  function isPlayerFav(p) {
+    return isFavPlayer(p.id) || (p.playerId && isFavPlayer(p.playerId)) || isFavPlayerByName(p.name);
+  }
+
+  function playerFavBtn(p) {
+    if (isPlayerFav(p)) {
+      return '<button class="remove-fav-btn" data-action="remove-fav" data-name="' + esc(p.name) + '" title="Remove favorite">&#9733;</button>';
+    } else {
+      return '<button class="add-fav-btn" data-action="add-fav" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Add favorite">&#9734;</button>';
+    }
+  }
+
+  function renderGroupedByPlayer(matches) {
+    // Build per-player match lists
+    var playerMap = {};
+    var playerOrder = [];
+    for (var i = 0; i < matches.length; i++) {
+      var m = matches[i];
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status);
+    }
+
+    // If showing favs only, only show fav players
+    if (showFavsOnly) {
+      playerOrder = playerOrder.filter(function(name) { return isPlayerFav(playerMap[name].player); });
+    }
+
+    var html = '';
+    for (var pi = 0; pi < playerOrder.length; pi++) {
+      var name = playerOrder[pi];
+      var pd = playerMap[name];
+      var isFav = isPlayerFav(pd.player);
+      html += '<div class="player-group">';
+      html += '<div class="player-group-header">';
+      html += playerFavBtn(pd.player);
+      html += '<span class="player-group-name' + (isFav ? ' is-fav' : '') + '">' + esc(pd.player.name) + '</span>';
+      if (pd.player.rating) html += '<span class="player-group-stats">(' + pd.player.rating + ')</span>';
+      if (pd.player.place) html += '<span class="player-group-stats">Place: ' + esc(pd.player.place) + '</span>';
+      html += '<span class="player-group-record"><span class="record-w">W' + pd.wins + '</span>-<span class="record-l">L' + pd.losses + '</span></span>';
+      html += '</div>';
+
+      html += '<div class="match-rows">';
+      for (var mi = 0; mi < pd.matches.length; mi++) {
+        var pm = pd.matches[mi];
+        var oppFav = isPlayerFav(pm.opp);
+        var cls = pm.status === 'COMPLETED' ? (pm.won ? 'mr-win' : 'mr-loss') : (pm.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
+        html += '<div class="match-row">';
+        html += '<span class="match-num">#' + pm.num + '</span>';
+        html += '<span class="match-vs-label">vs</span>';
+        html += playerFavBtn(pm.opp);
+        html += '<span class="match-opponent' + (oppFav ? ' is-fav' : '') + '">' + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
+        if (pm.status === 'COMPLETED') {
+          html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
+          html += '<span class="mr-s1 ' + cls + '">' + pm.myScore + '</span>';
+          html += '<span class="mr-sep ' + cls + '">-</span>';
+          html += '<span class="mr-s2 ' + cls + '">' + pm.oppScore + '</span>';
+        } else if (pm.status === 'IN_PROGRESS') {
+          html += '<span class="mr-label ' + cls + '">LIVE</span>';
+          html += '<span class="mr-s1 ' + cls + '">' + (pm.myScore != null ? pm.myScore : '') + '</span>';
+          html += '<span class="mr-sep ' + cls + '">' + (pm.myScore != null ? '-' : '') + '</span>';
+          html += '<span class="mr-s2 ' + cls + '">' + (pm.oppScore != null ? pm.oppScore : '') + '</span>';
+        } else {
+          html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status) {
+    var key = player.name;
+    if (!map[key]) {
+      map[key] = { player: player, matches: [], wins: 0, losses: 0 };
+      order.push(key);
+    }
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status });
+    if (status === 'COMPLETED') {
+      if (won) map[key].wins++;
+      else map[key].losses++;
+    }
+    // Update place if available
+    if (player.place && !map[key].player.place) map[key].player.place = player.place;
+  }
+
+  function renderFlatMatches(matches) {
+    // Sort by match number descending (latest first)
+    var sorted = matches.slice().sort(function(a, b) { return b.num - a.num; });
+    var html = '';
+    for (var i = 0; i < sorted.length; i++) {
+      var m = sorted[i];
+      var p1Fav = isPlayerFav(m.p1);
+      var p2Fav = isPlayerFav(m.p2);
+      var p1Win = m.p1Won;
+      var p2Win = m.p2Won;
+      html += '<div class="flat-match">';
+      html += '<span class="fm-num">#' + m.num + '</span>';
+      html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
+      html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (p1Win ? ' fm-winner' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
+      if (m.status === 'COMPLETED') {
+        html += '<span class="fm-score"><span' + (p1Win ? ' style="font-weight:700"' : '') + '>' + m.s1 + '</span> - <span' + (p2Win ? ' style="font-weight:700"' : '') + '>' + m.s2 + '</span></span>';
+      } else if (m.status === 'IN_PROGRESS') {
+        html += '<span class="fm-score" style="color:#60a5fa">LIVE ' + (m.s1 != null ? m.s1 + ' - ' + m.s2 : '') + '</span>';
+      } else {
+        html += '<span class="fm-score" style="color:#64748b">&mdash;</span>';
+      }
+      html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
+      html += '<span class="fm-p2' + (p2Fav ? ' is-fav' : '') + (p2Win ? ' fm-winner' : '') + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
+      var place = m.p1.place || m.p2.place || '';
+      html += '<span class="fm-place">' + esc(place) + '</span>';
+      html += '</div>';
+    }
+    return html;
+  }
+
+  // =====================================================
+  // Detail actions (exposed to window)
+  // =====================================================
+  window.toggleFavsOnly = function(v) { showFavsOnly = v; renderDetail(); };
+  window.toggleGroupBy = function(v) { groupByPlayer = v; renderDetail(); };
+  window.setPlayerListSort = function(v) { playerListSort = v; if (currentPlayerList) renderPlayerList(currentPlayerList); };
+
+  function reRenderCurrentView() {
+    if (currentPlayerList) renderPlayerList(currentPlayerList);
+    else renderDetail();
+  }
+
+  // Delegated click handler for add/remove fav buttons (avoids XSS from inline onclick)
+  document.getElementById('main').addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var action = btn.dataset.action;
+    var name = btn.dataset.name;
+    if (action === 'add-fav') {
+      addFavPlayer(name).then(function() {
+        reRenderCurrentView();
+        loadFeed();
+      });
+    } else if (action === 'remove-fav') {
+      removeFavPlayerByName(name);
+      reRenderCurrentView();
+      loadFeed();
+    }
+  });
+
+  window.addVenueFromDetail = function() {
+    if (!currentTournament || !currentTournament.venue) return;
+    var v = currentTournament.venue;
+    addFavVenue(v.name, v.id, v.city, v.region).then(function() {
+      reRenderCurrentView();
+      loadFeed();
+    });
+  };
+  window.removeVenueFromDetail = function() {
+    if (!currentTournament || !currentTournament.venue) return;
+    var vid = currentTournament.venue.id;
+    for (var i = 0; i < favs.venues.length; i++) {
+      if (favs.venues[i].venueIds.indexOf(vid) !== -1) { removeFavVenue(i); loadFeed(); return; }
+    }
+  };
+
+  window.addTdFromDetail = function() {
+    if (!currentTournament) return;
+    var td = currentTournament.director || currentTournament.organizer;
+    if (!td) return;
+    addFavTd(td.display_name, td.id).then(function() {
+      reRenderCurrentView();
+      loadFeed();
+    });
+  };
+  window.removeTdFromDetail = function() {
+    if (!currentTournament) return;
+    var td = currentTournament.director || currentTournament.organizer;
+    if (!td) return;
+    for (var i = 0; i < favs.tds.length; i++) {
+      if (favs.tds[i].userIds.indexOf(td.id) !== -1) { removeFavTd(i); loadFeed(); return; }
+    }
+  };
+
+  // =====================================================
+  // Auto-refresh
+  // =====================================================
+  function startDetailTimer() {
+    clearDetailTimer();
+    detailCountdown = 60;
+    detailInterval = setInterval(function() {
+      detailCountdown--;
+      var el = document.getElementById('countdown');
+      if (el) el.textContent = detailCountdown;
+      if (detailCountdown <= 0) {
+        detailCountdown = 60;
+        refreshDetail();
+      }
+    }, 1000);
+  }
+
+  function clearDetailTimer() {
+    if (detailInterval) { clearInterval(detailInterval); detailInterval = null; }
+  }
+
+  function refreshDetail() {
+    if (!currentSlug) return;
+    fetchMatches(currentSlug).then(function(result) {
+      currentMatches = result.matches;
+      currentTournament = result.tournament;
+      renderDetail();
+      if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
+    }).catch(function() { /* silent retry next cycle */ });
+  }
+
+  // =====================================================
+  // URL input
+  // =====================================================
+  var urlInput = document.getElementById('url-input');
+  urlInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      var url = urlInput.value.trim();
+      if (!url) return;
+      var slugMatch = url.match(/\/tournaments\/([^\/\?#]+)/);
+      if (slugMatch) {
+        var slug;
+        try { slug = decodeURIComponent(slugMatch[1]); } catch(ex) { slug = slugMatch[1]; }
+        loadSmartTournament(slug);
+      } else {
+        showStatus('Could not parse tournament URL. Expected: https://digitalpool.com/tournaments/your-tournament', 'error');
+      }
+    }
+  });
+
+  // =====================================================
+  // Add player by name
+  // =====================================================
+  var addPlayerInput = document.getElementById('add-player-input');
+  var addPlayerStatus = document.getElementById('add-player-status');
+
+  addPlayerInput.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    var name = addPlayerInput.value.trim();
+    if (!name) return;
+
+    if (isFavPlayerByName(name)) {
+      addPlayerStatus.textContent = 'Already in favorites';
+      addPlayerStatus.className = 'add-player-status error';
+      return;
+    }
+
+    addPlayerStatus.innerHTML = '<span class="spinner"></span> Searching...';
+    addPlayerStatus.className = 'add-player-status loading';
+
+    findPlayerDupes(name).then(function(dup) {
+      if (dup.playerIds.length === 0) {
+        addPlayerStatus.textContent = 'No player found with that name';
+        addPlayerStatus.className = 'add-player-status error';
+        return;
+      }
+      dup.nickname = '';
+      favs.players.push(dup);
+      sortFavs();
+      saveFavs(favs);
+      renderFavs();
+      addPlayerInput.value = '';
+      addPlayerStatus.textContent = 'Added ' + dup.name;
+      addPlayerStatus.className = 'add-player-status success';
+      setTimeout(function() { addPlayerStatus.textContent = ''; }, 2000);
+      reRenderCurrentView();
+      loadFeed();
+    }).catch(function(err) {
+      addPlayerStatus.textContent = 'Error: ' + err.message;
+      addPlayerStatus.className = 'add-player-status error';
+    });
+  });
+
+  // =====================================================
+  // URL params
+  // =====================================================
+  function loadSmartTournament(slug) {
+    // Check tournament status first, then route to match detail or player list
+    gql('query($s:String!){tournaments(where:{slug:{_eq:$s}},limit:1){status}}', { s: slug })
+    .then(function(res) {
+      var t = (res.data && res.data.tournaments && res.data.tournaments[0]) || {};
+      if (t.status === 'NOT_STARTED' || t.status === 'SCHEDULED') {
+        loadPlayerList(slug);
+      } else {
+        loadTournament(slug);
+      }
+    }).catch(function() {
+      loadTournament(slug); // fallback
+    });
+  }
+
+  function checkUrlParams() {
+    var params = new URLSearchParams(window.location.search);
+    var dpSlug = params.get('digitalpool');
+    if (dpSlug) {
+      urlInput.value = 'https://digitalpool.com/tournaments/' + dpSlug;
+      loadSmartTournament(dpSlug);
+    }
+  }
+
+  // =====================================================
+  // Sidebar collapse / Mobile
+  // =====================================================
+  window.toggleSidebar = function() {
+    var sb = document.getElementById('sidebar');
+    var exp = document.getElementById('sidebar-expand');
+    sb.classList.toggle('collapsed');
+    exp.classList.toggle('visible', sb.classList.contains('collapsed'));
+  };
+
+  window.toggleMobileFavs = function() {
+    document.getElementById('sidebar').classList.toggle('mobile-open');
+  };
+
+  // =====================================================
+  // Hover card positioning (fixed position to escape overflow)
+  // =====================================================
+  (function() {
+    var sidebar = document.getElementById('sidebar');
+    sidebar.addEventListener('mouseover', function(e) {
+      var item = e.target.closest('.fav-item');
+      if (!item) return;
+      // Hide all other cards
+      var cards = sidebar.querySelectorAll('.fav-card');
+      for (var i = 0; i < cards.length; i++) cards[i].style.display = 'none';
+      var card = item.querySelector('.fav-card');
+      if (!card) return;
+      var rect = item.getBoundingClientRect();
+      card.style.left = rect.right + 8 + 'px';
+      card.style.top = rect.top + 'px';
+      card.style.display = 'block';
+    });
+    sidebar.addEventListener('mouseout', function(e) {
+      var related = e.relatedTarget;
+      if (related && related.closest && related.closest('.fav-item') === e.target.closest('.fav-item')) return;
+      var item = e.target.closest('.fav-item');
+      if (!item) return;
+      var card = item.querySelector('.fav-card');
+      if (card) card.style.display = 'none';
+    });
+  })();
+
+  // =====================================================
+  // Util
+  // =====================================================
+  function esc(s) {
+    if (s == null) return '';
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function showStatus(msg, type) {
+    var el = document.getElementById('status');
+    el.className = 'status-msg status-' + type;
+    el.innerHTML = msg;
+  }
+  function clearStatus() {
+    var el = document.getElementById('status');
+    el.className = '';
+    el.innerHTML = '';
+  }
+
+  // =====================================================
+  // Init
+  // =====================================================
+  renderFavs();
+  initDateInputs();
+  loadFeed();
+  checkUrlParams();
+})();
+</script>
+</body>
+</html>
