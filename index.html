@@ -593,9 +593,9 @@ button { font-family: inherit; font-size: inherit; }
   var feedSort = { col: 'date', asc: false };
   var feedLoading = false;
 
-  // Default: -10 days to year 2200 (all future)
+  var isMobile = window.innerWidth <= 768;
   var feedDateFrom = new Date();
-  feedDateFrom.setDate(feedDateFrom.getDate() - 10);
+  feedDateFrom.setDate(feedDateFrom.getDate() - (isMobile ? 2 : 10));
   var feedDateTo = new Date();
   feedDateTo.setMonth(feedDateTo.getMonth() + 6);
 
