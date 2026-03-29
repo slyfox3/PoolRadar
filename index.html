@@ -1449,6 +1449,9 @@ button { font-family: inherit; font-size: inherit; }
   initDateInputs();
   loadFeed();
   checkUrlParams();
+  if (!localStorage.getItem('poolradar_favs') || (favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0)) {
+    document.getElementById('help-modal').classList.remove('hidden');
+  }
 })();
 </script>
 </body>
