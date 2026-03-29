@@ -121,7 +121,10 @@ button { font-family: inherit; font-size: inherit; }
 .record-l { color: #f87171; }
 
 /* Match rows — CSS grid so scores align across rows */
-.match-rows { display: inline-grid; grid-template-columns: 28px auto auto auto auto 16px 8px 16px; column-gap: 0; align-items: center; font-size: 13px; }
+.match-rows { display: inline-grid; grid-template-columns: 28px auto auto auto auto 16px 8px 16px auto; column-gap: 0; align-items: center; font-size: 13px; }
+.mr-video { padding-left: 6px; }
+.mr-video a { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 10px; background: #dc2626; border-radius: 2px; color: #fff; text-decoration: none; font-size: 6px; line-height: 1; vertical-align: middle; }
+.mr-video a:hover { background: #ef4444; }
 .match-num { padding-right: 6px; }
 .match-vs-label { padding-right: 4px; }
 .match-opponent { padding-right: 6px; }
@@ -147,17 +150,18 @@ button { font-family: inherit; font-size: inherit; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; }
 
 /* Flat match grid (by match#) */
-.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto 16px 8px 16px auto auto; column-gap: 0; align-items: center; font-size: 13px; }
+.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
+.flat-match > * { display: flex; align-items: center; }
 .flat-match { display: contents; }
-.flat-match .fm-num { color: #64748b; font-size: 11px; text-align: right; padding: 5px 6px 5px 0; border-bottom: 1px solid #334155; }
-.flat-match .fm-p1, .flat-match .fm-p2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: 1px solid #334155; padding: 5px 0; }
+.flat-match .fm-num { color: #64748b; font-size: 11px; text-align: right; padding-right: 6px; }
+.flat-match > * { border-bottom: 1px solid #334155; padding: 5px 0; }
+.flat-match .fm-p1, .flat-match .fm-p2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flat-match .fm-p1.is-fav, .flat-match .fm-p2.is-fav { color: #fbbf24; }
 .flat-match .fm-winner { font-weight: 700; }
-.flat-match .fm-add { border-bottom: 1px solid #334155; padding: 5px 0; }
+.flat-match .fm-add { }
 .flat-match .fm-rating { color: #64748b; font-size: 11px; }
 .flat-match .fm-p1 { padding-right: 4px; }
 .flat-match .fm-p2 { padding-left: 4px; }
-.flat-match .mr-s1, .flat-match .mr-sep, .flat-match .mr-s2 { border-bottom: 1px solid #334155; padding: 5px 0; }
 
 /* Add-fav button inline */
 .add-fav-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0 2px; font-size: 13px; }
@@ -960,7 +964,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -992,6 +996,7 @@ button { font-family: inherit; font-size: inherit; }
           p1Won: !!m.challenger1_is_winner,
           p2Won: !!m.challenger2_is_winner,
           status: m.status,
+          videoUrl: m.livestream_url || null,
         });
       }
 
@@ -1099,8 +1104,8 @@ button { font-family: inherit; font-size: inherit; }
     var playerOrder = [];
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl);
     }
 
     // If showing favs only, only show fav players
@@ -1144,6 +1149,7 @@ button { font-family: inherit; font-size: inherit; }
         } else {
           html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
         }
+        html += '<span class="mr-video">' + (pm.videoUrl ? '<a href="' + esc(pm.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>' : '') + '</span>';
         html += '</div>';
       }
       html += '</div>'; // match-rows
@@ -1153,13 +1159,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -1196,6 +1202,7 @@ button { font-family: inherit; font-size: inherit; }
       }
       html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
       html += '<span class="fm-p2' + (p2Fav ? ' is-fav' : '') + (p2Win ? ' fm-winner' : '') + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
+      html += '<span class="mr-video">' + (m.videoUrl ? '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>' : '') + '</span>';
       html += '</div>';
     }
     html += '</div>';
