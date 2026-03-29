@@ -86,6 +86,9 @@ button { font-family: inherit; font-size: inherit; }
 .feed-table tr:hover td { background: #1e293b; }
 .feed-table tr.active td { background: #1e3a5f; }
 .feed-table .fav-names { font-size: 12px; }
+.feed-section-collapsed { display: none; }
+.back-to-list { background: none; border: none; color: #64748b; cursor: pointer; font-size: 12px; padding: 0 0 8px 0; font-family: inherit; }
+.back-to-list:hover { color: #e2e8f0; }
 
 /* Match Detail */
 .match-detail { background: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; }
@@ -131,7 +134,7 @@ button { font-family: inherit; font-size: inherit; }
 .mr-video a { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 10px; background: #dc2626; border-radius: 2px; color: #fff; text-decoration: none; font-size: 6px; line-height: 1; vertical-align: middle; }
 .mr-video a:hover { background: #ef4444; }
 .match-num { padding-right: 6px; }
-.match-vs-label { padding-right: 4px; }
+.match-vs-label { padding-left: 4px; padding-right: 4px; }
 .match-opponent { padding-right: 6px; }
 .mr-label { padding-left: 4px; padding-right: 1px; }
 .mr-sep { padding: 0; }
@@ -846,7 +849,6 @@ button { font-family: inherit; font-size: inherit; }
   var currentTournament = null;
   var detailCountdown = 60;
   var detailInterval = null;
-  var showFavsOnly = true;
   var groupByPlayer = true;
   var playerListSort = 'name';
 
@@ -872,6 +874,7 @@ button { font-family: inherit; font-size: inherit; }
       clearStatus();
       renderPlayerList(players);
       document.getElementById('detail-section').classList.remove('hidden');
+      document.getElementById('feed-section').classList.add('feed-section-collapsed');
     }).catch(function(err) {
       showStatus('Failed to load player list: ' + err.message, 'error');
     });
@@ -888,7 +891,8 @@ button { font-family: inherit; font-size: inherit; }
     var isVenueFav = t.venue && isFavVenue(t.venue.id);
     var isTdFav = tdId && isFavTd(tdId);
 
-    var html = '<div class="match-detail">';
+    var html = '<button class="back-to-list" onclick="backToList()">&laquo; Back to tournament list</button>';
+    html += '<div class="match-detail">';
     html += '<div class="match-header">';
     html += '<div class="match-title">' + esc(t.name) + '</div>';
     html += '<div class="match-meta">' + esc(dateStr) + '</div>';
@@ -960,6 +964,7 @@ button { font-family: inherit; font-size: inherit; }
       clearStatus();
       renderDetail();
       document.getElementById('detail-section').classList.remove('hidden');
+      document.getElementById('feed-section').classList.add('feed-section-collapsed');
       // Start auto-refresh if in progress
       if (currentTournament.status === 'IN_PROGRESS') startDetailTimer();
     }).catch(function(err) {
@@ -1005,6 +1010,20 @@ button { font-family: inherit; font-size: inherit; }
         });
       }
 
+      // Detect splits: last 3 matches, completed, 0-0 or null scores
+      if (matches.length >= 3) {
+        var maxNum = 0;
+        for (var si = 0; si < matches.length; si++) {
+          if (matches[si].num > maxNum) maxNum = matches[si].num;
+        }
+        for (var si = 0; si < matches.length; si++) {
+          var sm = matches[si];
+          if (sm.num >= maxNum - 2 && sm.status === 'COMPLETED' && (sm.s1 == null || sm.s1 === 0) && (sm.s2 == null || sm.s2 === 0)) {
+            sm.isSplit = true;
+          }
+        }
+      }
+
       return { matches: matches, tournament: tournament };
     });
   }
@@ -1022,7 +1041,8 @@ button { font-family: inherit; font-size: inherit; }
     var isVenueFav = t.venue && isFavVenue(t.venue.id);
     var isTdFav = tdId && isFavTd(tdId);
 
-    var html = '<div class="match-detail">';
+    var html = '<button class="back-to-list" onclick="backToList()">&laquo; Back to tournament list</button>';
+    html += '<div class="match-detail">';
     html += '<div class="match-header">';
     html += '<div class="match-title">' + esc(t.name) + ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a></div>';
     html += '<div class="match-meta">' + esc(dateStr) + '</div>';
@@ -1054,33 +1074,18 @@ button { font-family: inherit; font-size: inherit; }
     }
     html += '</div></div>';
 
-    // Toggles
+    // Toggle
     html += '<div class="match-toggles">';
-    html += '<div class="toggle-group">';
-    html += '<button class="toggle-btn' + (showFavsOnly ? ' active' : '') + '" onclick="toggleFavsOnly(true)">&#9733; Favs</button>';
-    html += '<button class="toggle-btn' + (!showFavsOnly ? ' active' : '') + '" onclick="toggleFavsOnly(false)">All</button>';
-    html += '</div>';
     html += '<div class="toggle-group">';
     html += '<button class="toggle-btn' + (groupByPlayer ? ' active' : '') + '" onclick="toggleGroupBy(true)">By Player</button>';
     html += '<button class="toggle-btn' + (!groupByPlayer ? ' active' : '') + '" onclick="toggleGroupBy(false)">By Match #</button>';
     html += '</div>';
     html += '</div>';
 
-    // Filter matches
     var matches = currentMatches;
-    if (showFavsOnly) {
-      matches = matches.filter(function(m) {
-        return isPlayerFav(m.p1) || isPlayerFav(m.p2);
-      });
-    }
 
     if (matches.length === 0) {
-      if (showFavsOnly && currentMatches.length > 0) {
-        showFavsOnly = false;
-        return renderDetail();
-      } else {
-        html += '<div style="text-align:center;padding:20px;color:#475569;">No matches yet.</div>';
-      }
+      html += '<div style="text-align:center;padding:20px;color:#475569;">No matches yet.</div>';
     } else if (groupByPlayer) {
       html += renderGroupedByPlayer(matches);
     } else {
@@ -1109,14 +1114,17 @@ button { font-family: inherit; font-size: inherit; }
     var playerOrder = [];
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit);
     }
 
-    // If showing favs only, only show fav players
-    if (showFavsOnly) {
-      playerOrder = playerOrder.filter(function(name) { return isPlayerFav(playerMap[name].player); });
-    }
+    // Sort: favorites first, then by number of matches played (descending)
+    playerOrder.sort(function(a, b) {
+      var aFav = isPlayerFav(playerMap[a].player) ? 0 : 1;
+      var bFav = isPlayerFav(playerMap[b].player) ? 0 : 1;
+      if (aFav !== bFav) return aFav - bFav;
+      return playerMap[b].matches.length - playerMap[a].matches.length;
+    });
 
     var html = '<div class="player-groups-grid">';
     for (var pi = 0; pi < playerOrder.length; pi++) {
@@ -1141,7 +1149,9 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="match-vs-label">vs</span>';
         html += playerFavBtn(pm.opp);
         html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
-        if (pm.status === 'COMPLETED') {
+        if (pm.isSplit) {
+          html += '<span></span><span class="mr-win" style="grid-column:span 3">Split</span>';
+        } else if (pm.status === 'COMPLETED') {
           html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
           html += '<span class="mr-s1 ' + cls + '">' + pm.myScore + '</span>';
           html += '<span class="mr-sep ' + cls + '">-</span>';
@@ -1164,13 +1174,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -1194,7 +1204,9 @@ button { font-family: inherit; font-size: inherit; }
       html += '<span class="fm-num">#' + m.num + '</span>';
       html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
       html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (p1Win ? ' fm-winner' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
-      if (m.status === 'COMPLETED') {
+      if (m.isSplit) {
+        html += '<span class="mr-win" style="grid-column:span 3">Split</span>';
+      } else if (m.status === 'COMPLETED') {
         html += '<span class="mr-s1 ' + cls + '"' + (p1Win ? ' style="font-weight:700"' : '') + '>' + m.s1 + '</span>';
         html += '<span class="mr-sep ' + cls + '">-</span>';
         html += '<span class="mr-s2 ' + cls + '"' + (p2Win ? ' style="font-weight:700"' : '') + '>' + m.s2 + '</span>';
@@ -1217,7 +1229,11 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   // Detail actions (exposed to window)
   // =====================================================
-  window.toggleFavsOnly = function(v) { showFavsOnly = v; renderDetail(); };
+  window.backToList = function() {
+    document.getElementById('feed-section').classList.remove('feed-section-collapsed');
+    document.getElementById('detail-section').classList.add('hidden');
+  };
+
   window.toggleGroupBy = function(v) { groupByPlayer = v; renderDetail(); };
   window.setPlayerListSort = function(v) { playerListSort = v; if (currentPlayerList) renderPlayerList(currentPlayerList); };
 
@@ -1232,25 +1248,11 @@ button { font-family: inherit; font-size: inherit; }
     var oppLink = e.target.closest('.match-opponent-link');
     if (oppLink) {
       var targetId = oppLink.dataset.player;
-      if (showFavsOnly) {
-        showFavsOnly = false;
-        renderDetail();
-        // Re-find target after re-render
-        setTimeout(function() {
-          var el = document.getElementById(targetId);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.classList.add('highlight');
-            setTimeout(function() { el.classList.remove('highlight'); }, 3000);
-          }
-        }, 50);
-      } else {
-        var targetEl = document.getElementById(targetId);
-        if (targetEl) {
-          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          targetEl.classList.add('highlight');
-          setTimeout(function() { targetEl.classList.remove('highlight'); }, 3000);
-        }
+      var targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetEl.classList.add('highlight');
+        setTimeout(function() { targetEl.classList.remove('highlight'); }, 3000);
       }
       return;
     }
