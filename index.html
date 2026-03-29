@@ -115,7 +115,7 @@ button { font-family: inherit; font-size: inherit; }
 
 /* Player group */
 .player-groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px 16px; align-items: start; }
-.player-group { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; transition: border-color 0.3s; }
+.player-group { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; transition: border-color 0.3s; overflow: hidden; }
 .player-group.highlight { border-color: #60a5fa; animation: card-blink 1s ease-in-out 3; }
 @keyframes card-blink { 0%, 100% { background: #0f172a; } 50% { background: #1e3a5f; } }
 .match-opponent-link { cursor: pointer; }
@@ -129,7 +129,7 @@ button { font-family: inherit; font-size: inherit; }
 .record-l { color: #f87171; }
 
 /* Match rows — CSS grid so scores align across rows */
-.match-rows { display: inline-grid; grid-template-columns: 28px auto auto auto auto 16px 8px 16px auto; column-gap: 0; align-items: center; font-size: 13px; }
+.match-rows { display: grid; grid-template-columns: 28px auto auto minmax(0, auto) auto 16px 8px 16px auto; column-gap: 0; align-items: center; font-size: 13px; }
 .mr-video { padding-left: 6px; }
 .mr-video a { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 10px; background: #dc2626; border-radius: 2px; color: #fff; text-decoration: none; font-size: 6px; line-height: 1; vertical-align: middle; }
 .mr-video a:hover { background: #ef4444; }
@@ -851,11 +851,24 @@ button { font-family: inherit; font-size: inherit; }
   var detailInterval = null;
   var groupByPlayer = true;
   var playerListSort = 'name';
+  var cache = {}; // slug → { type: 'matches'|'players', data: ..., time: ... }
 
   function loadPlayerList(slug) {
     currentSlug = slug;
     updateUrlBar(slug);
     clearDetailTimer();
+
+    if (cache[slug] && cache[slug].type === 'players') {
+      var c = cache[slug];
+      currentTournament = c.tournament;
+      currentMatches = [];
+      currentPlayerList = c.players;
+      renderPlayerList(c.players);
+      document.getElementById('detail-section').classList.remove('hidden');
+      document.getElementById('feed-section').classList.add('feed-section-collapsed');
+      return;
+    }
+
     showStatus('<span class="spinner"></span> Loading player list...', 'info');
 
     var rows = document.querySelectorAll('.feed-table tbody tr');
@@ -871,6 +884,7 @@ button { font-family: inherit; font-size: inherit; }
       currentTournament = { name: t.name || '', date: t.start_date_time, status: t.status || 'NOT_STARTED', venue: t.venue, organizer: t.organizer, director: t.director, slug: slug };
       currentMatches = [];
       currentPlayerList = players;
+      cache[slug] = { type: 'players', players: players, tournament: currentTournament };
       clearStatus();
       renderPlayerList(players);
       document.getElementById('detail-section').classList.remove('hidden');
@@ -950,7 +964,6 @@ button { font-family: inherit; font-size: inherit; }
     currentPlayerList = null;
     updateUrlBar(slug);
     clearDetailTimer();
-    showStatus('<span class="spinner"></span> Loading matches...', 'info');
 
     // Highlight active row in feed
     var rows = document.querySelectorAll('.feed-table tbody tr');
@@ -958,9 +971,22 @@ button { font-family: inherit; font-size: inherit; }
       rows[i].className = rows[i].dataset.slug === slug ? 'active' : '';
     }
 
+    if (cache[slug] && cache[slug].type === 'matches') {
+      currentMatches = cache[slug].matches;
+      currentTournament = cache[slug].tournament;
+      renderDetail();
+      document.getElementById('detail-section').classList.remove('hidden');
+      document.getElementById('feed-section').classList.add('feed-section-collapsed');
+      if (currentTournament.status === 'IN_PROGRESS') startDetailTimer();
+      return;
+    }
+
+    showStatus('<span class="spinner"></span> Loading matches...', 'info');
+
     fetchMatches(slug).then(function(result) {
       currentMatches = result.matches;
       currentTournament = result.tournament;
+      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament };
       clearStatus();
       renderDetail();
       document.getElementById('detail-section').classList.remove('hidden');
@@ -1332,6 +1358,7 @@ button { font-family: inherit; font-size: inherit; }
     fetchMatches(currentSlug).then(function(result) {
       currentMatches = result.matches;
       currentTournament = result.tournament;
+      cache[currentSlug] = { type: 'matches', matches: result.matches, tournament: result.tournament };
       renderDetail();
       if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
     }).catch(function() { /* silent retry next cycle */ });
@@ -1500,8 +1527,10 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   renderFavs();
   initDateInputs();
-  loadFeed();
+  var hasSlug = new URLSearchParams(window.location.search).has('digitalpool');
   checkUrlParams();
+  if (hasSlug) setTimeout(loadFeed, 2000);
+  else loadFeed();
   if (!localStorage.getItem('poolradar_favs') || (favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0)) {
     document.getElementById('help-modal').classList.remove('hidden');
   }
