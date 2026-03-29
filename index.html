@@ -890,7 +890,7 @@ button { font-family: inherit; font-size: inherit; }
     var html = '<div class="match-detail">';
     html += '<div class="match-header">';
     html += '<div class="match-title">' + esc(t.name) + '</div>';
-    html += '<div class="match-meta">' + esc(dateStr) + ' &middot; <span style="color:#64748b">(upcoming)</span></div>';
+    html += '<div class="match-meta">' + esc(dateStr) + '</div>';
     if (venueStr) {
       var vBtn = isVenueFav
         ? '<button class="remove-fav-btn" onclick="removeVenueFromDetail()" title="Remove favorite">&#9733;</button> '
