@@ -597,6 +597,8 @@ button { font-family: inherit; font-size: inherit; }
   var feedData = [];
   var feedSort = { col: 'date', asc: false };
   var feedLoading = false;
+  var feedTruncated = { players: false, venues: false, tds: false };
+  var feedPaginationState = null;
 
   var isMobile = window.innerWidth <= 768;
   var feedDateFrom = new Date();
@@ -630,105 +632,91 @@ button { font-family: inherit; font-size: inherit; }
     var toStr = to.toISOString();
 
 
-    var promises = [];
     var tournamentMap = {};
+    var feedWasTruncated = false;
 
-    function ensureTournament(t) {
-      if (!tournamentMap[t.id]) {
-        tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [] };
-      }
-      return tournamentMap[t.id];
+    // Collect all favorite IDs
+    var allPlayerIds = [];
+    var allPlayerNames = [];
+    for (var i = 0; i < favs.players.length; i++) {
+      allPlayerIds = allPlayerIds.concat(favs.players[i].playerIds);
+      allPlayerNames.push(favs.players[i].name);
+    }
+    var allVenueIds = [];
+    for (var i = 0; i < favs.venues.length; i++) {
+      allVenueIds = allVenueIds.concat(favs.venues[i].venueIds);
+    }
+    var allTdIds = [];
+    for (var i = 0; i < favs.tds.length; i++) {
+      allTdIds = allTdIds.concat(favs.tds[i].userIds);
     }
 
-    // By player (search by player_id AND by name to catch unlinked registrations)
-    if (favs.players.length > 0) {
-      var allPlayerIds = [];
-      var allPlayerNames = [];
-      for (var i = 0; i < favs.players.length; i++) {
-        allPlayerIds = allPlayerIds.concat(favs.players[i].playerIds);
-        allPlayerNames.push(favs.players[i].name);
-      }
-      promises.push(
-        gql('query($ids:[Int!]!,$names:[String!]!,$from:timestamptz!,$to:timestamptz!){tournament_players(where:{_or:[{player_id:{_in:$ids}},{name:{_in:$names}}],tournament:{start_date_time:{_gte:$from,_lte:$to}}},order_by:{tournament:{start_date_time:desc}},limit:1000){player_id name tournament{id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}}',
-          { ids: allPlayerIds, names: allPlayerNames, from: fromStr, to: toStr })
-        .then(function(res) {
-          var tps = (res.data && res.data.tournament_players) || [];
-          for (var j = 0; j < tps.length; j++) {
-            var t = tps[j].tournament;
-            ensureTournament(t);
-            // Find which fav player matched (by player_id or by name)
-            for (var fi = 0; fi < favs.players.length; fi++) {
-              var matched = false;
-              if (tps[j].player_id && favs.players[fi].playerIds.indexOf(tps[j].player_id) !== -1) matched = true;
-              if (!matched && tps[j].name && tps[j].name.toLowerCase() === favs.players[fi].name.toLowerCase()) matched = true;
-              if (matched) {
-                var fn = favs.players[fi].nickname || favs.players[fi].name;
-                if (tournamentMap[t.id].favNames.indexOf(fn) === -1) tournamentMap[t.id].favNames.push(fn);
-                if (tournamentMap[t.id].favPlayerNames.indexOf(fn) === -1) tournamentMap[t.id].favPlayerNames.push(fn);
-              }
+    // Always include all conditions — empty arrays match nothing
+    var query = 'query($pids:[Int!]!,$pnames:[String!]!,$vids:[Int!]!,$tids:[Int!]!,$from:timestamptz!,$to:timestamptz!){'
+      + 'tournaments(where:{_or:['
+      + '{tournament_players:{_or:[{player_id:{_in:$pids}},{name:{_in:$pnames}}]}},'
+      + '{venue_id:{_in:$vids}},'
+      + '{_or:[{organizer_id:{_in:$tids}},{director_id:{_in:$tids}}]}'
+      + '],start_date_time:{_gte:$from,_lte:$to}}'
+      + ',order_by:{start_date_time:desc},limit:1000){'
+      + 'id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}'
+      + ' tournament_players(where:{_or:[{player_id:{_in:$pids}},{name:{_in:$pnames}}]}){player_id name}'
+      + '}}';
+
+    var vars = { pids: allPlayerIds, pnames: allPlayerNames, vids: allVenueIds, tids: allTdIds, from: fromStr, to: toStr };
+
+    gql(query, vars).then(function(res) {
+      var tournaments = (res.data && res.data.tournaments) || [];
+      if (tournaments.length >= 1000) feedWasTruncated = true;
+
+      for (var j = 0; j < tournaments.length; j++) {
+        var t = tournaments[j];
+        if (!tournamentMap[t.id]) {
+          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [] };
+        }
+        var entry = tournamentMap[t.id];
+
+        // Match players (from nested tournament_players)
+        var tps = t.tournament_players || [];
+        for (var k = 0; k < tps.length; k++) {
+          for (var fi = 0; fi < favs.players.length; fi++) {
+            var matched = false;
+            if (tps[k].player_id && favs.players[fi].playerIds.indexOf(tps[k].player_id) !== -1) matched = true;
+            if (!matched && tps[k].name && tps[k].name.toLowerCase() === favs.players[fi].name.toLowerCase()) matched = true;
+            if (matched) {
+              var fn = favs.players[fi].nickname || favs.players[fi].name;
+              if (entry.favNames.indexOf(fn) === -1) entry.favNames.push(fn);
+              if (entry.favPlayerNames.indexOf(fn) === -1) entry.favPlayerNames.push(fn);
             }
           }
-        })
-      );
-    }
+        }
 
-    // By venue
-    if (favs.venues.length > 0) {
-      var allVenueIds = [];
-      for (var i = 0; i < favs.venues.length; i++) {
-        allVenueIds = allVenueIds.concat(favs.venues[i].venueIds);
-      }
-      promises.push(
-        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{venue_id:{_in:$ids},start_date_time:{_gte:$from,_lte:$to}},limit:1000,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
-          { ids: allVenueIds, from: fromStr, to: toStr })
-        .then(function(res) {
-          var ts = (res.data && res.data.tournaments) || [];
-          for (var j = 0; j < ts.length; j++) {
-            var t = ts[j];
-            ensureTournament(t);
-            if (t.venue) {
-              for (var fi = 0; fi < favs.venues.length; fi++) {
-                if (favs.venues[fi].venueIds.indexOf(t.venue.id) !== -1) {
-                  var vn = favs.venues[fi].name;
-                  if (tournamentMap[t.id].favNames.indexOf(vn) === -1) tournamentMap[t.id].favNames.push(vn);
-                }
-              }
+        // Match venue
+        if (t.venue) {
+          for (var fi = 0; fi < favs.venues.length; fi++) {
+            if (favs.venues[fi].venueIds.indexOf(t.venue.id) !== -1) {
+              var vn = favs.venues[fi].name;
+              if (entry.favNames.indexOf(vn) === -1) entry.favNames.push(vn);
             }
           }
-        })
-      );
-    }
+        }
 
-    // By TD (organizer/director)
-    if (favs.tds.length > 0) {
-      var allTdIds = [];
-      for (var i = 0; i < favs.tds.length; i++) {
-        allTdIds = allTdIds.concat(favs.tds[i].userIds);
-      }
-      promises.push(
-        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{_or:[{organizer_id:{_in:$ids}},{director_id:{_in:$ids}}],start_date_time:{_gte:$from,_lte:$to}},limit:1000,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
-          { ids: allTdIds, from: fromStr, to: toStr })
-        .then(function(res) {
-          var ts = (res.data && res.data.tournaments) || [];
-          for (var j = 0; j < ts.length; j++) {
-            var t = ts[j];
-            ensureTournament(t);
-            for (var fi = 0; fi < favs.tds.length; fi++) {
-              var tdIds = favs.tds[fi].userIds;
-              if ((t.organizer && tdIds.indexOf(t.organizer.id) !== -1) || (t.director && tdIds.indexOf(t.director.id) !== -1)) {
-                var tn = favs.tds[fi].name;
-                if (tournamentMap[t.id].favNames.indexOf(tn) === -1) tournamentMap[t.id].favNames.push(tn);
-              }
-            }
+        // Match TD
+        for (var fi = 0; fi < favs.tds.length; fi++) {
+          var tdIds = favs.tds[fi].userIds;
+          if ((t.organizer && tdIds.indexOf(t.organizer.id) !== -1) || (t.director && tdIds.indexOf(t.director.id) !== -1)) {
+            var tn = favs.tds[fi].name;
+            if (entry.favNames.indexOf(tn) === -1) entry.favNames.push(tn);
           }
-        })
-      );
-    }
+        }
+      }
 
-    Promise.all(promises).then(function() {
       feedData = [];
       for (var id in tournamentMap) feedData.push(tournamentMap[id]);
       feedLoading = false;
+      feedTruncated = { players: feedWasTruncated, venues: false, tds: false };
+      feedPaginationState = { tournamentMap: tournamentMap, fromStr: fromStr, toStr: toStr, offset: 1000,
+        allPlayerIds: allPlayerIds, allPlayerNames: allPlayerNames, allVenueIds: allVenueIds, allTdIds: allTdIds, query: query };
       renderFeed();
     }).catch(function(err) {
       feedLoading = false;
@@ -833,7 +821,81 @@ button { font-family: inherit; font-size: inherit; }
       })(t.slug, t.status));
       tbody.appendChild(tr);
     }
+
+    // Show truncation warning
+    var truncWarning = document.getElementById('trunc-warning');
+    if (!truncWarning) {
+      truncWarning = document.createElement('div');
+      truncWarning.id = 'trunc-warning';
+      document.getElementById('feed-table').after(truncWarning);
+    }
+    if (feedTruncated.players || feedTruncated.venues || feedTruncated.tds) {
+      truncWarning.innerHTML = '<div style="background:#422006;border:1px solid #854d0e;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#fbbf24;">'
+        + 'Results may be incomplete (1000 limit reached). '
+        + '<button class="btn" onclick="loadMoreFeed()" style="font-size:11px;padding:2px 8px;margin-left:8px;">Load more</button>'
+        + '</div>';
+    } else {
+      truncWarning.innerHTML = '';
+    }
   }
+
+  window.loadMoreFeed = function() {
+    if (!feedPaginationState) return;
+    var ps = feedPaginationState;
+    var tournamentMap = ps.tournamentMap;
+
+    // Re-run same query with offset
+    var offsetQuery = ps.query.replace('limit:1000', 'limit:1000,offset:' + ps.offset);
+
+    showStatus('<span class="spinner"></span> Loading more...', 'info');
+    gql(offsetQuery, { pids: ps.allPlayerIds, pnames: ps.allPlayerNames, vids: ps.allVenueIds, tids: ps.allTdIds, from: ps.fromStr, to: ps.toStr })
+    .then(function(res) {
+      var tournaments = (res.data && res.data.tournaments) || [];
+      if (tournaments.length < 1000) feedTruncated = { players: false, venues: false, tds: false };
+
+      for (var j = 0; j < tournaments.length; j++) {
+        var t = tournaments[j];
+        if (!tournamentMap[t.id]) {
+          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [] };
+        }
+        var entry = tournamentMap[t.id];
+        var tps = t.tournament_players || [];
+        for (var k = 0; k < tps.length; k++) {
+          for (var fi = 0; fi < favs.players.length; fi++) {
+            var matched = false;
+            if (tps[k].player_id && favs.players[fi].playerIds.indexOf(tps[k].player_id) !== -1) matched = true;
+            if (!matched && tps[k].name && tps[k].name.toLowerCase() === favs.players[fi].name.toLowerCase()) matched = true;
+            if (matched) {
+              var fn = favs.players[fi].nickname || favs.players[fi].name;
+              if (entry.favNames.indexOf(fn) === -1) entry.favNames.push(fn);
+              if (entry.favPlayerNames.indexOf(fn) === -1) entry.favPlayerNames.push(fn);
+            }
+          }
+        }
+        if (t.venue) {
+          for (var fi = 0; fi < favs.venues.length; fi++) {
+            if (favs.venues[fi].venueIds.indexOf(t.venue.id) !== -1) {
+              var vn = favs.venues[fi].name;
+              if (entry.favNames.indexOf(vn) === -1) entry.favNames.push(vn);
+            }
+          }
+        }
+        for (var fi = 0; fi < favs.tds.length; fi++) {
+          var tdIds = favs.tds[fi].userIds;
+          if ((t.organizer && tdIds.indexOf(t.organizer.id) !== -1) || (t.director && tdIds.indexOf(t.director.id) !== -1)) {
+            var tn = favs.tds[fi].name;
+            if (entry.favNames.indexOf(tn) === -1) entry.favNames.push(tn);
+          }
+        }
+      }
+
+      feedData = [];
+      for (var id in tournamentMap) feedData.push(tournamentMap[id]);
+      ps.offset += 1000;
+      clearStatus();
+      renderFeed();
+    });
+  };
 
   window.sortFeed = function(col) {
     if (feedSort.col === col) feedSort.asc = !feedSort.asc;
