@@ -649,7 +649,7 @@ button { font-family: inherit; font-size: inherit; }
         allPlayerNames.push(favs.players[i].name);
       }
       promises.push(
-        gql('query($ids:[Int!]!,$names:[String!]!,$from:timestamptz!,$to:timestamptz!){tournament_players(where:{_or:[{player_id:{_in:$ids}},{name:{_in:$names}}],tournament:{start_date_time:{_gte:$from,_lte:$to}}},limit:200){player_id name tournament{id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}}',
+        gql('query($ids:[Int!]!,$names:[String!]!,$from:timestamptz!,$to:timestamptz!){tournament_players(where:{_or:[{player_id:{_in:$ids}},{name:{_in:$names}}],tournament:{start_date_time:{_gte:$from,_lte:$to}}},order_by:{tournament:{start_date_time:desc}},limit:1000){player_id name tournament{id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}}',
           { ids: allPlayerIds, names: allPlayerNames, from: fromStr, to: toStr })
         .then(function(res) {
           var tps = (res.data && res.data.tournament_players) || [];
@@ -679,7 +679,7 @@ button { font-family: inherit; font-size: inherit; }
         allVenueIds = allVenueIds.concat(favs.venues[i].venueIds);
       }
       promises.push(
-        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{venue_id:{_in:$ids},start_date_time:{_gte:$from,_lte:$to}},limit:200,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
+        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{venue_id:{_in:$ids},start_date_time:{_gte:$from,_lte:$to}},limit:1000,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
           { ids: allVenueIds, from: fromStr, to: toStr })
         .then(function(res) {
           var ts = (res.data && res.data.tournaments) || [];
@@ -706,7 +706,7 @@ button { font-family: inherit; font-size: inherit; }
         allTdIds = allTdIds.concat(favs.tds[i].userIds);
       }
       promises.push(
-        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{_or:[{organizer_id:{_in:$ids}},{director_id:{_in:$ids}}],start_date_time:{_gte:$from,_lte:$to}},limit:200,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
+        gql('query($ids:[Int!]!,$from:timestamptz!,$to:timestamptz!){tournaments(where:{_or:[{organizer_id:{_in:$ids}},{director_id:{_in:$ids}}],start_date_time:{_gte:$from,_lte:$to}},limit:1000,order_by:{start_date_time:desc}){id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}}}',
           { ids: allTdIds, from: fromStr, to: toStr })
         .then(function(res) {
           var ts = (res.data && res.data.tournaments) || [];
