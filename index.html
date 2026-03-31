@@ -1321,6 +1321,12 @@ button { font-family: inherit; font-size: inherit; }
   window.backToList = function() {
     document.getElementById('feed-section').classList.remove('feed-section-collapsed');
     document.getElementById('detail-section').classList.add('hidden');
+    document.getElementById('detail-section').innerHTML = '';
+    clearDetailTimer();
+    currentSlug = null;
+    var url = new URL(window.location);
+    url.searchParams.delete('digitalpool');
+    history.replaceState(null, '', url);
   };
 
   window.toggleGroupBy = function(v) { groupByPlayer = v; renderDetail(); };
