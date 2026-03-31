@@ -919,6 +919,7 @@ button { font-family: inherit; font-size: inherit; }
   function loadPlayerList(slug) {
     currentSlug = slug;
     updateUrlBar(slug);
+    urlInput.value = '';
     clearDetailTimer();
 
     if (cache[slug] && cache[slug].type === 'players') {
@@ -1026,6 +1027,7 @@ button { font-family: inherit; font-size: inherit; }
     currentSlug = slug;
     currentPlayerList = null;
     updateUrlBar(slug);
+    urlInput.value = '';
     clearDetailTimer();
 
     // Highlight active row in feed
@@ -1232,7 +1234,8 @@ button { font-family: inherit; font-size: inherit; }
       for (var mi = 0; mi < pd.matches.length; mi++) {
         var pm = pd.matches[mi];
         var oppFav = isPlayerFav(pm.opp);
-        var cls = pm.status === 'COMPLETED' ? (pm.won ? 'mr-win' : 'mr-loss') : (pm.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
+        var hasScore = pm.myScore != null && pm.oppScore != null && (pm.myScore > 0 || pm.oppScore > 0);
+        var cls = hasScore ? (pm.won ? 'mr-win' : 'mr-loss') : (pm.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
         html += '<div class="match-row">';
         html += '<span class="match-num">#' + pm.num + '</span>';
         html += '<span class="match-vs-label">vs</span>';
@@ -1240,7 +1243,7 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
         if (pm.isSplit) {
           html += '<span></span><span class="mr-win" style="grid-column:span 3">Split</span>';
-        } else if (pm.status === 'COMPLETED') {
+        } else if (hasScore) {
           html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
           html += '<span class="mr-s1 ' + cls + '">' + pm.myScore + '</span>';
           html += '<span class="mr-sep ' + cls + '">-</span>';
@@ -1288,14 +1291,15 @@ button { font-family: inherit; font-size: inherit; }
       var p2Fav = isPlayerFav(m.p2);
       var p1Win = m.p1Won;
       var p2Win = m.p2Won;
-      var cls = m.status === 'COMPLETED' ? (p1Win ? 'mr-win' : 'mr-loss') : (m.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
+      var hasScore = m.s1 != null && m.s2 != null && (m.s1 > 0 || m.s2 > 0);
+      var cls = hasScore ? (p1Win ? 'mr-win' : 'mr-loss') : (m.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
       html += '<div class="flat-match">';
       html += '<span class="fm-num">#' + m.num + '</span>';
       html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
       html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (p1Win ? ' fm-winner' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
       if (m.isSplit) {
         html += '<span class="mr-win" style="grid-column:span 3">Split</span>';
-      } else if (m.status === 'COMPLETED') {
+      } else if (hasScore) {
         html += '<span class="mr-s1 ' + cls + '"' + (p1Win ? ' style="font-weight:700"' : '') + '>' + m.s1 + '</span>';
         html += '<span class="mr-sep ' + cls + '">-</span>';
         html += '<span class="mr-s2 ' + cls + '"' + (p2Win ? ' style="font-weight:700"' : '') + '>' + m.s2 + '</span>';
