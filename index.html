@@ -660,7 +660,7 @@ button { font-family: inherit; font-size: inherit; }
       + '],start_date_time:{_gte:$from,_lte:$to}}'
       + ',order_by:{start_date_time:desc},limit:1000){'
       + 'id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}'
-      + ' tournament_players(where:{_or:[{player_id:{_in:$pids}},{name:{_in:$pnames}}]}){player_id name}'
+      + ' tournament_players(where:{_or:[{player_id:{_in:$pids}},{name:{_in:$pnames}}]}){player_id name place}'
       + '}}';
 
     var vars = { pids: allPlayerIds, pnames: allPlayerNames, vids: allVenueIds, tids: allTdIds, from: fromStr, to: toStr };
@@ -672,7 +672,7 @@ button { font-family: inherit; font-size: inherit; }
       for (var j = 0; j < tournaments.length; j++) {
         var t = tournaments[j];
         if (!tournamentMap[t.id]) {
-          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [] };
+          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [], favPlayerPlaces: {} };
         }
         var entry = tournamentMap[t.id];
 
@@ -687,6 +687,7 @@ button { font-family: inherit; font-size: inherit; }
               var fn = favs.players[fi].nickname || favs.players[fi].name;
               if (entry.favNames.indexOf(fn) === -1) entry.favNames.push(fn);
               if (entry.favPlayerNames.indexOf(fn) === -1) entry.favPlayerNames.push(fn);
+              if (tps[k].place) entry.favPlayerPlaces[fn] = tps[k].place;
             }
           }
         }
@@ -722,6 +723,32 @@ button { font-family: inherit; font-size: inherit; }
       feedLoading = false;
       showStatus('Failed to load feed: ' + err.message, 'error');
     });
+  }
+
+  function shortPlace(place) {
+    if (!place) return '';
+    var m = place.match(/^\d+/);
+    if (!m) return place;
+    var n = parseInt(m[0], 10);
+    var s = (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ['th','st','nd','rd'][n % 10] || 'th';
+    return n + s;
+  }
+
+  function formatFavPlayers(t) {
+    var names = t.favPlayerNames.slice();
+    var places = t.favPlayerPlaces || {};
+    names.sort(function(a, b) {
+      var pa = places[a] ? parseInt(places[a], 10) : Infinity;
+      var pb = places[b] ? parseInt(places[b], 10) : Infinity;
+      return pa - pb;
+    });
+    var parts = [];
+    for (var i = 0; i < names.length; i++) {
+      var fn = names[i];
+      var pl = places[fn];
+      parts.push(esc(fn) + (pl ? ' <span style="color:#94a3b8;">(' + esc(shortPlace(pl)) + ')</span>' : ''));
+    }
+    return parts.join(', ');
   }
 
   function renderFeed() {
@@ -812,7 +839,7 @@ button { font-family: inherit; font-size: inherit; }
       tr.innerHTML = '<td>' + esc(dateStr) + tag + '</td>'
         + '<td>' + esc(t.name) + '</td>'
         + '<td>' + esc(venueName) + '</td>'
-        + '<td class="' + (isFuture ? '' : 'fav-names') + '">' + esc(t.favPlayerNames.join(', ')) + '</td>';
+        + '<td class="' + (isFuture ? '' : 'fav-names') + '">' + formatFavPlayers(t) + '</td>';
       tr.addEventListener('click', (function(slug, status) {
         return function() {
           if (status === 'NOT_STARTED' || status === 'SCHEDULED') loadPlayerList(slug);
@@ -856,7 +883,7 @@ button { font-family: inherit; font-size: inherit; }
       for (var j = 0; j < tournaments.length; j++) {
         var t = tournaments[j];
         if (!tournamentMap[t.id]) {
-          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [] };
+          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [], favPlayerPlaces: {} };
         }
         var entry = tournamentMap[t.id];
         var tps = t.tournament_players || [];
@@ -869,6 +896,7 @@ button { font-family: inherit; font-size: inherit; }
               var fn = favs.players[fi].nickname || favs.players[fi].name;
               if (entry.favNames.indexOf(fn) === -1) entry.favNames.push(fn);
               if (entry.favPlayerNames.indexOf(fn) === -1) entry.favPlayerNames.push(fn);
+              if (tps[k].place) entry.favPlayerPlaces[fn] = tps[k].place;
             }
           }
         }
@@ -972,7 +1000,7 @@ button { font-family: inherit; font-size: inherit; }
     var html = '<button class="back-to-list" onclick="backToList()">&laquo; Back to tournament list</button>';
     html += '<div class="match-detail">';
     html += '<div class="match-header">';
-    html += '<div class="match-title">' + esc(t.name) + '</div>';
+    html += '<div class="match-title">' + esc(t.name) + ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/players" target="_blank" rel="noopener">Players &rarr;</a></div>';
     html += '<div class="match-meta">' + esc(dateStr) + '</div>';
     if (venueStr) {
       var vBtn = isVenueFav
