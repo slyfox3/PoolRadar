@@ -146,11 +146,12 @@ button { font-family: inherit; font-size: inherit; }
 .match-opponent.is-fav { color: #fbbf24; }
 .match-opp-rating { color: #64748b; font-size: 11px; }
 .mr-label { font-weight: 700; font-size: 12px; text-align: right; font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace; padding-right: 5px; }
-.mr-s1 { font-weight: 700; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
-.mr-sep { font-weight: 700; font-size: 12px; text-align: center; }
-.mr-s2 { font-weight: 700; font-size: 12px; text-align: left; font-variant-numeric: tabular-nums; }
-.mr-win { color: #4ade80; }
-.mr-loss { color: #f87171; }
+.mr-s1 { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.mr-sep { font-size: 12px; text-align: center; }
+.mr-s2 { font-size: 12px; text-align: left; font-variant-numeric: tabular-nums; }
+.mr-win { }
+.mr-loss { opacity: 0.45; }
+.fm-loser { opacity: 0.45; }
 .mr-live { color: #60a5fa; animation: blink 3s ease-in-out infinite; }
 .mr-none { color: #64748b; }
 
@@ -159,16 +160,17 @@ button { font-family: inherit; font-size: inherit; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; break-inside: avoid; }
 
 /* Flat match grid (by match#) */
-.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
+.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto 18px 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
 .flat-match > * { display: flex; align-items: center; }
 .flat-match { display: contents; }
 .flat-match .fm-num { color: #64748b; font-size: 11px; text-align: right; padding-right: 6px; }
 .flat-match > * { border-bottom: 1px solid #334155; padding: 5px 0; }
 .flat-match .fm-p1, .flat-match .fm-p2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flat-match .fm-p1.is-fav, .flat-match .fm-p2.is-fav { color: #fbbf24; }
-.flat-match .fm-winner { font-weight: 700; }
+.flat-match .fm-winner { font-weight: 700; color: #f8fafc; }
 .flat-match .fm-add { }
 .flat-match .fm-rating { color: #64748b; font-size: 11px; }
+.flat-match .fm-status { text-align: center; font-size: 11px; }
 .flat-match .fm-p1 { padding-right: 4px; }
 .flat-match .fm-p2 { padding-left: 4px; }
 
@@ -1263,24 +1265,24 @@ button { font-family: inherit; font-size: inherit; }
         var pm = pd.matches[mi];
         var oppFav = isPlayerFav(pm.opp);
         var hasScore = pm.myScore != null && pm.oppScore != null && (pm.myScore > 0 || pm.oppScore > 0);
-        var cls = hasScore ? (pm.won ? 'mr-win' : 'mr-loss') : (pm.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
-        html += '<div class="match-row">';
+        var rowCls = (pm.status !== 'IN_PROGRESS' && hasScore) ? (pm.won ? 'mr-win' : 'mr-loss') : '';
+        html += '<div class="match-row ' + rowCls + '">';
         html += '<span class="match-num">#' + pm.num + '</span>';
         html += '<span class="match-vs-label">vs</span>';
         html += playerFavBtn(pm.opp);
         html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
         if (pm.isSplit) {
-          html += '<span></span><span class="mr-win" style="grid-column:span 3">Split</span>';
-        } else if (hasScore) {
-          html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
-          html += '<span class="mr-s1 ' + cls + '">' + pm.myScore + '</span>';
-          html += '<span class="mr-sep ' + cls + '">-</span>';
-          html += '<span class="mr-s2 ' + cls + '">' + pm.oppScore + '</span>';
+          html += '<span></span><span style="grid-column:span 3">Split</span>';
         } else if (pm.status === 'IN_PROGRESS') {
-          html += '<span class="mr-label ' + cls + '">\uD83D\uDD25</span>';
-          html += '<span class="mr-s1 ' + cls + '">' + (pm.myScore != null ? pm.myScore : '') + '</span>';
-          html += '<span class="mr-sep ' + cls + '">' + (pm.myScore != null ? '-' : '') + '</span>';
-          html += '<span class="mr-s2 ' + cls + '">' + (pm.oppScore != null ? pm.oppScore : '') + '</span>';
+          html += '<span class="mr-label mr-live">\uD83D\uDD25</span>';
+          html += '<span class="mr-s1 mr-live">' + (pm.myScore != null ? pm.myScore : '') + '</span>';
+          html += '<span class="mr-sep mr-live">' + (pm.myScore != null ? '-' : '') + '</span>';
+          html += '<span class="mr-s2 mr-live">' + (pm.oppScore != null ? pm.oppScore : '') + '</span>';
+        } else if (hasScore) {
+          html += '<span class="mr-label">' + (pm.won ? 'W' : 'L') + '</span>';
+          html += '<span class="mr-s1">' + pm.myScore + '</span>';
+          html += '<span class="mr-sep">-</span>';
+          html += '<span class="mr-s2">' + pm.oppScore + '</span>';
         } else {
           html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
         }
@@ -1320,26 +1322,29 @@ button { font-family: inherit; font-size: inherit; }
       var p1Win = m.p1Won;
       var p2Win = m.p2Won;
       var hasScore = m.s1 != null && m.s2 != null && (m.s1 > 0 || m.s2 > 0);
-      var cls = hasScore ? (p1Win ? 'mr-win' : 'mr-loss') : (m.status === 'IN_PROGRESS' ? 'mr-live' : 'mr-none');
       html += '<div class="flat-match">';
       html += '<span class="fm-num">#' + m.num + '</span>';
       html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
-      html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (p1Win ? ' fm-winner' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
+      var completed = m.status !== 'IN_PROGRESS';
+      html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (completed && p1Win ? ' fm-winner' : '') + (completed && p2Win ? ' fm-loser' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
       if (m.isSplit) {
-        html += '<span class="mr-win" style="grid-column:span 3">Split</span>';
-      } else if (hasScore) {
-        html += '<span class="mr-s1 ' + cls + '"' + (p1Win ? ' style="font-weight:700"' : '') + '>' + m.s1 + '</span>';
-        html += '<span class="mr-sep ' + cls + '">-</span>';
-        html += '<span class="mr-s2 ' + cls + '"' + (p2Win ? ' style="font-weight:700"' : '') + '>' + m.s2 + '</span>';
+        html += '<span style="grid-column:span 4">Split</span>';
       } else if (m.status === 'IN_PROGRESS') {
+        html += '<span class="fm-status mr-live">\uD83D\uDD25</span>';
         html += '<span class="mr-s1 mr-live">' + (m.s1 != null ? m.s1 : '') + '</span>';
         html += '<span class="mr-sep mr-live">' + (m.s1 != null ? '-' : '') + '</span>';
         html += '<span class="mr-s2 mr-live">' + (m.s2 != null ? m.s2 : '') + '</span>';
+      } else if (hasScore) {
+        html += '<span class="fm-status"></span>';
+        html += '<span class="mr-s1">' + m.s1 + '</span>';
+        html += '<span class="mr-sep">-</span>';
+        html += '<span class="mr-s2">' + m.s2 + '</span>';
       } else {
+        html += '<span class="fm-status"></span>';
         html += '<span class="mr-s1 mr-none">&mdash;</span><span class="mr-sep"></span><span class="mr-s2"></span>';
       }
       html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
-      html += '<span class="fm-p2' + (p2Fav ? ' is-fav' : '') + (p2Win ? ' fm-winner' : '') + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
+      html += '<span class="fm-p2' + (p2Fav ? ' is-fav' : '') + (completed && p2Win ? ' fm-winner' : '') + (completed && p1Win ? ' fm-loser' : '') + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
       html += '<span class="mr-video">' + (m.videoUrl ? '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>' : '') + '</span>';
       html += '</div>';
     }
