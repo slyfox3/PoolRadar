@@ -149,8 +149,8 @@ button { font-family: inherit; font-size: inherit; }
 .mr-s1 { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
 .mr-sep { font-size: 12px; text-align: center; }
 .mr-s2 { font-size: 12px; text-align: left; font-variant-numeric: tabular-nums; }
-.mr-win { }
-.mr-loss { opacity: 0.45; }
+.mr-win { color: #4ade80; }
+.mr-loss { color: #f87171; }
 .fm-loser { opacity: 0.45; }
 .mr-live { color: #60a5fa; animation: blink 3s ease-in-out infinite; }
 .mr-none { color: #64748b; }
@@ -160,7 +160,8 @@ button { font-family: inherit; font-size: inherit; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; break-inside: avoid; }
 
 /* Flat match grid (by match#) */
-.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto 18px 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
+.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto auto 18px 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
+.flat-match .fm-round { color: #64748b; font-size: 11px; padding-right: 6px; white-space: nowrap; font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace; }
 .flat-match > * { display: flex; align-items: center; }
 .flat-match { display: contents; }
 .flat-match .fm-num { color: #64748b; font-size: 11px; text-align: right; padding-right: 6px; }
@@ -1095,7 +1096,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -1128,6 +1129,8 @@ button { font-family: inherit; font-size: inherit; }
           p2Won: !!m.challenger2_is_winner,
           status: m.status,
           videoUrl: m.livestream_url || null,
+          round: m.round || null,
+          identifier: m.identifier || null,
         });
       }
 
@@ -1265,8 +1268,7 @@ button { font-family: inherit; font-size: inherit; }
         var pm = pd.matches[mi];
         var oppFav = isPlayerFav(pm.opp);
         var hasScore = pm.myScore != null && pm.oppScore != null && (pm.myScore > 0 || pm.oppScore > 0);
-        var rowCls = (pm.status !== 'IN_PROGRESS' && hasScore) ? (pm.won ? 'mr-win' : 'mr-loss') : '';
-        html += '<div class="match-row ' + rowCls + '">';
+        html += '<div class="match-row">';
         html += '<span class="match-num">#' + pm.num + '</span>';
         html += '<span class="match-vs-label">vs</span>';
         html += playerFavBtn(pm.opp);
@@ -1279,10 +1281,11 @@ button { font-family: inherit; font-size: inherit; }
           html += '<span class="mr-sep mr-live">' + (pm.myScore != null ? '-' : '') + '</span>';
           html += '<span class="mr-s2 mr-live">' + (pm.oppScore != null ? pm.oppScore : '') + '</span>';
         } else if (hasScore) {
-          html += '<span class="mr-label">' + (pm.won ? 'W' : 'L') + '</span>';
-          html += '<span class="mr-s1">' + pm.myScore + '</span>';
-          html += '<span class="mr-sep">-</span>';
-          html += '<span class="mr-s2">' + pm.oppScore + '</span>';
+          var cls = pm.won ? 'mr-win' : 'mr-loss';
+          html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
+          html += '<span class="mr-s1 ' + cls + '">' + pm.myScore + '</span>';
+          html += '<span class="mr-sep ' + cls + '">-</span>';
+          html += '<span class="mr-s2 ' + cls + '">' + pm.oppScore + '</span>';
         } else {
           html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
         }
@@ -1322,8 +1325,15 @@ button { font-family: inherit; font-size: inherit; }
       var p1Win = m.p1Won;
       var p2Win = m.p2Won;
       var hasScore = m.s1 != null && m.s2 != null && (m.s1 > 0 || m.s2 > 0);
+      var roundLabel = '';
+      if (m.identifier) {
+        roundLabel = m.identifier.replace(/-\d+$/, '');
+      } else if (m.round) {
+        roundLabel = 'R' + m.round;
+      }
       html += '<div class="flat-match">';
       html += '<span class="fm-num">#' + m.num + '</span>';
+      html += '<span class="fm-round">' + esc(roundLabel) + '</span>';
       html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
       var completed = m.status !== 'IN_PROGRESS';
       html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (completed && p1Win ? ' fm-winner' : '') + (completed && p2Win ? ' fm-loser' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
