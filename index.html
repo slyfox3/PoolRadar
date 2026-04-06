@@ -1453,17 +1453,23 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   // Auto-refresh
   // =====================================================
+  var lastRefreshTime = 0;
+  var REFRESH_INTERVAL = 60;
+
   function startDetailTimer() {
     clearDetailTimer();
-    detailCountdown = 60;
+    lastRefreshTime = Date.now();
+    detailCountdown = REFRESH_INTERVAL;
     detailInterval = setInterval(function() {
-      detailCountdown--;
+      var elapsed = (Date.now() - lastRefreshTime) / 1000;
+      if (elapsed >= REFRESH_INTERVAL) {
+        detailCountdown = REFRESH_INTERVAL;
+        refreshDetail();
+      } else {
+        detailCountdown = Math.max(1, Math.round(REFRESH_INTERVAL - elapsed));
+      }
       var el = document.getElementById('countdown');
       if (el) el.textContent = detailCountdown;
-      if (detailCountdown <= 0) {
-        detailCountdown = 60;
-        refreshDetail();
-      }
     }, 1000);
   }
 
@@ -1471,8 +1477,23 @@ button { font-family: inherit; font-size: inherit; }
     if (detailInterval) { clearInterval(detailInterval); detailInterval = null; }
   }
 
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && detailInterval && currentSlug) {
+      var elapsed = (Date.now() - lastRefreshTime) / 1000;
+      if (elapsed >= REFRESH_INTERVAL) {
+        detailCountdown = REFRESH_INTERVAL;
+        refreshDetail();
+      } else {
+        detailCountdown = Math.max(1, Math.round(REFRESH_INTERVAL - elapsed));
+      }
+      var el = document.getElementById('countdown');
+      if (el) el.textContent = detailCountdown;
+    }
+  });
+
   function refreshDetail() {
     if (!currentSlug) return;
+    lastRefreshTime = Date.now();
     fetchMatches(currentSlug).then(function(result) {
       currentMatches = result.matches;
       currentTournament = result.tournament;
