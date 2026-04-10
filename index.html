@@ -248,6 +248,12 @@ button { font-family: inherit; font-size: inherit; }
   <div class="sidebar" id="sidebar">
     <button class="sidebar-toggle" onclick="toggleSidebar()">&laquo; Hide favorites</button>
     <div class="fav-section">
+      <h3>Show from</h3>
+      <div class="date-pickers">
+        <input type="date" id="date-from" onchange="setDateCustom()" />
+      </div>
+    </div>
+    <div class="fav-section">
       <h3>Players</h3>
       <div class="add-player-row">
         <input type="text" id="add-player-input" placeholder="Add player name..." />
@@ -262,12 +268,6 @@ button { font-family: inherit; font-size: inherit; }
     <div class="fav-section">
       <h3>TDs</h3>
       <div id="fav-tds"></div>
-    </div>
-    <div class="fav-section">
-      <h3>Show from</h3>
-      <div class="date-pickers">
-        <input type="date" id="date-from" onchange="setDateCustom()" />
-      </div>
     </div>
   </div>
   <div class="main" id="main">
@@ -1127,13 +1127,13 @@ button { font-family: inherit; font-size: inherit; }
       // Start auto-refresh if in progress
       if (currentTournament.status === 'IN_PROGRESS') {
         startDetailTimer();
-        // Also fetch registered players for live events
-        fetchPlayerList(slug).then(function(players) {
-          currentPlayerList = players;
-          cache[slug].players = players;
-          renderDetail();
-        });
       }
+      // Fetch registered players for all events
+      fetchPlayerList(slug).then(function(players) {
+        currentPlayerList = players;
+        cache[slug].players = players;
+        renderDetail();
+      });
     }).catch(function(err) {
       showStatus('Failed to load matches: ' + err.message, 'error');
     });
@@ -1261,8 +1261,8 @@ button { font-family: inherit; font-size: inherit; }
       html += renderFlatMatches(matches);
     }
 
-    // Registered players section for live events
-    if (t.status === 'IN_PROGRESS' && currentPlayerList && currentPlayerList.length > 0) {
+    // Registered players section
+    if (currentPlayerList && currentPlayerList.length > 0) {
       html += '<div class="registered-players-section">';
       html += '<div class="registered-players-header" onclick="toggleRegisteredPlayers()">';
       html += '<span>' + (registeredPlayersExpanded ? '&#9660;' : '&#9654;') + ' Registered Players (' + currentPlayerList.length + ')</span>';
