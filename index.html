@@ -859,7 +859,13 @@ button { font-family: inherit; font-size: inherit; }
         + '<td class="venue-col">' + esc(venueName) + '</td>'
         + '<td class="' + (isFuture ? '' : 'fav-names') + '">' + formatFavPlayers(t) + '</td>';
       tr.addEventListener('click', (function(slug, status) {
-        return function() {
+        return function(e) {
+          if (e.metaKey || e.ctrlKey) {
+            var url = new URL(window.location);
+            url.searchParams.set('digitalpool', slug);
+            window.open(url.toString(), '_blank');
+            return;
+          }
           if (status === 'NOT_STARTED' || status === 'SCHEDULED') loadPlayerList(slug);
           else loadTournament(slug);
         };
