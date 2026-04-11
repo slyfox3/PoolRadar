@@ -676,7 +676,7 @@ button { font-family: inherit; font-size: inherit; }
       + '{_or:[{organizer_id:{_in:$tids}},{director_id:{_in:$tids}}]}'
       + '],start_date_time:{_gte:$from,_lte:$to}}'
       + ',order_by:{start_date_time:desc},limit:1000){'
-      + 'id name slug start_date_time status venue{id name city region}organizer{id display_name}director{id display_name}'
+      + 'id name slug start_date_time status progress venue{id name city region}organizer{id display_name}director{id display_name}'
       + ' tournament_players(where:{_or:[{player_id:{_in:$pids}},{name:{_in:$pnames}}]}){player_id name place}'
       + '}}';
 
@@ -689,7 +689,7 @@ button { font-family: inherit; font-size: inherit; }
       for (var j = 0; j < tournaments.length; j++) {
         var t = tournaments[j];
         if (!tournamentMap[t.id]) {
-          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [], favPlayerPlaces: {} };
+          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, progress: t.progress, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [], favPlayerPlaces: {} };
         }
         var entry = tournamentMap[t.id];
 
@@ -757,7 +757,7 @@ button { font-family: inherit; font-size: inherit; }
     names.sort(function(a, b) {
       var pa = places[a] ? parseInt(places[a], 10) : Infinity;
       var pb = places[b] ? parseInt(places[b], 10) : Infinity;
-      return pa - pb;
+      return pa !== pb ? pa - pb : a.localeCompare(b);
     });
     var parts = [];
     for (var i = 0; i < names.length; i++) {
@@ -842,7 +842,9 @@ button { font-family: inherit; font-size: inherit; }
     for (var i = 0; i < sorted.length; i++) {
       var t = sorted[i];
       var d = new Date(t.date);
-      var isFuture = d > new Date() && t.status !== 'IN_PROGRESS';
+      var hasProgress = t.progress != null && parseFloat(t.progress) > 0 && parseFloat(t.progress) < 100;
+      var isLive = t.status === 'IN_PROGRESS' || (t.status !== 'COMPLETED' && hasProgress);
+      var isFuture = d > new Date() && !isLive;
       var tr = document.createElement('tr');
       tr.dataset.slug = t.slug;
       tr.dataset.status = t.status;
@@ -851,7 +853,7 @@ button { font-family: inherit; font-size: inherit; }
       var dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
       var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + (feedSpansYears ? '/' + d.getFullYear() : '') + ' ' + dayNames[d.getDay()];
       var tag = '';
-      if (t.status === 'IN_PROGRESS') tag = ' <span class="mr-live" style="font-size:13px">\uD83D\uDD25</span>';
+      if (isLive) tag = ' <span class="mr-live" style="font-size:13px">\uD83D\uDD25</span>';
       else if (isFuture) tag = ' <span style="filter:grayscale(1) opacity(0.5);font-size:11px">\uD83D\uDCC5</span>';
       var venueName = t.venue ? t.venue.name : '';
       tr.innerHTML = '<td>' + esc(dateStr) + tag + '</td>'
@@ -906,7 +908,7 @@ button { font-family: inherit; font-size: inherit; }
       for (var j = 0; j < tournaments.length; j++) {
         var t = tournaments[j];
         if (!tournamentMap[t.id]) {
-          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [], favPlayerPlaces: {} };
+          tournamentMap[t.id] = { id: t.id, name: t.name, slug: t.slug, date: t.start_date_time, status: t.status, progress: t.progress, venue: t.venue, organizer: t.organizer, director: t.director, favNames: [], favPlayerNames: [], favPlayerPlaces: {} };
         }
         var entry = tournamentMap[t.id];
         var tps = t.tournament_players || [];
