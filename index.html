@@ -1296,7 +1296,7 @@ button { font-family: inherit; font-size: inherit; }
         html += isFav
           ? '<button class="remove-fav-btn" data-action="remove-fav" data-name="' + esc(p.name) + '" title="Remove favorite">&#9733;</button>'
           : '<button class="add-fav-btn" data-action="add-fav" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Add favorite">&#9734;</button>';
-        html += '<span' + (isFav ? ' style="color:#fbbf24"' : '') + '>' + esc(p.name) + '</span>';
+        html += '<span class="match-opponent-link" data-player="pg-' + esc(p.name).replace(/\s/g, '-').toLowerCase() + '" style="cursor:pointer' + (isFav ? ';color:#fbbf24' : '') + '">' + esc(p.name) + '</span>';
         if (p.skill_level) html += ' <span class="match-opp-rating">(' + p.skill_level + ')</span>';
         html += '</div>';
       }
