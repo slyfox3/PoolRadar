@@ -866,8 +866,7 @@ button { font-family: inherit; font-size: inherit; }
             window.open(url.toString(), '_blank');
             return;
           }
-          if (status === 'NOT_STARTED' || status === 'SCHEDULED') loadPlayerList(slug);
-          else loadTournament(slug);
+          loadSmartTournament(slug);
         };
       })(t.slug, t.status));
       tbody.appendChild(tr);
@@ -982,18 +981,6 @@ button { font-family: inherit; font-size: inherit; }
     urlInput.value = '';
     clearDetailTimer();
 
-    if (cache[slug] && cache[slug].type === 'players') {
-      var c = cache[slug];
-      currentTournament = c.tournament;
-      currentMatches = [];
-      currentPlayerList = c.players;
-      renderPlayerList(c.players);
-      document.getElementById('detail-section').classList.remove('hidden');
-      document.getElementById('feed-section').classList.add('feed-section-collapsed');
-      deferLoadFeed();
-      return;
-    }
-
     showStatus('<span class="spinner"></span> Loading player list...', 'info');
 
     var rows = document.querySelectorAll('.feed-table tbody tr');
@@ -1003,20 +990,20 @@ button { font-family: inherit; font-size: inherit; }
 
     gql('query($s:String!){tournament_players(where:{tournament:{slug:{_eq:$s}}},order_by:{name:asc}){id name skill_level player_id player{id name name_slug fargo_id}}tournaments(where:{slug:{_eq:$s}},limit:1){name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}', { s: slug })
     .then(function(res) {
+      if (currentSlug !== slug) return; // stale response from rapid clicking
       var players = (res.data && res.data.tournament_players) || [];
       var tArr = (res.data && res.data.tournaments) || [];
       var t = tArr[0] || {};
       currentTournament = { name: t.name || '', date: t.start_date_time, status: t.status || 'NOT_STARTED', venue: t.venue, organizer: t.organizer, director: t.director, slug: slug };
       currentMatches = [];
       currentPlayerList = players;
-      cache[slug] = { type: 'players', players: players, tournament: currentTournament };
       clearStatus();
       renderPlayerList(players);
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
     }).catch(function(err) {
-      showStatus('Failed to load player list: ' + err.message, 'error');
+      showStatus('Failed to load player list: ' + esc(err.message), 'error');
     });
   }
 
@@ -1122,6 +1109,13 @@ button { font-family: inherit; font-size: inherit; }
     showStatus('<span class="spinner"></span> Loading matches...', 'info');
 
     fetchMatches(slug).then(function(result) {
+      if (currentSlug !== slug) return; // stale response from rapid clicking
+      if (result.matches.length === 0) {
+        // No matches yet — show player list instead
+        clearStatus();
+        loadPlayerList(slug);
+        return;
+      }
       currentMatches = result.matches;
       currentTournament = result.tournament;
       cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament };
@@ -1136,12 +1130,13 @@ button { font-family: inherit; font-size: inherit; }
       }
       // Fetch registered players for all events
       fetchPlayerList(slug).then(function(players) {
+        if (currentSlug !== slug) return;
         currentPlayerList = players;
         cache[slug].players = players;
         renderDetail();
       });
     }).catch(function(err) {
-      showStatus('Failed to load matches: ' + err.message, 'error');
+      showStatus('Failed to load matches: ' + esc(err.message), 'error');
     });
   }
 
@@ -1458,6 +1453,9 @@ button { font-family: inherit; font-size: inherit; }
     document.getElementById('detail-section').innerHTML = '';
     clearDetailTimer();
     currentSlug = null;
+    currentMatches = null;
+    currentTournament = null;
+    currentPlayerList = null;
     var url = new URL(window.location);
     url.searchParams.delete('digitalpool');
     history.replaceState(null, '', url);
@@ -1670,25 +1668,14 @@ button { font-family: inherit; font-size: inherit; }
   }
 
   function loadSmartTournament(slug) {
-    // Check tournament status first, then route to match detail or player list
-    gql('query($s:String!){tournaments(where:{slug:{_eq:$s}},limit:1){status}}', { s: slug })
-    .then(function(res) {
-      var t = (res.data && res.data.tournaments && res.data.tournaments[0]) || {};
-      if (t.status === 'NOT_STARTED' || t.status === 'SCHEDULED') {
-        loadPlayerList(slug);
-      } else {
-        loadTournament(slug);
-      }
-    }).catch(function() {
-      loadTournament(slug); // fallback
-    });
+    // Try loading matches — if none exist, loadTournament falls back to player list
+    loadTournament(slug);
   }
 
   function checkUrlParams() {
     var params = new URLSearchParams(window.location.search);
     var dpSlug = params.get('digitalpool');
     if (dpSlug) {
-      urlInput.value = 'https://digitalpool.com/tournaments/' + dpSlug;
       loadSmartTournament(dpSlug);
     }
   }
