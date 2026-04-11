@@ -1425,7 +1425,7 @@ button { font-family: inherit; font-size: inherit; }
       var completed = m.status !== 'IN_PROGRESS';
       html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (completed && p1Win ? ' fm-winner' : '') + (completed && p2Win ? ' fm-loser' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
       if (m.isSplit) {
-        html += '<span style="grid-column:span 4">Split</span>';
+        html += '<span class="fm-status"></span><span style="grid-column:span 3">Split</span>';
       } else if (m.status === 'IN_PROGRESS') {
         html += '<span class="fm-status mr-live">\uD83D\uDD25</span>';
         html += '<span class="mr-s1 mr-live">' + (m.s1 != null ? m.s1 : '') + '</span>';
@@ -1477,8 +1477,8 @@ button { font-family: inherit; font-size: inherit; }
   };
 
   function reRenderCurrentView() {
-    if (currentPlayerList) renderPlayerList(currentPlayerList);
-    else renderDetail();
+    if (currentMatches && currentMatches.length > 0) renderDetail();
+    else if (currentPlayerList) renderPlayerList(currentPlayerList);
   }
 
   // Delegated click handler for add/remove fav buttons and opponent links
