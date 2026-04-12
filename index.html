@@ -755,8 +755,8 @@ button { font-family: inherit; font-size: inherit; }
     var names = t.favPlayerNames.slice();
     var places = t.favPlayerPlaces || {};
     names.sort(function(a, b) {
-      var pa = places[a] ? parseInt(places[a], 10) : Infinity;
-      var pb = places[b] ? parseInt(places[b], 10) : Infinity;
+      var pa = places[a] ? parseInt(places[a], 10) : -1;
+      var pb = places[b] ? parseInt(places[b], 10) : -1;
       return pa !== pb ? pa - pb : a.localeCompare(b);
     });
     var parts = [];
