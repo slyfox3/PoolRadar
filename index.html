@@ -158,6 +158,15 @@ button { font-family: inherit; font-size: inherit; }
 /* Player list grid for future events */
 .player-list-grid { columns: 200px auto; column-gap: 16px; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; break-inside: avoid; }
+.blocker-section { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
+.blocker-entry { margin: 2px 0; }
+.blocker-child { margin: 2px 0 2px 22px; color: #64748b; }
+.blocker-switch { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; cursor: pointer; font-size: 12px; color: #94a3b8; user-select: none; }
+.blocker-switch .switch-track { width: 30px; height: 15px; border-radius: 8px; background: #475569; position: relative; transition: background 0.25s ease; flex-shrink: 0; }
+.blocker-switch.active .switch-track { background: #22c55e; }
+.blocker-switch .switch-knob { width: 11px; height: 11px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; transition: left 0.25s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.blocker-switch.active .switch-knob { left: 17px; }
+.blocker-switch.active .switch-label { color: #fff; }
 .registered-players-section { margin-bottom: 12px; border: 1px solid #334155; border-radius: 6px; overflow: hidden; }
 .registered-players-header { padding: 8px 12px; background: #1e293b; cursor: pointer; font-size: 13px; color: #94a3b8; user-select: none; }
 .registered-players-header:hover { background: #334155; }
@@ -966,8 +975,10 @@ button { font-family: inherit; font-size: inherit; }
   var detailCountdown = 60;
   var detailInterval = null;
   var groupByPlayer = true;
+  var showBlockers = false;
   var playerListSort = 'name';
   var registeredPlayersExpanded = false;
+  var bracketByNum = {};
   var cache = {}; // slug → { type: 'matches'|'players', data: ..., time: ... }
 
   function fetchPlayerList(slug) {
@@ -1091,6 +1102,7 @@ button { font-family: inherit; font-size: inherit; }
       currentMatches = cache[slug].matches;
       currentTournament = cache[slug].tournament;
       currentPlayerList = cache[slug].players || null;
+      bracketByNum = cache[slug].bracketByNum || {};
       renderDetail();
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
@@ -1120,7 +1132,8 @@ button { font-family: inherit; font-size: inherit; }
       }
       currentMatches = result.matches;
       currentTournament = result.tournament;
-      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament };
+      bracketByNum = result.bracketByNum || {};
+      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
       clearStatus();
       renderDetail();
       document.getElementById('detail-section').classList.remove('hidden');
@@ -1144,7 +1157,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num winner_from_top_num winner_from_bottom_num loser_from_top_num loser_from_bottom_num status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -1159,6 +1172,21 @@ button { font-family: inherit; font-size: inherit; }
         tournament.venue = t.venue;
         tournament.organizer = t.organizer;
         tournament.director = t.director;
+      }
+
+      var bByNum = {};
+      for (var i = 0; i < brackets.length; i++) {
+        var m = brackets[i];
+        bByNum[m.match_number] = {
+          num: m.match_number, status: m.status, is_bye: m.is_bye, identifier: m.identifier || null,
+          p1: m.challenger1 ? { name: m.challenger1.name, rating: m.challenger1.skill_level } : null,
+          p2: m.challenger2 ? { name: m.challenger2.name, rating: m.challenger2.skill_level } : null,
+          s1: m.challenger1_score, s2: m.challenger2_score,
+          p1Won: !!m.challenger1_is_winner, p2Won: !!m.challenger2_is_winner,
+          winnerTo: m.winner_to_num, loserTo: m.loser_to_num,
+          winnerFromTop: m.winner_from_top_num, winnerFromBottom: m.winner_from_bottom_num,
+          loserFromTop: m.loser_from_top_num, loserFromBottom: m.loser_from_bottom_num,
+        };
       }
 
       for (var i = 0; i < brackets.length; i++) {
@@ -1196,7 +1224,7 @@ button { font-family: inherit; font-size: inherit; }
         }
       }
 
-      return { matches: matches, tournament: tournament };
+      return { matches: matches, tournament: tournament, bracketByNum: bByNum };
     });
   }
 
@@ -1252,6 +1280,9 @@ button { font-family: inherit; font-size: inherit; }
     html += '<button class="toggle-btn' + (groupByPlayer ? ' active' : '') + '" onclick="toggleGroupBy(true)">By Player</button>';
     html += '<button class="toggle-btn' + (!groupByPlayer ? ' active' : '') + '" onclick="toggleGroupBy(false)">By Match #</button>';
     html += '</div>';
+    if (groupByPlayer) {
+      html += '<span class="blocker-switch' + (showBlockers ? ' active' : '') + '" onclick="toggleBlockers()"><span class="switch-track"><span class="switch-knob"></span></span><span class="switch-label">Blockers</span></span>';
+    }
     html += '</div>';
 
     var matches = currentMatches;
@@ -1326,12 +1357,17 @@ button { font-family: inherit; font-size: inherit; }
       addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit);
     }
 
-    // Sort: favorites first, then by number of matches played (descending)
+    // Sort: favorites first, then placing (active first), then matches played, then name
     playerOrder.sort(function(a, b) {
-      var aFav = isPlayerFav(playerMap[a].player) ? 0 : 1;
-      var bFav = isPlayerFav(playerMap[b].player) ? 0 : 1;
+      var pa = playerMap[a], pb = playerMap[b];
+      var aFav = isPlayerFav(pa.player) ? 0 : 1;
+      var bFav = isPlayerFav(pb.player) ? 0 : 1;
       if (aFav !== bFav) return aFav - bFav;
-      return playerMap[b].matches.length - playerMap[a].matches.length;
+      var aPlace = pa.player.place ? parseInt(pa.player.place, 10) : -1;
+      var bPlace = pb.player.place ? parseInt(pb.player.place, 10) : -1;
+      if (aPlace !== bPlace) return aPlace - bPlace;
+      if (pb.matches.length !== pa.matches.length) return pb.matches.length - pa.matches.length;
+      return (pa.player.name || '').localeCompare(pb.player.name || '');
     });
 
     var html = '<div class="player-groups-grid">';
@@ -1377,9 +1413,125 @@ button { font-family: inherit; font-size: inherit; }
         html += '</div>';
       }
       html += '</div>'; // match-rows
+
+      // Blocker section
+      if (showBlockers) {
+        var blockers = getBlockersForPlayer(pd);
+        if (blockers.length > 0) {
+          html += '<div class="blocker-section">';
+          for (var bi = 0; bi < blockers.length; bi++) {
+            var bl = blockers[bi];
+            html += '<div class="blocker-entry">\u23F3 ' + blockerPlayerLabel(bl) + '</div>';
+            if (bl.children && bl.children.length > 0) {
+              for (var ci = 0; ci < bl.children.length; ci++) {
+                html += '<div class="blocker-child">\u2514 ' + blockerPlayerLabel(bl.children[ci]) + '</div>';
+              }
+            }
+          }
+          html += '</div>';
+        }
+      }
+
       html += '</div>'; // player-group
     }
     html += '</div>'; // player-groups-grid
+    return html;
+  }
+
+  function getBlockersForPlayer(pd) {
+    var blockers = [];
+    if (!pd.matches.length) return blockers;
+    if (currentTournament && currentTournament.status === 'COMPLETED') return blockers;
+    var playerName = pd.player.name.toLowerCase();
+
+    // Strategy: find the player's next pending match
+    // 1. Check if their last displayed match is still pending (player is in a NOT_STARTED match with both names known)
+    // 2. Otherwise, follow winnerTo/loserTo from their last completed match
+    var lastMatch = pd.matches[pd.matches.length - 1];
+    var pendingMatchNum = null;
+
+    if (lastMatch.status === 'NOT_STARTED' || lastMatch.status === 'IN_PROGRESS') return blockers;
+
+    // Last match is COMPLETED — find where they go next
+    var lastBracket = bracketByNum[lastMatch.num];
+    if (!lastBracket) return blockers;
+
+    var nextNum = lastMatch.won ? lastBracket.winnerTo : lastBracket.loserTo;
+
+    // Walk forward through completed matches to find the actual pending match
+    // (player may have completed multiple matches since their "last" in the filtered view)
+    var visited = {};
+    while (nextNum && bracketByNum[nextNum]) {
+      if (visited[nextNum]) break;
+      visited[nextNum] = true;
+      var nm = bracketByNum[nextNum];
+      if (nm.status !== 'COMPLETED') { pendingMatchNum = nextNum; break; }
+      // This match is completed — figure out if the player won or lost and continue
+      var pInTop = nm.p1 && nm.p1.name.toLowerCase() === playerName;
+      var pInBottom = nm.p2 && nm.p2.name.toLowerCase() === playerName;
+      if (pInTop) {
+        nextNum = nm.p1Won ? nm.winnerTo : nm.loserTo;
+      } else if (pInBottom) {
+        nextNum = nm.p2Won ? nm.winnerTo : nm.loserTo;
+      } else {
+        break; // player not in this match, stop
+      }
+    }
+
+    if (!pendingMatchNum) return blockers;
+    var nextMatch = bracketByNum[pendingMatchNum];
+    if (!nextMatch) return blockers;
+    if (nextMatch.p1 && nextMatch.p2) return blockers; // both slots filled, not blocked
+
+    // Find feeder matches for the empty slot(s)
+    // Check all four feeder fields — the top/bottom mapping to p1/p2 is not consistent
+    var allFeeders = [nextMatch.winnerFromTop, nextMatch.winnerFromBottom, nextMatch.loserFromTop, nextMatch.loserFromBottom];
+    var feederNums = [];
+    for (var af = 0; af < allFeeders.length; af++) {
+      if (allFeeders[af] && feederNums.indexOf(allFeeders[af]) === -1) feederNums.push(allFeeders[af]);
+    }
+
+    for (var fi = 0; fi < feederNums.length; fi++) {
+      if (feederNums[fi] === lastMatch.num || visited[feederNums[fi]]) continue; // skip player's own matches
+      var feeder = bracketByNum[feederNums[fi]];
+      if (!feeder || feeder.is_bye) continue;
+      if (feeder.status === 'COMPLETED') continue; // already done, not blocking
+
+      var blockerEntry = { num: feeder.num, identifier: feeder.identifier, p1: feeder.p1, p2: feeder.p2, s1: feeder.s1, s2: feeder.s2, status: feeder.status, children: [] };
+
+      // Level 2: if this blocker itself has empty slots, find its feeders
+      var allFeeders2 = [feeder.winnerFromTop, feeder.winnerFromBottom, feeder.loserFromTop, feeder.loserFromBottom];
+      var feeder2Nums = [];
+      for (var af2 = 0; af2 < allFeeders2.length; af2++) {
+        if (allFeeders2[af2] && feeder2Nums.indexOf(allFeeders2[af2]) === -1) feeder2Nums.push(allFeeders2[af2]);
+      }
+      for (var fi2 = 0; fi2 < feeder2Nums.length; fi2++) {
+        if (feeder2Nums[fi2] === lastMatch.num || visited[feeder2Nums[fi2]]) continue;
+        var feeder2 = bracketByNum[feeder2Nums[fi2]];
+        if (!feeder2 || feeder2.is_bye || feeder2.status === 'COMPLETED') continue;
+        blockerEntry.children.push({ num: feeder2.num, identifier: feeder2.identifier, p1: feeder2.p1, p2: feeder2.p2, s1: feeder2.s1, s2: feeder2.s2, status: feeder2.status });
+      }
+
+      blockers.push(blockerEntry);
+    }
+
+    return blockers;
+  }
+
+  function blockerPlayerLink(p) {
+    if (!p) return 'TBD';
+    var pgId = 'pg-' + esc(p.name).replace(/\s/g, '-').toLowerCase();
+    return '<span class="match-opponent-link" data-player="' + pgId + '" style="cursor:pointer">' + esc(p.name) + (p.rating ? ' (' + p.rating + ')' : '') + '</span>';
+  }
+
+  function blockerPlayerLabel(bl) {
+    var p1 = blockerPlayerLink(bl.p1);
+    var p2 = blockerPlayerLink(bl.p2);
+    if (bl.status === 'IN_PROGRESS' && (bl.s1 != null || bl.s2 != null)) {
+      return p1 + ' <span class="mr-live">\uD83D\uDD25 ' + (bl.s1 || 0) + '-' + (bl.s2 || 0) + '</span> ' + p2;
+    }
+    var html = p1 + ' vs ' + p2;
+    if (!bl.p1 && !bl.p2) html += ' (pending)';
     return html;
   }
 
@@ -1458,12 +1610,14 @@ button { font-family: inherit; font-size: inherit; }
     currentMatches = null;
     currentTournament = null;
     currentPlayerList = null;
+    bracketByNum = {};
     var url = new URL(window.location);
     url.searchParams.delete('digitalpool');
     history.replaceState(null, '', url);
   };
 
   window.toggleGroupBy = function(v) { groupByPlayer = v; renderDetail(); };
+  window.toggleBlockers = function() { showBlockers = !showBlockers; renderDetail(); };
   window.setPlayerListSort = function(v) { playerListSort = v; if (currentPlayerList) renderPlayerList(currentPlayerList); };
   window.setPlayerListSortDetail = function(v) { playerListSort = v; renderDetail(); };
   window.toggleRegisteredPlayers = function() {
@@ -1592,7 +1746,8 @@ button { font-family: inherit; font-size: inherit; }
     fetchMatches(currentSlug).then(function(result) {
       currentMatches = result.matches;
       currentTournament = result.tournament;
-      cache[currentSlug] = { type: 'matches', matches: result.matches, tournament: result.tournament };
+      bracketByNum = result.bracketByNum || {};
+      cache[currentSlug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
       renderDetail();
       if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
     }).catch(function() { /* silent retry next cycle */ });
