@@ -975,7 +975,7 @@ button { font-family: inherit; font-size: inherit; }
   var detailCountdown = 60;
   var detailInterval = null;
   var groupByPlayer = true;
-  var showBlockers = false;
+  var showBlockers = true;
   var playerListSort = 'name';
   var registeredPlayersExpanded = false;
   var bracketByNum = {};
@@ -1357,7 +1357,17 @@ button { font-family: inherit; font-size: inherit; }
       addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit);
     }
 
-    // Sort: favorites first, then placing (active first), then matches played, then name
+    // Estimate card height: header + matches + blocker rows
+    function estimateCardHeight(pd) {
+      var h = 44 + pd.matches.length * 20;
+      if (showBlockers) {
+        var bl = getBlockersForPlayer(pd);
+        if (bl.length) h += 33 + (bl[0].children ? bl[0].children.length * 18 : 0);
+      }
+      return h;
+    }
+
+    // Sort: favorites first, then placing (no placing = active = first), then card height desc
     playerOrder.sort(function(a, b) {
       var pa = playerMap[a], pb = playerMap[b];
       var aFav = isPlayerFav(pa.player) ? 0 : 1;
@@ -1366,8 +1376,7 @@ button { font-family: inherit; font-size: inherit; }
       var aPlace = pa.player.place ? parseInt(pa.player.place, 10) : -1;
       var bPlace = pb.player.place ? parseInt(pb.player.place, 10) : -1;
       if (aPlace !== bPlace) return aPlace - bPlace;
-      if (pb.matches.length !== pa.matches.length) return pb.matches.length - pa.matches.length;
-      return (pa.player.name || '').localeCompare(pb.player.name || '');
+      return estimateCardHeight(pb) - estimateCardHeight(pa);
     });
 
     var html = '<div class="player-groups-grid">';
@@ -1438,83 +1447,76 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function getBlockersForPlayer(pd) {
-    var blockers = [];
-    if (!pd.matches.length) return blockers;
-    if (currentTournament && currentTournament.status === 'COMPLETED') return blockers;
-    var playerName = pd.player.name.toLowerCase();
-
-    // Strategy: find the player's next pending match
-    // 1. Check if their last displayed match is still pending (player is in a NOT_STARTED match with both names known)
-    // 2. Otherwise, follow winnerTo/loserTo from their last completed match
-    var lastMatch = pd.matches[pd.matches.length - 1];
-    var pendingMatchNum = null;
-
-    if (lastMatch.status === 'NOT_STARTED' || lastMatch.status === 'IN_PROGRESS') return blockers;
-
-    // Last match is COMPLETED — find where they go next
-    var lastBracket = bracketByNum[lastMatch.num];
-    if (!lastBracket) return blockers;
-
-    var nextNum = lastMatch.won ? lastBracket.winnerTo : lastBracket.loserTo;
-
-    // Walk forward through completed matches to find the actual pending match
-    // (player may have completed multiple matches since their "last" in the filtered view)
-    var visited = {};
-    while (nextNum && bracketByNum[nextNum]) {
-      if (visited[nextNum]) break;
-      visited[nextNum] = true;
-      var nm = bracketByNum[nextNum];
-      if (nm.status !== 'COMPLETED') { pendingMatchNum = nextNum; break; }
-      // This match is completed — figure out if the player won or lost and continue
-      var pInTop = nm.p1 && nm.p1.name.toLowerCase() === playerName;
-      var pInBottom = nm.p2 && nm.p2.name.toLowerCase() === playerName;
-      if (pInTop) {
-        nextNum = nm.p1Won ? nm.winnerTo : nm.loserTo;
-      } else if (pInBottom) {
-        nextNum = nm.p2Won ? nm.winnerTo : nm.loserTo;
-      } else {
-        break; // player not in this match, stop
-      }
-    }
-
-    if (!pendingMatchNum) return blockers;
-    var nextMatch = bracketByNum[pendingMatchNum];
-    if (!nextMatch) return blockers;
-    if (nextMatch.p1 && nextMatch.p2) return blockers; // both slots filled, not blocked
-
-    // Find feeder matches for the empty slot(s)
-    // Check all four feeder fields — the top/bottom mapping to p1/p2 is not consistent
-    var allFeeders = [nextMatch.winnerFromTop, nextMatch.winnerFromBottom, nextMatch.loserFromTop, nextMatch.loserFromBottom];
-    var feederNums = [];
-    for (var af = 0; af < allFeeders.length; af++) {
-      if (allFeeders[af] && feederNums.indexOf(allFeeders[af]) === -1) feederNums.push(allFeeders[af]);
-    }
-
-    for (var fi = 0; fi < feederNums.length; fi++) {
-      if (feederNums[fi] === lastMatch.num || visited[feederNums[fi]]) continue; // skip player's own matches
-      var feeder = bracketByNum[feederNums[fi]];
+  // Returns unresolved feeders for a match's null slot(s), with W/L annotation.
+  // Each feeder field encodes whether it sends a Winner or Loser to this match.
+  // A null slot means the feeder hasn't resolved yet — that's the only check needed.
+  function getUnresolvedFeeders(matchNum, excludeNums) {
+    var match = bracketByNum[matchNum];
+    if (!match) return [];
+    var feederNums = [match.winnerFromTop, match.winnerFromBottom, match.loserFromTop, match.loserFromBottom];
+    var result = [], seen = {};
+    for (var i = 0; i < feederNums.length; i++) {
+      var fNum = feederNums[i];
+      if (!fNum || excludeNums[fNum] || seen[fNum]) continue;
+      seen[fNum] = true;
+      var feeder = bracketByNum[fNum];
       if (!feeder || feeder.is_bye) continue;
-      if (feeder.status === 'COMPLETED') continue; // already done, not blocking
-
-      var blockerEntry = { num: feeder.num, identifier: feeder.identifier, p1: feeder.p1, p2: feeder.p2, s1: feeder.s1, s2: feeder.s2, status: feeder.status, children: [] };
-
-      // Level 2: if this blocker itself has empty slots, find its feeders
-      var allFeeders2 = [feeder.winnerFromTop, feeder.winnerFromBottom, feeder.loserFromTop, feeder.loserFromBottom];
-      var feeder2Nums = [];
-      for (var af2 = 0; af2 < allFeeders2.length; af2++) {
-        if (allFeeders2[af2] && feeder2Nums.indexOf(allFeeders2[af2]) === -1) feeder2Nums.push(allFeeders2[af2]);
-      }
-      for (var fi2 = 0; fi2 < feeder2Nums.length; fi2++) {
-        if (feeder2Nums[fi2] === lastMatch.num || visited[feeder2Nums[fi2]]) continue;
-        var feeder2 = bracketByNum[feeder2Nums[fi2]];
-        if (!feeder2 || feeder2.is_bye || feeder2.status === 'COMPLETED') continue;
-        blockerEntry.children.push({ num: feeder2.num, identifier: feeder2.identifier, p1: feeder2.p1, p2: feeder2.p2, s1: feeder2.s1, s2: feeder2.s2, status: feeder2.status });
-      }
-
-      blockers.push(blockerEntry);
+      // W/L determined by where the feeder sends its winner/loser
+      var wl = feeder.winnerTo === matchNum ? 'W' : feeder.loserTo === matchNum ? 'L' : '?';
+      // Feeder is resolved if its result has arrived (winner/loser determined)
+      if (feeder.p1Won || feeder.p2Won) continue;
+      result.push({ num: feeder.num, identifier: feeder.identifier, p1: feeder.p1, p2: feeder.p2, s1: feeder.s1, s2: feeder.s2, status: feeder.status, wl: wl, children: [] });
     }
+    return result;
+  }
 
+  // Find the player's pending match: walk forward from last completed match,
+  // skipping byes transparently. Fall back to bracket scan if walk fails.
+  function findPendingMatch(playerName, excludeNums, lastMatchNum) {
+    // Walk phase
+    var cur = lastMatchNum;
+    for (var step = 0; step < 20; step++) {
+      var m = bracketByNum[cur];
+      if (!m) break;
+      var pTop = m.p1 && m.p1.name.toLowerCase() === playerName;
+      var pBot = m.p2 && m.p2.name.toLowerCase() === playerName;
+      var won = (pTop && m.p1Won) || (pBot && m.p2Won);
+      var next = won ? m.winnerTo : m.loserTo;
+      if (!next || !bracketByNum[next]) break;
+      var nm = bracketByNum[next];
+      if (nm.is_bye) { cur = next; continue; } // skip through byes
+      var hasPlayer = (nm.p1 && nm.p1.name.toLowerCase() === playerName) || (nm.p2 && nm.p2.name.toLowerCase() === playerName);
+      if (hasPlayer && (!nm.p1 || !nm.p2)) return nm;
+      if (nm.status === 'COMPLETED' && hasPlayer) { cur = next; continue; }
+      break;
+    }
+    // Scan fallback (handles byes the walk couldn't traverse)
+    for (var k in bracketByNum) {
+      var bm = bracketByNum[k];
+      if (bm.is_bye || excludeNums[bm.num]) continue;
+      var hp = (bm.p1 && bm.p1.name.toLowerCase() === playerName) || (bm.p2 && bm.p2.name.toLowerCase() === playerName);
+      if (hp && (!bm.p1 || !bm.p2)) return bm;
+    }
+    return null;
+  }
+
+  function getBlockersForPlayer(pd) {
+    if (!pd.matches.length) return [];
+    if (currentTournament && currentTournament.status === 'COMPLETED') return [];
+    var lastMatch = pd.matches[pd.matches.length - 1];
+    if (lastMatch.status === 'IN_PROGRESS') return [];
+
+    var playerName = pd.player.name.toLowerCase();
+    var excludeNums = {};
+    for (var i = 0; i < pd.matches.length; i++) excludeNums[pd.matches[i].num] = true;
+
+    var pending = findPendingMatch(playerName, excludeNums, lastMatch.num);
+    if (!pending) return [];
+
+    var blockers = getUnresolvedFeeders(pending.num, excludeNums);
+    for (var i = 0; i < blockers.length; i++) {
+      blockers[i].children = getUnresolvedFeeders(blockers[i].num, excludeNums);
+    }
     return blockers;
   }
 
@@ -1525,12 +1527,13 @@ button { font-family: inherit; font-size: inherit; }
   }
 
   function blockerPlayerLabel(bl) {
+    var prefix = bl.wl ? bl.wl + ' of ' : '';
     var p1 = blockerPlayerLink(bl.p1);
     var p2 = blockerPlayerLink(bl.p2);
     if (bl.status === 'IN_PROGRESS' && (bl.s1 != null || bl.s2 != null)) {
-      return p1 + ' <span class="mr-live">\uD83D\uDD25 ' + (bl.s1 || 0) + '-' + (bl.s2 || 0) + '</span> ' + p2;
+      return prefix + p1 + ' <span class="mr-live">\uD83D\uDD25 ' + (bl.s1 || 0) + '-' + (bl.s2 || 0) + '</span> ' + p2;
     }
-    var html = p1 + ' vs ' + p2;
+    var html = prefix + p1 + ' vs ' + p2;
     if (!bl.p1 && !bl.p2) html += ' (pending)';
     return html;
   }
