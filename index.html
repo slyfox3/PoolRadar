@@ -158,6 +158,10 @@ button { font-family: inherit; font-size: inherit; }
 /* Player list grid for future events */
 .player-list-grid { columns: 200px auto; column-gap: 16px; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; break-inside: avoid; }
+.next-plays { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
+.next-plays .np-item { display: block; margin: 2px 0; }
+.next-plays .np-label { display: inline-block; width: 40px; }
+.next-plays .np-arrow { color: #475569; }
 .blocker-section { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
 .blocker-entry { margin: 2px 0; }
 .blocker-child { margin: 2px 0 2px 22px; color: #64748b; }
@@ -1157,7 +1161,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num winner_from_top_num winner_from_bottom_num loser_from_top_num loser_from_bottom_num status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -1184,8 +1188,6 @@ button { font-family: inherit; font-size: inherit; }
           s1: m.challenger1_score, s2: m.challenger2_score,
           p1Won: !!m.challenger1_is_winner, p2Won: !!m.challenger2_is_winner,
           winnerTo: m.winner_to_num, loserTo: m.loser_to_num,
-          winnerFromTop: m.winner_from_top_num, winnerFromBottom: m.winner_from_bottom_num,
-          loserFromTop: m.loser_from_top_num, loserFromBottom: m.loser_from_bottom_num,
         };
       }
 
@@ -1357,11 +1359,18 @@ button { font-family: inherit; font-size: inherit; }
       addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit);
     }
 
-    // Estimate card height: header + matches + blocker rows
+    var bMap = buildBlockerMap();
+
+    // Estimate card height: header + matches + next-plays + blocker rows
     function estimateCardHeight(pd) {
       var h = 44 + pd.matches.length * 20;
+      var lastMatch = pd.matches[pd.matches.length - 1];
+      if (lastMatch) {
+        var np = getNextPlaysInfo(lastMatch.num);
+        if (np) h += 33 + (np.hasWinner ? 18 : 0) + (np.hasLoser ? 18 : 0);
+      }
       if (showBlockers) {
-        var bl = getBlockersForPlayer(pd);
+        var bl = getBlockersForPlayer(pd, bMap);
         if (bl.length) h += 33 + (bl[0].children ? bl[0].children.length * 18 : 0);
       }
       return h;
@@ -1423,9 +1432,15 @@ button { font-family: inherit; font-size: inherit; }
       }
       html += '</div>'; // match-rows
 
+      // Next-plays section: show for the last match if unresolved
+      var lastMatch = pd.matches[pd.matches.length - 1];
+      if (lastMatch) {
+        html += renderNextPlays(lastMatch.num);
+      }
+
       // Blocker section
       if (showBlockers) {
-        var blockers = getBlockersForPlayer(pd);
+        var blockers = getBlockersForPlayer(pd, bMap);
         if (blockers.length > 0) {
           html += '<div class="blocker-section">';
           for (var bi = 0; bi < blockers.length; bi++) {
@@ -1447,77 +1462,55 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  // Returns unresolved feeders for a match's null slot(s), with W/L annotation.
-  // Each feeder field encodes whether it sends a Winner or Loser to this match.
-  // A null slot means the feeder hasn't resolved yet — that's the only check needed.
-  function getUnresolvedFeeders(matchNum, excludeNums) {
-    var match = bracketByNum[matchNum];
-    if (!match) return [];
-    var feederNums = [match.winnerFromTop, match.winnerFromBottom, match.loserFromTop, match.loserFromBottom];
-    var result = [], seen = {};
-    for (var i = 0; i < feederNums.length; i++) {
-      var fNum = feederNums[i];
-      if (!fNum || excludeNums[fNum] || seen[fNum]) continue;
-      seen[fNum] = true;
-      var feeder = bracketByNum[fNum];
-      if (!feeder || feeder.is_bye) continue;
-      // W/L determined by where the feeder sends its winner/loser
-      var wl = feeder.winnerTo === matchNum ? 'W' : feeder.loserTo === matchNum ? 'L' : '?';
-      // Feeder is resolved if its result has arrived (winner/loser determined)
-      if (feeder.p1Won || feeder.p2Won) continue;
-      result.push({ num: feeder.num, identifier: feeder.identifier, p1: feeder.p1, p2: feeder.p2, s1: feeder.s1, s2: feeder.s2, status: feeder.status, wl: wl, children: [] });
-    }
-    return result;
-  }
-
-  // Find the player's pending match: walk forward from last completed match,
-  // skipping byes transparently. Fall back to bracket scan if walk fails.
-  function findPendingMatch(playerName, excludeNums, lastMatchNum) {
-    // Walk phase
-    var cur = lastMatchNum;
-    for (var step = 0; step < 20; step++) {
-      var m = bracketByNum[cur];
-      if (!m) break;
-      var pTop = m.p1 && m.p1.name.toLowerCase() === playerName;
-      var pBot = m.p2 && m.p2.name.toLowerCase() === playerName;
-      var won = (pTop && m.p1Won) || (pBot && m.p2Won);
-      var next = won ? m.winnerTo : m.loserTo;
-      if (!next || !bracketByNum[next]) break;
-      var nm = bracketByNum[next];
-      if (nm.is_bye) { cur = next; continue; } // skip through byes
-      var hasPlayer = (nm.p1 && nm.p1.name.toLowerCase() === playerName) || (nm.p2 && nm.p2.name.toLowerCase() === playerName);
-      if (hasPlayer && (!nm.p1 || !nm.p2)) return nm;
-      if (nm.status === 'COMPLETED' && hasPlayer) { cur = next; continue; }
-      break;
-    }
-    // Scan fallback (handles byes the walk couldn't traverse)
-    for (var k in bracketByNum) {
-      var bm = bracketByNum[k];
-      if (bm.is_bye || excludeNums[bm.num]) continue;
-      var hp = (bm.p1 && bm.p1.name.toLowerCase() === playerName) || (bm.p2 && bm.p2.name.toLowerCase() === playerName);
-      if (hp && (!bm.p1 || !bm.p2)) return bm;
+  // Follow forward through byes to find the real destination match.
+  function followTo(destNum) {
+    for (var step = 0; step < 10; step++) {
+      if (!destNum) return null;
+      var dest = bracketByNum[destNum];
+      if (!dest) return null;
+      if (!dest.is_bye) return dest;
+      destNum = dest.winnerTo;
     }
     return null;
   }
 
-  function getBlockersForPlayer(pd) {
+  // Single-pass forward propagation: for each unresolved match, follow
+  // winnerTo/loserTo one hop to build two tables.
+  function buildBlockerMap() {
+    var blockedMatches = {};  // destMatchNum → [feeder entries]
+    var blockedPlayers = {};  // playerName → pendingMatchNum
+    for (var k in bracketByNum) {
+      var S = bracketByNum[k];
+      if (S.is_bye || S.p1Won || S.p2Won) continue;
+      var paths = [[S.winnerTo, 'W'], [S.loserTo, 'L']];
+      for (var pi = 0; pi < paths.length; pi++) {
+        var D = followTo(paths[pi][0]);
+        if (!D || D.p1Won || D.p2Won) continue;
+        if (!blockedMatches[D.num]) blockedMatches[D.num] = [];
+        blockedMatches[D.num].push({
+          num: S.num, identifier: S.identifier,
+          p1: S.p1, p2: S.p2, s1: S.s1, s2: S.s2,
+          status: S.status, wl: paths[pi][1]
+        });
+        var wp = (D.p1 && !D.p2) ? D.p1 : (!D.p1 && D.p2) ? D.p2 : null;
+        if (wp) blockedPlayers[wp.name.toLowerCase()] = D.num;
+      }
+    }
+    return { blockedMatches: blockedMatches, blockedPlayers: blockedPlayers };
+  }
+
+  function getBlockersForPlayer(pd, bMap) {
     if (!pd.matches.length) return [];
     if (currentTournament && currentTournament.status === 'COMPLETED') return [];
     var lastMatch = pd.matches[pd.matches.length - 1];
     if (lastMatch.status === 'IN_PROGRESS') return [];
-
-    var playerName = pd.player.name.toLowerCase();
-    var excludeNums = {};
-    for (var i = 0; i < pd.matches.length; i++) excludeNums[pd.matches[i].num] = true;
-
-    var pending = findPendingMatch(playerName, excludeNums, lastMatch.num);
-    if (!pending) return [];
-
-    var blockers = getUnresolvedFeeders(pending.num, excludeNums);
-    for (var i = 0; i < blockers.length; i++) {
-      blockers[i].children = getUnresolvedFeeders(blockers[i].num, excludeNums);
+    var pendingNum = bMap.blockedPlayers[pd.player.name.toLowerCase()];
+    if (!pendingNum) return [];
+    var level1 = (bMap.blockedMatches[pendingNum] || []).slice();
+    for (var i = 0; i < level1.length; i++) {
+      level1[i] = Object.assign({}, level1[i], { children: bMap.blockedMatches[level1[i].num] || [] });
     }
-    return blockers;
+    return level1;
   }
 
   function blockerPlayerLink(p) {
@@ -1538,6 +1531,39 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
+  // For an unresolved match, look up where the winner/loser go next
+  // and who (if anyone) is already waiting there.
+  function getNextPlaysInfo(matchNum) {
+    var match = bracketByNum[matchNum];
+    if (!match || match.p1Won || match.p2Won) return null;
+    var info = {};
+    var wDest = followTo(match.winnerTo);
+    if (wDest && !(wDest.p1 && wDest.p2)) {
+      info.winner = wDest.p1 || wDest.p2 || null;
+      info.hasWinner = true;
+    }
+    var lDest = followTo(match.loserTo);
+    if (lDest && !(lDest.p1 && lDest.p2)) {
+      info.loser = lDest.p1 || lDest.p2 || null;
+      info.hasLoser = true;
+    }
+    return (info.hasWinner || info.hasLoser) ? info : null;
+  }
+
+  function renderNextPlays(matchNum) {
+    var info = getNextPlaysInfo(matchNum);
+    if (!info) return '';
+    var html = '<div class="next-plays">';
+    if (info.hasWinner) {
+      html += '<span class="np-item"><span class="np-label">Winner</span> <span class="np-arrow">\u2192</span> ' + (info.winner ? blockerPlayerLink(info.winner) : 'TBD') + '</span>';
+    }
+    if (info.hasLoser) {
+      html += '<span class="np-item"><span class="np-label">Loser</span> <span class="np-arrow">\u2192</span> ' + (info.loser ? blockerPlayerLink(info.loser) : 'TBD') + '</span>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit) {
     var key = player.name;
     if (!map[key]) {
@@ -1549,8 +1575,12 @@ button { font-family: inherit; font-size: inherit; }
       if (won) map[key].wins++;
       else map[key].losses++;
     }
-    // Update place if available
-    if (player.place && !map[key].player.place) map[key].player.place = player.place;
+    // Update place if available, but clear it if player is still in a live match
+    if (status === 'IN_PROGRESS') {
+      map[key].player.place = null;
+    } else if (player.place && !map[key].player.place) {
+      map[key].player.place = player.place;
+    }
   }
 
   function renderFlatMatches(matches) {
