@@ -302,6 +302,7 @@ button { font-family: inherit; font-size: inherit; }
   </div>
 </div>
 
+<script src="bracket-algo.js"></script>
 <script>
 (function() {
   'use strict';
@@ -1359,18 +1360,19 @@ button { font-family: inherit; font-size: inherit; }
       addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit);
     }
 
-    var bMap = buildBlockerMap();
+    var bMap = buildBlockerMap(bracketByNum);
+    var tStatus = currentTournament && currentTournament.status;
 
     // Estimate card height: header + matches + next-plays + blocker rows
     function estimateCardHeight(pd) {
       var h = 44 + pd.matches.length * 20;
       var lastMatch = pd.matches[pd.matches.length - 1];
       if (lastMatch) {
-        var np = getNextPlaysInfo(lastMatch.num);
+        var np = getNextPlaysInfo(bracketByNum, lastMatch.num);
         if (np) h += 33 + (np.hasWinner ? 18 : 0) + (np.hasLoser ? 18 : 0);
       }
       if (showBlockers) {
-        var bl = getBlockersForPlayer(pd, bMap);
+        var bl = getBlockersForPlayer(pd, bMap, tStatus);
         if (bl.length) h += 33 + (bl[0].children ? bl[0].children.length * 18 : 0);
       }
       return h;
@@ -1440,7 +1442,7 @@ button { font-family: inherit; font-size: inherit; }
 
       // Blocker section
       if (showBlockers) {
-        var blockers = getBlockersForPlayer(pd, bMap);
+        var blockers = getBlockersForPlayer(pd, bMap, tStatus);
         if (blockers.length > 0) {
           html += '<div class="blocker-section">';
           for (var bi = 0; bi < blockers.length; bi++) {
@@ -1462,56 +1464,8 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  // Follow forward through byes to find the real destination match.
-  function followTo(destNum) {
-    for (var step = 0; step < 10; step++) {
-      if (!destNum) return null;
-      var dest = bracketByNum[destNum];
-      if (!dest) return null;
-      if (!dest.is_bye) return dest;
-      destNum = dest.winnerTo;
-    }
-    return null;
-  }
-
-  // Single-pass forward propagation: for each unresolved match, follow
-  // winnerTo/loserTo one hop to build two tables.
-  function buildBlockerMap() {
-    var blockedMatches = {};  // destMatchNum → [feeder entries]
-    var blockedPlayers = {};  // playerName → pendingMatchNum
-    for (var k in bracketByNum) {
-      var S = bracketByNum[k];
-      if (S.is_bye || S.p1Won || S.p2Won) continue;
-      var paths = [[S.winnerTo, 'W'], [S.loserTo, 'L']];
-      for (var pi = 0; pi < paths.length; pi++) {
-        var D = followTo(paths[pi][0]);
-        if (!D || D.p1Won || D.p2Won) continue;
-        if (!blockedMatches[D.num]) blockedMatches[D.num] = [];
-        blockedMatches[D.num].push({
-          num: S.num, identifier: S.identifier,
-          p1: S.p1, p2: S.p2, s1: S.s1, s2: S.s2,
-          status: S.status, wl: paths[pi][1]
-        });
-        var wp = (D.p1 && !D.p2) ? D.p1 : (!D.p1 && D.p2) ? D.p2 : null;
-        if (wp) blockedPlayers[wp.name.toLowerCase()] = D.num;
-      }
-    }
-    return { blockedMatches: blockedMatches, blockedPlayers: blockedPlayers };
-  }
-
-  function getBlockersForPlayer(pd, bMap) {
-    if (!pd.matches.length) return [];
-    if (currentTournament && currentTournament.status === 'COMPLETED') return [];
-    var lastMatch = pd.matches[pd.matches.length - 1];
-    if (lastMatch.status === 'IN_PROGRESS') return [];
-    var pendingNum = bMap.blockedPlayers[pd.player.name.toLowerCase()];
-    if (!pendingNum) return [];
-    var level1 = (bMap.blockedMatches[pendingNum] || []).slice();
-    for (var i = 0; i < level1.length; i++) {
-      level1[i] = Object.assign({}, level1[i], { children: bMap.blockedMatches[level1[i].num] || [] });
-    }
-    return level1;
-  }
+  // followTo, buildBlockerMap, getBlockersForPlayer, getNextPlaysInfo
+  // are defined in bracket-algo.js
 
   function blockerPlayerLink(p) {
     if (!p) return 'TBD';
@@ -1531,27 +1485,8 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  // For an unresolved match, look up where the winner/loser go next
-  // and who (if anyone) is already waiting there.
-  function getNextPlaysInfo(matchNum) {
-    var match = bracketByNum[matchNum];
-    if (!match || match.p1Won || match.p2Won) return null;
-    var info = {};
-    var wDest = followTo(match.winnerTo);
-    if (wDest && !(wDest.p1 && wDest.p2)) {
-      info.winner = wDest.p1 || wDest.p2 || null;
-      info.hasWinner = true;
-    }
-    var lDest = followTo(match.loserTo);
-    if (lDest && !(lDest.p1 && lDest.p2)) {
-      info.loser = lDest.p1 || lDest.p2 || null;
-      info.hasLoser = true;
-    }
-    return (info.hasWinner || info.hasLoser) ? info : null;
-  }
-
   function renderNextPlays(matchNum) {
-    var info = getNextPlaysInfo(matchNum);
+    var info = getNextPlaysInfo(bracketByNum, matchNum);
     if (!info) return '';
     var html = '<div class="next-plays">';
     if (info.hasWinner) {
