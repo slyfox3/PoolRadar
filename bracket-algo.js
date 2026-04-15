@@ -59,11 +59,21 @@ function getNextPlaysInfo(bracketByNum, matchNum) {
   if (!match || match.p1Won || match.p2Won) return null;
   var info = {};
   var wDest = followTo(bracketByNum, match.winnerTo);
+  var lDest = followTo(bracketByNum, match.loserTo);
+  // Double dip: in double-elim, the last match is always 2^n - 1.
+  // If winnerTo points to that match, this is the grand final.
+  // In double-elim, the LB final is the match before the grand final,
+  // and its winner advances to the grand final.
+  var lbFinal = bracketByNum[match.num - 1];
+  if (wDest && match.p1 && match.p2 && wDest.num >= 3 &&
+      (wDest.num & (wDest.num + 1)) === 0 &&
+      lbFinal && lbFinal.winnerTo === match.num) {
+    return { doubleDip: true };
+  }
   if (wDest && !(wDest.p1 && wDest.p2)) {
     info.winner = wDest.p1 || wDest.p2 || null;
     info.hasWinner = true;
   }
-  var lDest = followTo(bracketByNum, match.loserTo);
   if (lDest && !(lDest.p1 && lDest.p2)) {
     info.loser = lDest.p1 || lDest.p2 || null;
     info.hasLoser = true;

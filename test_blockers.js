@@ -1,5 +1,5 @@
-// Run with:
-//   /System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc bracket-algo.js test_blockers.js
+// Terminal: /System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc bracket-algo.js test_blockers.js
+// Browser: open test_blockers.html
 'use strict';
 if (typeof console === 'undefined') {
   var console = { log: function(s) { print(s); }, error: function(s) { print(s); } };
@@ -261,6 +261,50 @@ function toObj(list) {
 
   var np = getNextPlaysInfo(b, 1);
   assert(np.winner.name === 'Alice', 'winner plays Alice (bye skipped)');
+})();
+
+// ═══════════════════════════════════════════════
+// F1: Double dip — 8-player bracket (last match = 15 = 2^4-1)
+// M14(Artem,Kalata) →W→ M15 (double dip)
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('F1: Double dip — 8-player bracket');
+  var b = toObj([
+    M(13, 'Jack', 'Eddie', { wTo: 14, status: 'COMPLETED', p1Won: true }),
+    M(14, 'Artem', 'Kalata', { wTo: 15 }),
+    M(15, null, null),
+  ]);
+  var np = getNextPlaysInfo(b, 14);
+  assert(np && np.doubleDip === true, 'doubleDip when winnerTo is 2^n-1');
+})();
+
+// ═══════════════════════════════════════════════
+// F2: Double dip — 32-player bracket (last match = 63 = 2^6-1)
+// M62(Artem,Kalata) →W→ M63, →L→ null
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('F2: Double dip — 32-player bracket');
+  var b = toObj([
+    M(61, 'Artem', 'Jack', { wTo: 62, status: 'COMPLETED', p1Won: true }),
+    M(62, 'Artem', 'Kalata', { wTo: 63 }),
+    M(63, null, null),
+  ]);
+  var np = getNextPlaysInfo(b, 62);
+  assert(np && np.doubleDip === true, 'doubleDip when winnerTo is 2^n-1');
+})();
+
+// ═══════════════════════════════════════════════
+// F3: NOT a double dip — normal LR match with loserTo null
+// M19(Alice,Bob) →W→ M21(empty), →L→ null
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('F3: Not a double dip — normal LR match');
+  var b = toObj([
+    M(19, 'Alice', 'Bob', { wTo: 21 }),
+    M(21, null, null),
+  ]);
+  var np = getNextPlaysInfo(b, 19);
+  assert(!np || !np.doubleDip, 'no doubleDip for non-2^n-1 destination');
 })();
 
 // ═══════════════════════════════════════════════

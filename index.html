@@ -160,7 +160,7 @@ button { font-family: inherit; font-size: inherit; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; break-inside: avoid; }
 .next-plays { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
 .next-plays .np-item { display: block; margin: 2px 0; }
-.next-plays .np-label { display: inline-block; width: 40px; }
+.next-plays .np-label { display: inline-block; width: 42px; }
 .next-plays .np-arrow { color: #475569; }
 .blocker-section { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
 .blocker-entry { margin: 2px 0; }
@@ -1363,17 +1363,18 @@ button { font-family: inherit; font-size: inherit; }
     var bMap = buildBlockerMap(bracketByNum);
     var tStatus = currentTournament && currentTournament.status;
 
-    // Estimate card height: header + matches + next-plays + blocker rows
+    // Estimate card height for masonry-style sorting
+    var LINE = 18, SECTION_PAD = 33, HEADER = 44, MATCH_ROW = 20;
     function estimateCardHeight(pd) {
-      var h = 44 + pd.matches.length * 20;
+      var h = HEADER + pd.matches.length * MATCH_ROW;
       var lastMatch = pd.matches[pd.matches.length - 1];
       if (lastMatch) {
         var np = getNextPlaysInfo(bracketByNum, lastMatch.num);
-        if (np) h += 33 + (np.hasWinner ? 18 : 0) + (np.hasLoser ? 18 : 0);
+        if (np && (np.doubleDip || np.hasWinner)) h += SECTION_PAD + LINE;
       }
       if (showBlockers) {
         var bl = getBlockersForPlayer(pd, bMap, tStatus);
-        if (bl.length) h += 33 + (bl[0].children ? bl[0].children.length * 18 : 0);
+        if (bl.length) h += SECTION_PAD + (bl[0].children ? bl[0].children.length * LINE : 0);
       }
       return h;
     }
@@ -1437,7 +1438,13 @@ button { font-family: inherit; font-size: inherit; }
       // Next-plays section: show for the last match if unresolved
       var lastMatch = pd.matches[pd.matches.length - 1];
       if (lastMatch) {
-        html += renderNextPlays(lastMatch.num);
+        var npInfo = getNextPlaysInfo(bracketByNum, lastMatch.num);
+        if (npInfo && npInfo.doubleDip) {
+          var dpLabel = pd.losses === 0 ? 'If wins \u2192 Champion' : 'If wins \u2192 Double Dip';
+          html += '<div class="next-plays"><span class="np-item">' + dpLabel + '</span></div>';
+        } else {
+          html += renderNextPlays(lastMatch.num);
+        }
       }
 
       // Blocker section
@@ -1487,16 +1494,8 @@ button { font-family: inherit; font-size: inherit; }
 
   function renderNextPlays(matchNum) {
     var info = getNextPlaysInfo(bracketByNum, matchNum);
-    if (!info) return '';
-    var html = '<div class="next-plays">';
-    if (info.hasWinner) {
-      html += '<span class="np-item"><span class="np-label">Winner</span> <span class="np-arrow">\u2192</span> ' + (info.winner ? blockerPlayerLink(info.winner) : 'TBD') + '</span>';
-    }
-    if (info.hasLoser) {
-      html += '<span class="np-item"><span class="np-label">Loser</span> <span class="np-arrow">\u2192</span> ' + (info.loser ? blockerPlayerLink(info.loser) : 'TBD') + '</span>';
-    }
-    html += '</div>';
-    return html;
+    if (!info || info.doubleDip || !info.hasWinner) return '';
+    return '<div class="next-plays"><span class="np-item"><span class="np-label">If wins</span> <span class="np-arrow">\u2192</span> ' + (info.winner ? blockerPlayerLink(info.winner) : 'TBD') + '</span></div>';
   }
 
   function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit) {
