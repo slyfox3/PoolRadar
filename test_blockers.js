@@ -43,6 +43,15 @@ function toObj(list) {
   return o;
 }
 
+// Same logic as in index.html — find the other feeder to a destination
+function resolveFeeder(destNum, excludeNum, bMap) {
+  var feeders = bMap.blockedMatches[destNum] || [];
+  for (var i = 0; i < feeders.length; i++) {
+    if (feeders[i].num !== excludeNum) return feeders[i];
+  }
+  return null;
+}
+
 // ═══════════════════════════════════════════════
 // A1: Both resolved, no bye
 // M1(Bob,Carol) →W→ M2(Alice,??)
@@ -328,6 +337,89 @@ function toObj(list) {
   // No matches — no blockers
   var pdEmpty = { player: { name: 'Alice' }, matches: [] };
   assert(getBlockersForPlayer(pdEmpty, bMap, null).length === 0, 'no blockers when no matches');
+})();
+
+// ═══════════════════════════════════════════════
+// G1: Resolve TBD opponent — winner side match
+// M10(Alice,Bob) →W→ M12(empty), →L→ M11(empty)
+// M20(Carol,Dave) →W→ M12
+// M30(Eve,Frank) →L→ M11
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('G1: Resolve TBD — if wins / if loses');
+  var b = toObj([
+    M(10, 'Alice', 'Bob', { wTo: 12, lTo: 11 }),
+    M(20, 'Carol', 'Dave', { wTo: 12 }),
+    M(30, 'Eve', 'Frank', { lTo: 11 }),
+    M(12, null, null),
+    M(11, null, null),
+  ]);
+  var bMap = buildBlockerMap(b);
+  var np = getNextPlaysInfo(b, 10);
+
+  // Winner dest is TBD — resolves to "W of Carol vs Dave"
+  assert(np.hasWinner, 'has winner');
+  assert(np.winner === null, 'winner is TBD (both slots empty)');
+  assert(np.winnerDest === 12, 'winnerDest is match 12');
+  var wOpp = resolveFeeder(np.winnerDest, 10, bMap);
+  assert(wOpp && wOpp.num === 20, 'winner opponent feeder is match 20');
+  assert(wOpp.wl === 'W', 'winner opponent wl is W');
+  assert(wOpp.p1.name === 'Carol', 'winner opponent p1 is Carol');
+  assert(wOpp.p2.name === 'Dave', 'winner opponent p2 is Dave');
+
+  // Loser dest is TBD — resolves to "L of Eve vs Frank"
+  assert(np.hasLoser, 'has loser');
+  assert(np.loser === null, 'loser is TBD');
+  assert(np.loserDest === 11, 'loserDest is match 11');
+  var lOpp = resolveFeeder(np.loserDest, 10, bMap);
+  assert(lOpp && lOpp.num === 30, 'loser opponent feeder is match 30');
+  assert(lOpp.wl === 'L', 'loser opponent wl is L');
+  assert(lOpp.p1.name === 'Eve', 'loser opponent p1 is Eve');
+  assert(lOpp.p2.name === 'Frank', 'loser opponent p2 is Frank');
+})();
+
+// ═══════════════════════════════════════════════
+// G2: Resolve TBD — one known, one TBD
+// M10(Alice,Bob) →W→ M12(Charlie,??)
+// M20(Carol,Dave) →L→ M11(empty)
+// M10 →L→ M11
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('G2: Resolve TBD — one known, one needs resolving');
+  var b = toObj([
+    M(10, 'Alice', 'Bob', { wTo: 12, lTo: 11 }),
+    M(20, 'Carol', 'Dave', { lTo: 11 }),
+    M(12, 'Charlie', null),
+    M(11, null, null),
+  ]);
+  var bMap = buildBlockerMap(b);
+  var np = getNextPlaysInfo(b, 10);
+
+  // Winner plays Charlie (already seated)
+  assert(np.winner && np.winner.name === 'Charlie', 'winner plays Charlie');
+  assert(!np.winnerDest, 'no winnerDest when opponent is known');
+
+  // Loser is TBD — resolves to "L of Carol vs Dave"
+  assert(np.loser === null, 'loser opponent is TBD');
+  var lOpp = resolveFeeder(np.loserDest, 10, bMap);
+  assert(lOpp && lOpp.p1.name === 'Carol', 'loser opponent resolves to Carol vs Dave');
+  assert(lOpp.wl === 'L', 'loser opponent wl is L');
+})();
+
+// ═══════════════════════════════════════════════
+// G3: No feeder to resolve — destination empty, no other match feeds in
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('G3: No feeder to resolve');
+  var b = toObj([
+    M(10, 'Alice', 'Bob', { wTo: 12 }),
+    M(12, null, null),
+  ]);
+  var bMap = buildBlockerMap(b);
+  var np = getNextPlaysInfo(b, 10);
+  assert(np.winnerDest === 12, 'winnerDest set');
+  var opp = resolveFeeder(np.winnerDest, 10, bMap);
+  assert(opp === null, 'no feeder to resolve — stays TBD');
 })();
 
 // ═══════════════════════════════════════════════

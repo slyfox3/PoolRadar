@@ -160,8 +160,7 @@ button { font-family: inherit; font-size: inherit; }
 .player-list-item { display: flex; align-items: center; gap: 4px; padding: 3px 0; font-size: 13px; white-space: nowrap; overflow: hidden; break-inside: avoid; }
 .next-plays { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
 .next-plays .np-item { display: block; margin: 2px 0; }
-.next-plays .np-label { display: inline-block; width: 42px; }
-.next-plays .np-arrow { color: #475569; }
+.next-plays .np-prefix { font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; color: #475569; margin-right: 4px; }
 .blocker-section { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
 .blocker-entry { margin: 2px 0; }
 .blocker-child { margin: 2px 0 2px 22px; color: #64748b; }
@@ -1370,7 +1369,7 @@ button { font-family: inherit; font-size: inherit; }
       var lastMatch = pd.matches[pd.matches.length - 1];
       if (lastMatch) {
         var np = getNextPlaysInfo(bracketByNum, lastMatch.num);
-        if (np && (np.doubleDip || np.hasWinner)) h += SECTION_PAD + LINE;
+        if (np && (np.doubleDip || np.hasWinner)) h += SECTION_PAD + (np.hasWinner ? LINE : 0) + (np.hasLoser ? LINE : 0);
       }
       if (showBlockers) {
         var bl = getBlockersForPlayer(pd, bMap, tStatus);
@@ -1440,10 +1439,10 @@ button { font-family: inherit; font-size: inherit; }
       if (lastMatch) {
         var npInfo = getNextPlaysInfo(bracketByNum, lastMatch.num);
         if (npInfo && npInfo.doubleDip) {
-          var dpLabel = pd.losses === 0 ? 'If wins \u2192 Champion' : 'If wins \u2192 Double Dip';
-          html += '<div class="next-plays"><span class="np-item">' + dpLabel + '</span></div>';
+          var dpLabel = pd.losses === 0 ? 'Champion' : 'Double Dip';
+          html += '<div class="next-plays"><span class="np-item"><span class="np-prefix">If W \u2192</span> ' + dpLabel + '</span></div>';
         } else {
-          html += renderNextPlays(lastMatch.num);
+          html += renderNextPlays(lastMatch.num, bMap);
         }
       }
 
@@ -1488,14 +1487,37 @@ button { font-family: inherit; font-size: inherit; }
       return prefix + p1 + ' <span class="mr-live">\uD83D\uDD25 ' + (bl.s1 || 0) + '-' + (bl.s2 || 0) + '</span> ' + p2;
     }
     var html = prefix + p1 + ' vs ' + p2;
-    if (!bl.p1 && !bl.p2) html += ' (pending)';
     return html;
   }
 
-  function renderNextPlays(matchNum) {
+  function resolveFeeder(destNum, excludeNum, bMap) {
+    var feeders = bMap.blockedMatches[destNum] || [];
+    for (var i = 0; i < feeders.length; i++) {
+      if (feeders[i].num !== excludeNum) return feeders[i];
+    }
+    return null;
+  }
+
+  function nextPlaysLabel(player, destNum, matchNum, bMap) {
+    if (player) return blockerPlayerLink(player);
+    if (!destNum) return 'TBD';
+    var feeder = resolveFeeder(destNum, matchNum, bMap);
+    if (feeder) return blockerPlayerLabel(feeder);
+    return 'TBD';
+  }
+
+  function renderNextPlays(matchNum, bMap) {
     var info = getNextPlaysInfo(bracketByNum, matchNum);
-    if (!info || info.doubleDip || !info.hasWinner) return '';
-    return '<div class="next-plays"><span class="np-item"><span class="np-label">If wins</span> <span class="np-arrow">\u2192</span> ' + (info.winner ? blockerPlayerLink(info.winner) : 'TBD') + '</span></div>';
+    if (!info || info.doubleDip) return '';
+    var html = '<div class="next-plays">';
+    if (info.hasWinner) {
+      html += '<span class="np-item"><span class="np-prefix">If W \u2192</span> ' + nextPlaysLabel(info.winner, info.winnerDest, matchNum, bMap) + '</span>';
+    }
+    if (info.hasLoser) {
+      html += '<span class="np-item"><span class="np-prefix">If L \u2192</span> ' + nextPlaysLabel(info.loser, info.loserDest, matchNum, bMap) + '</span>';
+    }
+    html += '</div>';
+    return html;
   }
 
   function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit) {

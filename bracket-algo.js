@@ -72,10 +72,12 @@ function getNextPlaysInfo(bracketByNum, matchNum) {
   }
   if (wDest && !(wDest.p1 && wDest.p2)) {
     info.winner = wDest.p1 || wDest.p2 || null;
+    if (!info.winner) info.winnerDest = wDest.num;
     info.hasWinner = true;
   }
   if (lDest && !(lDest.p1 && lDest.p2)) {
     info.loser = lDest.p1 || lDest.p2 || null;
+    if (!info.loser) info.loserDest = lDest.num;
     info.hasLoser = true;
   }
   return (info.hasWinner || info.hasLoser) ? info : null;
