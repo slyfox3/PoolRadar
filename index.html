@@ -130,7 +130,7 @@ button { font-family: inherit; font-size: inherit; }
 .record-l { color: #f87171; }
 
 /* Match rows — CSS grid so scores align across rows */
-.match-rows { display: grid; grid-template-columns: 28px auto auto minmax(0, auto) auto 16px 8px 16px auto; column-gap: 0; align-items: center; font-size: 13px; }
+.match-rows { display: grid; grid-template-columns: 28px auto auto minmax(0, 1fr) auto 16px 8px 16px auto; column-gap: 0; align-items: center; font-size: 13px; }
 .mr-video { padding-left: 6px; }
 .mr-video a { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 10px; background: #dc2626; border-radius: 2px; color: #fff; text-decoration: none; font-size: 6px; line-height: 1; vertical-align: middle; }
 .mr-video a:hover { background: #ef4444; }
@@ -142,7 +142,7 @@ button { font-family: inherit; font-size: inherit; }
 .match-row { display: contents; }
 .match-num { color: #64748b; font-size: 11px; text-align: right; padding: 3px 0; }
 .match-vs-label { color: #64748b; font-size: 11px; }
-.match-opponent { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 150px; }
+.match-opponent { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .match-opponent.is-fav { color: #fbbf24; }
 .match-opp-rating { color: #64748b; font-size: 11px; }
 .mr-label { font-weight: 700; font-size: 12px; text-align: right; font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace; padding-right: 5px; }
@@ -176,7 +176,7 @@ button { font-family: inherit; font-size: inherit; }
 .registered-players-body { padding: 8px 12px; }
 
 /* Flat match grid (by match#) */
-.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto auto 18px 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
+.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto auto auto 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
 .flat-match .fm-round { color: #64748b; font-size: 11px; padding-right: 6px; white-space: nowrap; font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace; }
 .flat-match > * { display: flex; align-items: center; }
 .flat-match { display: contents; }
@@ -187,7 +187,7 @@ button { font-family: inherit; font-size: inherit; }
 .flat-match .fm-winner { font-weight: 700; color: #f8fafc; }
 .flat-match .fm-add { }
 .flat-match .fm-rating { color: #64748b; font-size: 11px; }
-.flat-match .fm-status { text-align: center; font-size: 11px; }
+.flat-match .fm-status { text-align: center; font-size: 11px; white-space: nowrap; }
 .flat-match .fm-p1 { padding-right: 4px; }
 .flat-match .fm-p2 { padding-left: 4px; }
 
@@ -1161,7 +1161,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num table_name status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -1207,6 +1207,7 @@ button { font-family: inherit; font-size: inherit; }
           p2Won: !!m.challenger2_is_winner,
           status: m.status,
           videoUrl: m.livestream_url || null,
+          tableName: m.table_name || null,
           round: m.round || null,
           identifier: m.identifier || null,
         });
@@ -1355,8 +1356,8 @@ button { font-family: inherit; font-size: inherit; }
     var playerOrder = [];
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -1416,7 +1417,8 @@ button { font-family: inherit; font-size: inherit; }
         if (pm.isSplit) {
           html += '<span></span><span style="grid-column:span 3">Split</span>';
         } else if (pm.status === 'IN_PROGRESS') {
-          html += '<span class="mr-label mr-live">\uD83D\uDD25</span>';
+          var tbl = pm.tableName ? pm.tableName.replace(/^Table\s*/i, 'T') : '';
+          html += '<span class="mr-label mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
           html += '<span class="mr-s1 mr-live">' + (pm.myScore != null ? pm.myScore : '') + '</span>';
           html += '<span class="mr-sep mr-live">' + (pm.myScore != null ? '-' : '') + '</span>';
           html += '<span class="mr-s2 mr-live">' + (pm.oppScore != null ? pm.oppScore : '') + '</span>';
@@ -1520,13 +1522,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -1565,7 +1567,8 @@ button { font-family: inherit; font-size: inherit; }
       if (m.isSplit) {
         html += '<span class="fm-status"></span><span style="grid-column:span 3">Split</span>';
       } else if (m.status === 'IN_PROGRESS') {
-        html += '<span class="fm-status mr-live">\uD83D\uDD25</span>';
+        var tbl = m.tableName ? m.tableName.replace(/^Table\s*/i, 'T') : '';
+        html += '<span class="fm-status mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
         html += '<span class="mr-s1 mr-live">' + (m.s1 != null ? m.s1 : '') + '</span>';
         html += '<span class="mr-sep mr-live">' + (m.s1 != null ? '-' : '') + '</span>';
         html += '<span class="mr-s2 mr-live">' + (m.s2 != null ? m.s2 : '') + '</span>';
