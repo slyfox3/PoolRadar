@@ -1367,28 +1367,35 @@ button { font-family: inherit; font-size: inherit; }
     var LINE = 18, SECTION_PAD = 33, HEADER = 44, MATCH_ROW = 20;
     function estimateCardHeight(pd) {
       var h = HEADER + pd.matches.length * MATCH_ROW;
-      var lastMatch = pd.matches[pd.matches.length - 1];
-      if (lastMatch) {
-        var np = getNextPlaysInfo(bracketByNum, lastMatch.num);
-        if (np && (np.doubleDip || np.hasWinner)) h += SECTION_PAD + (np.hasWinner ? LINE : 0) + (np.hasLoser ? LINE : 0);
-      }
       if (showBlockers) {
+        var lastMatch = pd.matches[pd.matches.length - 1];
+        if (lastMatch) {
+          var np = getNextPlaysInfo(bracketByNum, lastMatch.num);
+          if (np && (np.doubleDip || np.hasWinner)) h += SECTION_PAD + (np.hasWinner ? LINE : 0) + (np.hasLoser ? LINE : 0);
+        }
         var bl = getBlockersForPlayer(pd, bMap, tStatus);
         if (bl.length) h += SECTION_PAD + (bl[0].children ? bl[0].children.length * LINE : 0);
       }
       return h;
     }
 
-    // Sort: favorites first, then placing (no placing = active = first), then card height desc
+    // Sort: active before eliminated, favorites first within each group, then card height desc
     playerOrder.sort(function(a, b) {
       var pa = playerMap[a], pb = playerMap[b];
+      var aElim = pa.player.place ? 1 : 0;
+      var bElim = pb.player.place ? 1 : 0;
+      if (aElim !== bElim) return aElim - bElim;
       var aFav = isPlayerFav(pa.player) ? 0 : 1;
       var bFav = isPlayerFav(pb.player) ? 0 : 1;
       if (aFav !== bFav) return aFav - bFav;
-      var aPlace = pa.player.place ? parseInt(pa.player.place, 10) : -1;
-      var bPlace = pb.player.place ? parseInt(pb.player.place, 10) : -1;
-      if (aPlace !== bPlace) return aPlace - bPlace;
-      return estimateCardHeight(pb) - estimateCardHeight(pa);
+      if (aElim && bElim) {
+        var aPlace = parseInt(pa.player.place, 10);
+        var bPlace = parseInt(pb.player.place, 10);
+        if (aPlace !== bPlace) return aPlace - bPlace;
+      }
+      var hDiff = estimateCardHeight(pb) - estimateCardHeight(pa);
+      if (hDiff !== 0) return hDiff;
+      return a.localeCompare(b);
     });
 
     var html = '<div class="player-groups-grid">';
@@ -1437,14 +1444,16 @@ button { font-family: inherit; font-size: inherit; }
       html += '</div>'; // match-rows
 
       // Next-plays section: show for the last match if unresolved
-      var lastMatch = pd.matches[pd.matches.length - 1];
-      if (lastMatch) {
-        var npInfo = getNextPlaysInfo(bracketByNum, lastMatch.num);
-        if (npInfo && npInfo.doubleDip) {
-          var dpLabel = pd.losses === 0 ? 'Champion' : 'Double Dip';
-          html += '<div class="next-plays"><span class="np-item"><span class="np-prefix">If W \u2192</span> ' + dpLabel + '</span></div>';
-        } else {
-          html += renderNextPlays(lastMatch.num, bMap);
+      if (showBlockers) {
+        var lastMatch = pd.matches[pd.matches.length - 1];
+        if (lastMatch) {
+          var npInfo = getNextPlaysInfo(bracketByNum, lastMatch.num);
+          if (npInfo && npInfo.doubleDip) {
+            var dpLabel = pd.losses === 0 ? 'Champion' : 'Double Dip';
+            html += '<div class="next-plays"><span class="np-item"><span class="np-prefix">If W \u2192</span> ' + dpLabel + '</span></div>';
+          } else {
+            html += renderNextPlays(lastMatch.num, bMap);
+          }
         }
       }
 
