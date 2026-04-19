@@ -307,6 +307,8 @@ button { font-family: inherit; font-size: inherit; }
   'use strict';
 
   var GQL = 'https://api-cached.digitalpool.com/';
+  var CORS_PROXY = 'https://corsproxy.io/?url=';
+  var DEFAULT_YT_CHANNEL = 'UCTlcpma6Dx7uIZN0dFJJl9w'; // @EvoSportsStreaming
 
   // =====================================================
   // LocalStorage helpers
@@ -321,6 +323,121 @@ button { font-family: inherit; font-size: inherit; }
   }
   function saveFavs(f) { localStorage.setItem('poolradar_favs', JSON.stringify(f)); }
   var favs = loadFavs();
+
+  // =====================================================
+  // YouTube video discovery via RSS
+  // =====================================================
+  function loadVideoCache() {
+    try { return JSON.parse(localStorage.getItem('poolradar_videos')) || {}; }
+    catch(e) { return {}; }
+  }
+  function saveVideoCache(c) { localStorage.setItem('poolradar_videos', JSON.stringify(c)); }
+
+  function tokenizeName(name) {
+    // "Douglas (Doug) Dunn" → ["douglas", "doug", "dunn"]
+    return name.toLowerCase().replace(/[()]/g, ' ').split(/\s+/).filter(function(t) { return t.length > 1; });
+  }
+
+  function scoreVideoMatch(p1Name, p2Name, title) {
+    var titleLower = title.toLowerCase().replace(/[^\w\s]/g, ' ');
+    var titleTokens = titleLower.split(/\s+/);
+    var score = 0;
+    var names = [tokenizeName(p1Name), tokenizeName(p2Name)];
+    for (var ni = 0; ni < names.length; ni++) {
+      var tokens = names[ni];
+      for (var ti = 0; ti < tokens.length; ti++) {
+        if (titleTokens.indexOf(tokens[ti]) !== -1) { score += 10; break; }
+      }
+    }
+    return score; // 20 = both players matched, 10 = one player
+  }
+
+  function fetchYouTubeRSS(channelId) {
+    var rssUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=' + channelId;
+    var fullUrl = CORS_PROXY + rssUrl;
+    return fetch(fullUrl)
+      .then(function(r) { return r.text(); })
+      .then(function(xml) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xml, 'text/xml');
+        var entries = doc.getElementsByTagName('entry');
+        var videos = [];
+        for (var i = 0; i < entries.length; i++) {
+          var e = entries[i];
+          var vidNode = e.getElementsByTagNameNS('http://www.youtube.com/xml/schemas/2015', 'videoId')[0];
+          var videoId = vidNode ? vidNode.textContent : null;
+          var title = e.getElementsByTagName('title')[0];
+          var published = e.getElementsByTagName('published')[0];
+          if (videoId) videos.push({ videoId: videoId, title: title ? title.textContent : '', published: published ? published.textContent : '' });
+        }
+        return videos;
+      });
+  }
+
+  function findVideosForMatches(matches, videos) {
+    var cache = loadVideoCache();
+    var found = 0;
+    // Build candidate list: each video → best matching match (by score, then time proximity)
+    var usedVideos = {}; // videoId → matchNum (dedup: one video per match)
+    // First pass: collect best video per match
+    var candidates = []; // [{matchIdx, videoIdx, score, timeDiff}]
+    for (var mi = 0; mi < matches.length; mi++) {
+      var m = matches[mi];
+      if (m.videoUrl) continue;
+      var cacheKey = currentSlug + '_' + m.num;
+      if (cache[cacheKey]) { m.videoUrl = cache[cacheKey].url; m.videoAuto = true; found++; continue; }
+      for (var vi = 0; vi < videos.length; vi++) {
+        var score = scoreVideoMatch(m.p1.name, m.p2.name, videos[vi].title);
+        if (score >= 20) {
+          var timeDiff = Infinity;
+          if (m.startTime && videos[vi].published) {
+            timeDiff = Math.abs(new Date(m.startTime) - new Date(videos[vi].published));
+          }
+          candidates.push({ mi: mi, vi: vi, score: score, timeDiff: timeDiff });
+        }
+      }
+    }
+    // Sort: highest score first, then closest time
+    candidates.sort(function(a, b) {
+      return b.score - a.score || a.timeDiff - b.timeDiff;
+    });
+    // Assign: each video to at most one match, each match to at most one video
+    var assignedMatches = {};
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var c = candidates[ci];
+      var vid = videos[c.vi].videoId;
+      if (usedVideos[vid] || assignedMatches[c.mi]) continue;
+      usedVideos[vid] = true;
+      assignedMatches[c.mi] = true;
+      var m = matches[c.mi];
+      var url = 'https://www.youtube.com/watch?v=' + vid;
+      m.videoUrl = url;
+      m.videoAuto = true;
+      cache[currentSlug + '_' + m.num] = { url: url, title: videos[c.vi].title, cachedAt: Date.now() };
+      found++;
+    }
+    saveVideoCache(cache);
+    return found;
+  }
+
+  function applyVideoCache(slug) {
+    if (!currentMatches) return;
+    var vc = loadVideoCache();
+    for (var i = 0; i < currentMatches.length; i++) {
+      var m = currentMatches[i];
+      if (m.videoUrl) continue;
+      var k = slug + '_' + m.num;
+      if (vc[k]) { m.videoUrl = vc[k].url; m.videoAuto = true; }
+    }
+  }
+
+  function autoFetchVideos(slug) {
+    fetchYouTubeRSS(DEFAULT_YT_CHANNEL).then(function(videos) {
+      if (currentSlug !== slug || !currentMatches) return;
+      var found = findVideosForMatches(currentMatches, videos);
+      if (found) renderDetail();
+    }).catch(function(err) { console.error('[YT] Video fetch failed:', err); });
+  }
 
   // =====================================================
   // GraphQL helper
@@ -1107,7 +1224,9 @@ button { font-family: inherit; font-size: inherit; }
       currentTournament = cache[slug].tournament;
       currentPlayerList = cache[slug].players || null;
       bracketByNum = cache[slug].bracketByNum || {};
+      applyVideoCache(slug);
       renderDetail();
+      autoFetchVideos(slug);
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
@@ -1137,9 +1256,11 @@ button { font-family: inherit; font-size: inherit; }
       currentMatches = result.matches;
       currentTournament = result.tournament;
       bracketByNum = result.bracketByNum || {};
+      applyVideoCache(slug);
       cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
       clearStatus();
       renderDetail();
+      autoFetchVideos(slug);
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
@@ -1161,7 +1282,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num table_name status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num table_name start_time status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -1208,6 +1329,7 @@ button { font-family: inherit; font-size: inherit; }
           status: m.status,
           videoUrl: m.livestream_url || null,
           tableName: m.table_name || null,
+          startTime: m.start_time || null,
           round: m.round || null,
           identifier: m.identifier || null,
         });
@@ -1356,8 +1478,8 @@ button { font-family: inherit; font-size: inherit; }
     var playerOrder = [];
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.videoAuto);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.videoAuto);
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -1438,7 +1560,7 @@ button { font-family: inherit; font-size: inherit; }
         } else {
           html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
         }
-        html += '<span class="mr-video">' + (pm.videoUrl ? '<a href="' + esc(pm.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>' : '') + '</span>';
+        html += '<span class="mr-video">' + (pm.videoUrl ? '<a href="' + esc(pm.videoUrl) + '" target="_blank" title="Watch on YouTube"' + '>&#9654;</a>' : '') + '</span>';
         html += '</div>';
       }
       html += '</div>'; // match-rows
@@ -1531,13 +1653,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, videoAuto) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, videoAuto: videoAuto });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -1592,7 +1714,7 @@ button { font-family: inherit; font-size: inherit; }
       }
       html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
       html += '<span class="fm-p2' + (p2Fav ? ' is-fav' : '') + (completed && p2Win ? ' fm-winner' : '') + (completed && p1Win ? ' fm-loser' : '') + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
-      html += '<span class="mr-video">' + (m.videoUrl ? '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>' : '') + '</span>';
+      html += '<span class="mr-video">' + (m.videoUrl ? '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube"' + '>&#9654;</a>' : '') + '</span>';
       html += '</div>';
     }
     html += '</div>';
@@ -1743,12 +1865,15 @@ button { font-family: inherit; font-size: inherit; }
 
   function refreshDetail() {
     if (!currentSlug) return;
+    var slug = currentSlug;
     lastRefreshTime = Date.now();
-    fetchMatches(currentSlug).then(function(result) {
+    fetchMatches(slug).then(function(result) {
+      if (currentSlug !== slug) return;
       currentMatches = result.matches;
       currentTournament = result.tournament;
       bracketByNum = result.bracketByNum || {};
-      cache[currentSlug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
+      applyVideoCache(slug);
+      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
       renderDetail();
       if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
     }).catch(function() { /* silent retry next cycle */ });
