@@ -617,12 +617,17 @@ button { font-family: inherit; font-size: inherit; }
   function getMatchDateRange(matches, tournament) {
     var minMs = Infinity, maxMs = -Infinity;
     for (var i = 0; i < matches.length; i++) {
-      if (matches[i].startTime) {
-        var t = new Date(matches[i].startTime).getTime();
+      var m = matches[i];
+      if (m.startTime) {
+        var t = new Date(m.startTime).getTime();
         if (!isNaN(t)) {
           if (t < minMs) minMs = t;
           if (t > maxMs) maxMs = t;
         }
+      }
+      if (m.updatedAt) {
+        var u = new Date(m.updatedAt).getTime();
+        if (!isNaN(u) && u > maxMs) maxMs = u;
       }
     }
     if (minMs === Infinity && tournament && tournament.date) {
@@ -640,12 +645,12 @@ button { font-family: inherit; font-size: inherit; }
     if (!range) return Promise.resolve();
     var paddedFrom = new Date(new Date(range.from).getTime() - RANGE_PADDING).toISOString();
     var paddedTo = new Date(new Date(range.to).getTime() + RANGE_PADDING).toISOString();
-    var nowMs = Date.now();
-    var coversNow = new Date(paddedFrom).getTime() <= nowMs && new Date(paddedTo).getTime() >= nowMs;
-    if (!coversNow && isRangeCovered(paddedFrom, paddedTo)) return Promise.resolve();
+    if (isRangeCovered(paddedFrom, paddedTo)) return Promise.resolve();
     return fetchVideosFromWebApp(paddedFrom, paddedTo).then(function(videos) {
       if (videos.length > 0) addVideos(videos);
-      addFetchedRange(paddedFrom, paddedTo);
+      var nowMs = Date.now();
+      var paddedToMs = new Date(paddedTo).getTime();
+      addFetchedRange(paddedFrom, paddedToMs <= nowMs ? paddedTo : new Date(nowMs).toISOString());
     }).catch(function() {});
   }
 
@@ -1552,7 +1557,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num table_name start_time status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num table_name start_time updated_at status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -1600,6 +1605,7 @@ button { font-family: inherit; font-size: inherit; }
           videoUrl: m.livestream_url || null,
           tableName: m.table_name || null,
           startTime: m.start_time || null,
+          updatedAt: m.updated_at || null,
           round: m.round || null,
           identifier: m.identifier || null,
         });
@@ -2155,7 +2161,6 @@ button { font-family: inherit; font-size: inherit; }
       cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum, players: currentPlayerList };
       renderDetail();
       if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
-      // Refresh videos from web app for live tournaments (fetches fresh RSS server-side)
       ensureVideosForMatches(currentMatches, currentTournament);
     }).catch(function() { /* silent retry next cycle */ });
   }
