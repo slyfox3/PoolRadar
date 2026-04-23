@@ -1894,7 +1894,8 @@ button { font-family: inherit; font-size: inherit; }
       html += '<span class="fm-round">' + esc(roundLabel) + '</span>';
       html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
       var completed = m.status !== 'IN_PROGRESS';
-      html += '<span class="fm-p1' + (p1Fav ? ' is-fav' : '') + (completed && p1Win ? ' fm-winner' : '') + (completed && p2Win ? ' fm-loser' : '') + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
+      var p1PgId = 'pg-' + esc(m.p1.name).replace(/\s/g, '-').toLowerCase();
+      html += '<span class="fm-p1 match-opponent-link' + (p1Fav ? ' is-fav' : '') + (completed && p1Win ? ' fm-winner' : '') + (completed && p2Win ? ' fm-loser' : '') + '" data-player="' + p1PgId + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
       if (m.isSplit) {
         html += '<span class="fm-status"></span><span style="grid-column:span 3">Split</span>';
       } else if (m.status === 'IN_PROGRESS') {
@@ -1913,7 +1914,8 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="mr-s1 mr-none">&mdash;</span><span class="mr-sep"></span><span class="mr-s2"></span>';
       }
       html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
-      html += '<span class="fm-p2' + (p2Fav ? ' is-fav' : '') + (completed && p2Win ? ' fm-winner' : '') + (completed && p1Win ? ' fm-loser' : '') + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
+      var p2PgId = 'pg-' + esc(m.p2.name).replace(/\s/g, '-').toLowerCase();
+      html += '<span class="fm-p2 match-opponent-link' + (p2Fav ? ' is-fav' : '') + (completed && p2Win ? ' fm-winner' : '') + (completed && p1Win ? ' fm-loser' : '') + '" data-player="' + p2PgId + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
       html += '<span class="mr-video">' + (m.videoUrl ? '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube"' + '>&#9654;</a>' : '') + '</span>';
       html += '</div>';
     }
@@ -1964,6 +1966,10 @@ button { font-family: inherit; font-size: inherit; }
     var oppLink = e.target.closest('.match-opponent-link');
     if (oppLink) {
       var targetId = oppLink.dataset.player;
+      if (!groupByPlayer) {
+        groupByPlayer = true;
+        renderDetail();
+      }
       var targetEl = document.getElementById(targetId);
       if (targetEl) {
         targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
