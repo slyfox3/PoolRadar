@@ -525,7 +525,7 @@ button { font-family: inherit; font-size: inherit; }
         var offsetSec = Math.round((matchMs - videoMs) / 1000);
         // Accept: match started after stream start (or up to 5min before for clock skew)
         // and within 8 hours of stream start
-        if (offsetSec >= -300 && offsetSec <= 28800 && Math.abs(offsetSec) < bestOffset) {
+        if (offsetSec >= -300 && offsetSec <= 43200 && Math.abs(offsetSec) < bestOffset) {
           bestOffset = Math.abs(offsetSec);
           bestVideo = { videoId: v.videoId, offset: Math.max(0, offsetSec) };
         }
