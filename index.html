@@ -416,9 +416,9 @@ button { font-family: inherit; font-size: inherit; }
   function filterVideosForMatches(videos, matches, tournament) {
     var range = getCachedMatchRange(matches, tournament);
     if (!range) return videos;
-    var PADDING = 3600000; // 1 hour padding beyond match range
+    var PADDING = 3600000;
     var lo = new Date(range.from).getTime() - PADDING;
-    var hi = new Date(range.to + 'T23:59:59').getTime() + PADDING;
+    var hi = new Date(range.to).getTime() + PADDING;
     var startIdx = bsearchVideoDesc(videos, hi);
     var dated = [];
     var undated = [];
@@ -524,7 +524,7 @@ button { font-family: inherit; font-size: inherit; }
         merged.push(ranges[i]);
       }
     }
-    merged.push({ from: new Date(fromMs).toISOString().slice(0, 10), to: new Date(toMs).toISOString().slice(0, 10) });
+    merged.push({ from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() });
     merged.sort(function(a, b) { return a.from < b.from ? -1 : 1; });
     saveFetchedRanges(merged);
   }
@@ -561,21 +561,22 @@ button { font-family: inherit; font-size: inherit; }
       if (!isNaN(td)) { minMs = td; maxMs = td; }
     }
     if (minMs === Infinity) return null;
-    return {
-      from: new Date(minMs - 3600000).toISOString().slice(0, 10),
-      to: new Date(maxMs + 3600000).toISOString().slice(0, 10)
-    };
+    return { from: new Date(minMs).toISOString(), to: new Date(maxMs).toISOString() };
   }
+
+  var RANGE_PADDING = 3600000;
 
   function ensureVideosForMatches(matches, tournament) {
     var range = getCachedMatchRange(matches, tournament);
     if (!range) return Promise.resolve();
-    var today = new Date().toISOString().slice(0, 10);
-    var coversToday = range.from <= today && range.to >= today;
-    if (!coversToday && isRangeCovered(range.from, range.to)) return Promise.resolve();
-    return fetchVideosFromWebApp(range.from, range.to).then(function(videos) {
+    var paddedFrom = new Date(new Date(range.from).getTime() - RANGE_PADDING).toISOString();
+    var paddedTo = new Date(new Date(range.to).getTime() + RANGE_PADDING).toISOString();
+    var nowMs = Date.now();
+    var coversNow = new Date(paddedFrom).getTime() <= nowMs && new Date(paddedTo).getTime() >= nowMs;
+    if (!coversNow && isRangeCovered(paddedFrom, paddedTo)) return Promise.resolve();
+    return fetchVideosFromWebApp(paddedFrom, paddedTo).then(function(videos) {
       if (videos.length > 0) addVideos(videos);
-      addFetchedRange(range.from, range.to);
+      addFetchedRange(paddedFrom, paddedTo);
     }).catch(function() {});
   }
 

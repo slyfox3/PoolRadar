@@ -2,6 +2,15 @@ var SHEET_NAME = 'videos';
 var CHANNEL_ID = 'UCTlcpma6Dx7uIZN0dFJJl9w'; // @EvoSportsStreaming
 var RSS_URL = 'https://www.youtube.com/feeds/videos.xml?channel_id=' + CHANNEL_ID;
 
+// EvoSports descriptions use venue local time with no timezone indicator.
+// Most venues are US-based; Apps Script parses in project timezone (America/Los_Angeles).
+function parseMatchTime(text) {
+  var m = text.match(/Match Start time:\s*(\d{1,2}\/\d{1,2}\/\d{4},\s*\d{1,2}:\d{2}:\d{2}\s*[AP]M)/i);
+  if (!m) return null;
+  var parsed = new Date(m[1]);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 // =====================================================
 // Timed trigger: fetch RSS every 10 minutes
 // Run setupTrigger() once manually to install
@@ -50,12 +59,7 @@ function fetchRSS() {
     var matchTime = null;
     var mediaGroup = entry.getChild('group', mediaNs);
     if (mediaGroup) {
-      var mediaDesc = mediaGroup.getChildText('description', mediaNs) || '';
-      var m = mediaDesc.match(/Match Start time:\s*(.+)/i);
-      if (m) {
-        var parsed = new Date(m[1].trim());
-        if (!isNaN(parsed.getTime())) matchTime = parsed;
-      }
+      matchTime = parseMatchTime(mediaGroup.getChildText('description', mediaNs) || '');
     }
 
     newVideos.push({
@@ -86,12 +90,11 @@ function fetchRSS() {
 
 function rangeCoversNow(to) {
   if (!to) return true;
-  var today = new Date().toISOString().slice(0, 10);
-  return to >= today;
+  return new Date(to) >= new Date();
 }
 
 // =====================================================
-// Web endpoint: GET ?from=2026-04-19&to=2026-04-22
+// Web endpoint: GET ?from=ISO_TIMESTAMP&to=ISO_TIMESTAMP
 // =====================================================
 function doGet(e) {
   var t0 = Date.now();
@@ -114,8 +117,8 @@ function doGet(e) {
   var readMs = Date.now() - t3;
 
   var t4 = Date.now();
-  var fromDate = from ? new Date(from + 'T00:00:00Z') : null;
-  var toDate = to ? new Date(to + 'T23:59:59Z') : null;
+  var fromDate = from ? new Date(from) : null;
+  var toDate = to ? new Date(to) : null;
 
   var videos = [];
   for (var i = 1; i < data.length; i++) {
@@ -181,12 +184,7 @@ function backfillYouTubeVideos(weeks) {
       for (var j = 0; j < details.items.length; j++) {
         var v = details.items[j];
         var desc = v.snippet.description || '';
-        var matchTime = null;
-        var m = desc.match(/Match Start time:\s*(.+)/i);
-        if (m) {
-          var parsed = new Date(m[1].trim());
-          if (!isNaN(parsed.getTime())) matchTime = parsed;
-        }
+        var matchTime = parseMatchTime(desc);
         rows.push([v.id, v.snippet.title, matchTime, new Date(v.snippet.publishedAt), new Date()]);
         existing[v.id] = true;
       }
