@@ -47,15 +47,14 @@ function fetchRSS() {
     var title = entry.getChildText('title', atom) || '';
     var publishedAt = entry.getChildText('published', atom) || '';
 
-    // Extract Match Start time from media:group > media:description
-    var matchTime = '';
+    var matchTime = null;
     var mediaGroup = entry.getChild('group', mediaNs);
     if (mediaGroup) {
       var mediaDesc = mediaGroup.getChildText('description', mediaNs) || '';
       var m = mediaDesc.match(/Match Start time:\s*(.+)/i);
       if (m) {
         var parsed = new Date(m[1].trim());
-        if (!isNaN(parsed.getTime())) matchTime = parsed.toISOString();
+        if (!isNaN(parsed.getTime())) matchTime = parsed;
       }
     }
 
@@ -63,7 +62,7 @@ function fetchRSS() {
       videoId: videoId.getText(),
       title: title,
       matchTime: matchTime,
-      publishedAt: publishedAt
+      publishedAt: publishedAt ? new Date(publishedAt) : null
     });
   }
 
@@ -76,7 +75,7 @@ function fetchRSS() {
   for (var j = 0; j < newVideos.length; j++) {
     var v = newVideos[j];
     if (existing[v.videoId]) continue;
-    rows.push([v.videoId, v.title, v.matchTime, v.publishedAt, new Date().toISOString()]);
+    rows.push([v.videoId, v.title, v.matchTime, v.publishedAt, new Date()]);
   }
 
   if (rows.length > 0) {
@@ -115,20 +114,20 @@ function doGet(e) {
   var readMs = Date.now() - t3;
 
   var t4 = Date.now();
-  var fromCmp = (from && from.length === 10) ? from + 'T00:00:00' : from;
-  var toCmp = (to && to.length === 10) ? to + 'T23:59:59' : to;
+  var fromDate = from ? new Date(from + 'T00:00:00Z') : null;
+  var toDate = to ? new Date(to + 'T23:59:59Z') : null;
 
   var videos = [];
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    var matchTime = row[2] || '';
+    var matchTime = row[2];
     if (!matchTime) continue;
-    if (fromCmp && matchTime < fromCmp) continue;
-    if (toCmp && matchTime > toCmp) continue;
+    if (fromDate && matchTime < fromDate) continue;
+    if (toDate && matchTime > toDate) continue;
     videos.push({
       videoId: row[0],
       title: row[1],
-      matchTime: matchTime
+      matchTime: matchTime instanceof Date ? matchTime.toISOString() : matchTime
     });
   }
   var filterMs = Date.now() - t4;
@@ -156,8 +155,10 @@ function backfillYouTubeVideos(weeks) {
   var pageToken = '';
   var totalAdded = 0;
   var reachedCutoff = false;
+  var pageNum = 0;
 
   do {
+    pageNum++;
     var opts = { playlistId: UPLOADS_PLAYLIST, maxResults: 50 };
     if (pageToken) opts.pageToken = pageToken;
     var response = YouTube.PlaylistItems.list('snippet', opts);
@@ -180,13 +181,13 @@ function backfillYouTubeVideos(weeks) {
       for (var j = 0; j < details.items.length; j++) {
         var v = details.items[j];
         var desc = v.snippet.description || '';
-        var matchTime = '';
+        var matchTime = null;
         var m = desc.match(/Match Start time:\s*(.+)/i);
         if (m) {
           var parsed = new Date(m[1].trim());
-          if (!isNaN(parsed.getTime())) matchTime = parsed.toISOString();
+          if (!isNaN(parsed.getTime())) matchTime = parsed;
         }
-        rows.push([v.id, v.snippet.title, matchTime, v.snippet.publishedAt, new Date().toISOString()]);
+        rows.push([v.id, v.snippet.title, matchTime, new Date(v.snippet.publishedAt), new Date()]);
         existing[v.id] = true;
       }
       if (rows.length > 0) {
@@ -194,6 +195,9 @@ function backfillYouTubeVideos(weeks) {
         totalAdded += rows.length;
       }
     }
+
+    var oldest = items[items.length - 1] ? items[items.length - 1].snippet.publishedAt : '?';
+    Logger.log('Page ' + pageNum + ': ' + items.length + ' items, ' + videoIds.length + ' new, oldest=' + oldest);
 
     pageToken = response.nextPageToken || '';
   } while (pageToken && !reachedCutoff);
@@ -234,3 +238,5 @@ function getExistingVideoIds(sheet) {
   }
   return ids;
 }
+
+function runBackfill() { backfillYouTubeVideos(20); }
