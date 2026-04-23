@@ -487,9 +487,13 @@ button { font-family: inherit; font-size: inherit; }
     return '';
   }
 
+  var GENERIC_VENUE_WORDS = ['bar', 'grill', 'billiards', 'billiard', 'pool', 'hall', 'lounge', 'pub', 'tavern', 'sports', 'club', 'room', 'house', 'table', 'the', 'and', 'pizza', 'kitchen', 'cafe', 'restaurant', 'saloon'];
+
   function matchLivestreamsToMatches(matches, videos, tournament) {
     var venueName = (tournament && tournament.venue && tournament.venue.name) || '';
-    var venueTokens = venueName.toLowerCase().split(/\s+/).filter(function(t) { return t.length > 2; });
+    var venueTokens = venueName.toLowerCase().split(/\s+/).filter(function(t) {
+      return t.length > 2 && GENERIC_VENUE_WORDS.indexOf(t) === -1;
+    });
     if (venueTokens.length === 0) return 0;
 
     var found = 0;
@@ -509,7 +513,6 @@ button { font-family: inherit; font-size: inherit; }
         var videoTable = extractTableNum(v.title);
         if (videoTable !== matchTable) continue;
 
-        // Verify venue matches
         var videoVenue = extractVenueFromTitle(v.title).toLowerCase();
         var venueHit = false;
         for (var ti = 0; ti < venueTokens.length; ti++) {
