@@ -403,8 +403,18 @@ button { font-family: inherit; font-size: inherit; }
     return lo;
   }
 
+  var cachedMatchRange = null;
+
+  function getCachedMatchRange(matches, tournament) {
+    if (!cachedMatchRange || cachedMatchRange._matches !== matches) {
+      cachedMatchRange = getMatchDateRange(matches, tournament);
+      if (cachedMatchRange) cachedMatchRange._matches = matches;
+    }
+    return cachedMatchRange;
+  }
+
   function filterVideosForMatches(videos, matches, tournament) {
-    var range = getMatchDateRange(matches, tournament);
+    var range = getCachedMatchRange(matches, tournament);
     if (!range) return videos;
     var PADDING = 3600000; // 1 hour padding beyond match range
     var lo = new Date(range.from).getTime() - PADDING;
@@ -551,16 +561,14 @@ button { font-family: inherit; font-size: inherit; }
       if (!isNaN(td)) { minMs = td; maxMs = td; }
     }
     if (minMs === Infinity) return null;
-    var range = {
+    return {
       from: new Date(minMs - 3600000).toISOString().slice(0, 10),
       to: new Date(maxMs + 3600000).toISOString().slice(0, 10)
     };
-    console.log('[VideoRange] matches: ' + new Date(minMs).toISOString() + ' → ' + new Date(maxMs).toISOString() + ' | padded: ' + range.from + ' → ' + range.to);
-    return range;
   }
 
   function ensureVideosForMatches(matches, tournament) {
-    var range = getMatchDateRange(matches, tournament);
+    var range = getCachedMatchRange(matches, tournament);
     if (!range) return Promise.resolve();
     var today = new Date().toISOString().slice(0, 10);
     var coversToday = range.from <= today && range.to >= today;
