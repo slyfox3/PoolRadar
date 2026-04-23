@@ -661,30 +661,17 @@ button { font-family: inherit; font-size: inherit; }
     if (list.length === 0) {
       html = '<p>No videos cached yet. Videos are added automatically via RSS feed when you view a tournament.</p>';
     } else {
-      var newest = '', oldest = '', withTime = 0;
       var dayBuckets = {};
       for (var i = 0; i < list.length; i++) {
         if (list[i].matchTime) {
-          withTime++;
-          if (!newest || list[i].matchTime > newest) newest = list[i].matchTime;
-          if (!oldest || list[i].matchTime < oldest) oldest = list[i].matchTime;
           var day = new Date(list[i].matchTime).toLocaleDateString('sv-SE');
           dayBuckets[day] = (dayBuckets[day] || 0) + 1;
         }
       }
       html += '<p><strong>Total videos:</strong> ' + list.length + '</p>';
-      html += '<p><strong>With timestamps:</strong> ' + withTime + ' / ' + list.length + '</p>';
-      if (newest) html += '<p><strong>Range:</strong> ' + new Date(oldest).toLocaleDateString() + ' — ' + new Date(newest).toLocaleDateString() + '</p>';
       var bytes = 0;
       try { bytes = localStorage.getItem('poolradar_yt_videos').length * 2; } catch(e) {}
-      if (bytes > 0) html += '<p><strong>Cache size:</strong> ' + (bytes / 1024).toFixed(1) + ' KB</p>';
-      var ranges = loadFetchedRanges();
-      if (ranges.length > 0) {
-        html += '<p><strong>Fetched ranges:</strong></p>';
-        html += '<div style="font-size:11px;color:#94a3b8;margin-left:8px">';
-        for (var ri = 0; ri < ranges.length; ri++) html += ranges[ri].from + ' — ' + ranges[ri].to + '<br>';
-        html += '</div>';
-      }
+      if (bytes > 0) html += '<p><strong>Cache size:</strong> ' + (bytes / 1024).toFixed(1) + ' KB (' + Math.round(bytes / list.length) + ' bytes/entry)</p>';
       var days = Object.keys(dayBuckets).sort().reverse();
       if (days.length > 0) {
         var maxCount = 0;
