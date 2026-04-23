@@ -551,10 +551,12 @@ button { font-family: inherit; font-size: inherit; }
       if (!isNaN(td)) { minMs = td; maxMs = td; }
     }
     if (minMs === Infinity) return null;
-    return {
+    var range = {
       from: new Date(minMs - 3600000).toISOString().slice(0, 10),
       to: new Date(maxMs + 3600000).toISOString().slice(0, 10)
     };
+    console.log('[VideoRange] matches: ' + new Date(minMs).toISOString() + ' → ' + new Date(maxMs).toISOString() + ' | padded: ' + range.from + ' → ' + range.to);
+    return range;
   }
 
   function ensureVideosForMatches(matches, tournament) {
@@ -583,7 +585,7 @@ button { font-family: inherit; font-size: inherit; }
           withTime++;
           if (!newest || list[i].matchTime > newest) newest = list[i].matchTime;
           if (!oldest || list[i].matchTime < oldest) oldest = list[i].matchTime;
-          var day = list[i].matchTime.slice(0, 10);
+          var day = new Date(list[i].matchTime).toLocaleDateString('sv-SE');
           dayBuckets[day] = (dayBuckets[day] || 0) + 1;
         }
       }
