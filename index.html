@@ -1746,7 +1746,7 @@ button { font-family: inherit; font-size: inherit; }
         if (pm.isSplit) {
           html += '<span></span><span style="grid-column:span 3">Split</span>';
         } else if (pm.status === 'IN_PROGRESS') {
-          var tbl = pm.tableName ? pm.tableName.replace(/^Table\s*/i, 'T') : '';
+          var tbl = pm.tableName ? 'T' + pm.tableName.replace(/^Table\s*/i, '') : '';
           html += '<span class="mr-label mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
           html += '<span class="mr-s1 mr-live">' + (pm.myScore != null ? pm.myScore : '') + '</span>';
           html += '<span class="mr-sep mr-live">' + (pm.myScore != null ? '-' : '') + '</span>';
@@ -1898,7 +1898,7 @@ button { font-family: inherit; font-size: inherit; }
       if (m.isSplit) {
         html += '<span class="fm-status"></span><span style="grid-column:span 3">Split</span>';
       } else if (m.status === 'IN_PROGRESS') {
-        var tbl = m.tableName ? m.tableName.replace(/^Table\s*/i, 'T') : '';
+        var tbl = m.tableName ? 'T' + m.tableName.replace(/^Table\s*/i, '') : '';
         html += '<span class="fm-status mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
         html += '<span class="mr-s1 mr-live">' + (m.s1 != null ? m.s1 : '') + '</span>';
         html += '<span class="mr-sep mr-live">' + (m.s1 != null ? '-' : '') + '</span>';
