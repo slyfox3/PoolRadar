@@ -540,7 +540,7 @@ button { font-family: inherit; font-size: inherit; }
         var videos = data.videos || [];
         var rt = Date.now() - t0;
         var t = data._timing;
-        console.log('[WebApp] ' + videos.length + '/' + (t ? t.rows : '?') + ' videos in ' + rt + 'ms' + (t ? ' (rss=' + t.rss + 'ms query=' + t.query + 'ms network=' + (rt - t.total) + 'ms)' : ''));
+        console.log('[WebApp] ' + videos.length + '/' + (t ? t.rows : '?') + ' videos in ' + rt + 'ms' + (t ? ' (rss=' + t.rss + 'ms read=' + t.read + 'ms filter=' + t.filter + 'ms server=' + t.total + 'ms network=' + (rt - t.total) + 'ms)' : ''));
         return videos;
       });
   }

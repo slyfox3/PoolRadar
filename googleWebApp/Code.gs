@@ -112,7 +112,9 @@ function doGet(e) {
   var t3 = Date.now();
   var sheet = getOrCreateSheet();
   var data = sheet.getDataRange().getValues();
+  var readMs = Date.now() - t3;
 
+  var t4 = Date.now();
   var fromCmp = (from && from.length === 10) ? from + 'T00:00:00' : from;
   var toCmp = (to && to.length === 10) ? to + 'T23:59:59' : to;
 
@@ -120,7 +122,6 @@ function doGet(e) {
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
     var matchTime = row[2] || '';
-    // Skip videos without matchTime — can't filter by date
     if (!matchTime) continue;
     if (fromCmp && matchTime < fromCmp) continue;
     if (toCmp && matchTime > toCmp) continue;
@@ -130,10 +131,10 @@ function doGet(e) {
       matchTime: matchTime
     });
   }
-  var queryMs = Date.now() - t3;
+  var filterMs = Date.now() - t4;
   var totalMs = Date.now() - t0;
 
-  var timing = { total: totalMs, rss: rssMs, query: queryMs, rows: data.length - 1, matched: videos.length };
+  var timing = { total: totalMs, rss: rssMs, read: readMs, filter: filterMs, rows: data.length - 1, matched: videos.length };
   Logger.log('doGet timing: ' + JSON.stringify(timing));
 
   return ContentService
