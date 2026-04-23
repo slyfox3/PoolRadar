@@ -19,10 +19,9 @@ button { font-family: inherit; font-size: inherit; }
 .header .url-input { flex: 1; min-width: 0; max-width: 520px; padding: 7px 12px; border: 1px solid #475569; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 14px; }
 .header .url-input::placeholder { color: #64748b; }
 .header .url-input:focus { outline: none; border-color: #60a5fa; }
-.help-icon, .gh-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: none; border: none; cursor: pointer; padding: 0; color: #94a3b8; transition: color 0.15s; flex-shrink: 0; }
-.help-icon:hover { color: #f97316; }
-.gh-icon:hover { color: #f8fafc; }
-.help-icon svg, .gh-icon svg { width: 22px; height: 22px; }
+.help-icon, .gh-icon, .yt-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: none; border: none; cursor: pointer; padding: 0; color: #94a3b8; transition: color 0.15s; flex-shrink: 0; }
+.help-icon:hover, .gh-icon:hover, .yt-icon:hover { color: #f8fafc; }
+.help-icon svg, .gh-icon svg, .yt-icon svg { width: 22px; height: 22px; }
 
 /* Modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
@@ -232,6 +231,9 @@ button { font-family: inherit; font-size: inherit; }
   <button class="help-icon" onclick="document.getElementById('help-modal').classList.remove('hidden')" title="Help">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
   </button>
+  <button class="yt-icon" id="yt-login-btn" onclick="showYtCacheModal()" title="YouTube video cache">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.9 31.9 0 0 0 0 12a31.9 31.9 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.9 31.9 0 0 0 24 12a31.9 31.9 0 0 0-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
+  </button>
   <a class="gh-icon" href="https://github.com/slyfox3/PoolRadar" target="_blank" title="GitHub">
     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
   </a>
@@ -248,6 +250,14 @@ button { font-family: inherit; font-size: inherit; }
     <p><strong>Duplicate accounts:</strong> PoolRadar automatically detects and groups duplicate DigitalPool accounts by matching Fargo ID and name slug variations.</p>
     <p><strong>Live updates:</strong> Match detail auto-refreshes every 60 seconds for in-progress tournaments.</p>
     <p>All data is stored in your browser. No server, no account needed.</p>
+  </div>
+</div>
+
+<div id="yt-cache-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="modal">
+    <button class="modal-close" onclick="document.getElementById('yt-cache-modal').classList.add('hidden')">&times;</button>
+    <h2>YouTube Video Cache</h2>
+    <div id="yt-cache-body"></div>
   </div>
 </div>
 
@@ -307,8 +317,7 @@ button { font-family: inherit; font-size: inherit; }
   'use strict';
 
   var GQL = 'https://api-cached.digitalpool.com/';
-  var CORS_PROXY = 'https://corsproxy.io/?url=';
-  var DEFAULT_YT_CHANNEL = 'UCTlcpma6Dx7uIZN0dFJJl9w'; // @EvoSportsStreaming
+  var YT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxMM4X-AGKCIOUTaahuXUwt-Qqgs3kYFTWhO5qfNnNHSnvaGRDN_YN9M11QwdjnB3h/exec';
 
   // =====================================================
   // LocalStorage helpers
@@ -325,119 +334,296 @@ button { font-family: inherit; font-size: inherit; }
   var favs = loadFavs();
 
   // =====================================================
-  // YouTube video discovery via RSS
+  // YouTube video cache — local storage + match scoring
   // =====================================================
-  function loadVideoCache() {
-    try { return JSON.parse(localStorage.getItem('poolradar_videos')) || {}; }
-    catch(e) { return {}; }
+  // Append-only video list cached in localStorage
+  function loadVideoList() {
+    try { return JSON.parse(localStorage.getItem('poolradar_yt_videos')) || []; }
+    catch(e) { return []; }
   }
-  function saveVideoCache(c) { localStorage.setItem('poolradar_videos', JSON.stringify(c)); }
+  function saveVideoList(list) {
+    list.sort(function(a, b) {
+      var ta = a.matchTime || '', tb = b.matchTime || '';
+      return ta > tb ? -1 : ta < tb ? 1 : 0;
+    });
+    try { localStorage.setItem('poolradar_yt_videos', JSON.stringify(list)); }
+    catch(e) { /* quota exceeded — silently skip */ }
+  }
+  function mergeVideos(existing, newVids) {
+    var seen = {};
+    for (var i = 0; i < existing.length; i++) seen[existing[i].videoId] = true;
+    var merged = existing.slice();
+    for (var j = 0; j < newVids.length; j++) {
+      if (!seen[newVids[j].videoId]) { merged.push(newVids[j]); seen[newVids[j].videoId] = true; }
+    }
+    return merged;
+  }
 
   function tokenizeName(name) {
     // "Douglas (Doug) Dunn" → ["douglas", "doug", "dunn"]
     return name.toLowerCase().replace(/[()]/g, ' ').split(/\s+/).filter(function(t) { return t.length > 1; });
   }
 
-  function scoreVideoMatch(p1Name, p2Name, title) {
+  function scoreVideoMatch(p1Name, p2Name, title, matchStartTime, matchTable, videoMatchTime) {
     var titleLower = title.toLowerCase().replace(/[^\w\s]/g, ' ');
     var titleTokens = titleLower.split(/\s+/);
-    var score = 0;
+    var nameScore = 0;
     var names = [tokenizeName(p1Name), tokenizeName(p2Name)];
     for (var ni = 0; ni < names.length; ni++) {
       var tokens = names[ni];
       for (var ti = 0; ti < tokens.length; ti++) {
-        if (titleTokens.indexOf(tokens[ti]) !== -1) { score += 10; break; }
+        if (titleTokens.indexOf(tokens[ti]) !== -1) { nameScore += 10; break; }
       }
     }
-    return score; // 20 = both players matched, 10 = one player
+    var bonus = 0;
+    // Time proximity: <10min = +15, <30min = +10, <60min = +5
+    if (matchStartTime && videoMatchTime) {
+      var timeDiff = Math.abs(new Date(matchStartTime) - new Date(videoMatchTime));
+      if (timeDiff < 10 * 60000) bonus += 15;
+      else if (timeDiff < 30 * 60000) bonus += 10;
+      else if (timeDiff < 60 * 60000) bonus += 5;
+    }
+    // Table match: extract "table N" from title and compare
+    if (matchTable) {
+      var tableMatch = titleLower.match(/table\s+(\d+)/);
+      if (tableMatch && matchTable.toLowerCase().indexOf(tableMatch[1]) !== -1) bonus += 10;
+    }
+    return { nameScore: nameScore, total: nameScore + bonus };
   }
 
-  function fetchYouTubeRSS(channelId) {
-    var rssUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=' + channelId;
-    var fullUrl = CORS_PROXY + rssUrl;
-    return fetch(fullUrl)
-      .then(function(r) { return r.text(); })
-      .then(function(xml) {
-        var parser = new DOMParser();
-        var doc = parser.parseFromString(xml, 'text/xml');
-        var entries = doc.getElementsByTagName('entry');
-        var videos = [];
-        for (var i = 0; i < entries.length; i++) {
-          var e = entries[i];
-          var vidNode = e.getElementsByTagNameNS('http://www.youtube.com/xml/schemas/2015', 'videoId')[0];
-          var videoId = vidNode ? vidNode.textContent : null;
-          var title = e.getElementsByTagName('title')[0];
-          var published = e.getElementsByTagName('published')[0];
-          if (videoId) videos.push({ videoId: videoId, title: title ? title.textContent : '', published: published ? published.textContent : '' });
-        }
-        return videos;
-      });
+
+  function bsearchVideoDesc(videos, targetMs) {
+    var lo = 0, hi = videos.length;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      var pub = videos[mid].matchTime;
+      if (!pub || new Date(pub).getTime() > targetMs) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
   }
 
-  function findVideosForMatches(matches, videos) {
-    var cache = loadVideoCache();
-    var found = 0;
-    // Build candidate list: each video → best matching match (by score, then time proximity)
-    var usedVideos = {}; // videoId → matchNum (dedup: one video per match)
-    // First pass: collect best video per match
-    var candidates = []; // [{matchIdx, videoIdx, score, timeDiff}]
+  function filterVideosForMatches(videos, matches, tournament) {
+    var range = getMatchDateRange(matches, tournament);
+    if (!range) return videos;
+    var PADDING = 3600000; // 1 hour padding beyond match range
+    var lo = new Date(range.from).getTime() - PADDING;
+    var hi = new Date(range.to + 'T23:59:59').getTime() + PADDING;
+    var startIdx = bsearchVideoDesc(videos, hi);
+    var dated = [];
+    var undated = [];
+    for (var i = startIdx; i < videos.length; i++) {
+      var v = videos[i];
+      if (!v.matchTime) { undated.push(v); continue; }
+      var t = new Date(v.matchTime).getTime();
+      if (t < lo) break;
+      dated.push(v);
+    }
+    for (var j = 0; j < startIdx; j++) {
+      if (!videos[j].matchTime) undated.push(videos[j]);
+    }
+    return dated.concat(undated);
+  }
+
+  // Score all matches against the full accumulated video list, assign greedily
+  function matchVideosToMatches(matches, videos) {
+    var candidates = [];
+    var usedVideos = {};
     for (var mi = 0; mi < matches.length; mi++) {
       var m = matches[mi];
-      if (m.videoUrl) continue;
-      var cacheKey = currentSlug + '_' + m.num;
-      if (cache[cacheKey]) { m.videoUrl = cache[cacheKey].url; m.videoAuto = true; found++; continue; }
+      if (m.videoUrl) continue; // already has DigitalPool link
       for (var vi = 0; vi < videos.length; vi++) {
-        var score = scoreVideoMatch(m.p1.name, m.p2.name, videos[vi].title);
-        if (score >= 20) {
-          var timeDiff = Infinity;
-          if (m.startTime && videos[vi].published) {
-            timeDiff = Math.abs(new Date(m.startTime) - new Date(videos[vi].published));
-          }
-          candidates.push({ mi: mi, vi: vi, score: score, timeDiff: timeDiff });
+        // Skip videos too far in time (>30min) when both timestamps available
+        if (m.startTime && videos[vi].matchTime) {
+          var td = Math.abs(new Date(m.startTime) - new Date(videos[vi].matchTime));
+          if (td > 30 * 60000) continue;
+        }
+        var result = scoreVideoMatch(m.p1.name, m.p2.name, videos[vi].title, m.startTime, m.tableName, videos[vi].matchTime);
+        if (result.nameScore >= 20) {
+          candidates.push({ mi: mi, vi: vi, nameScore: result.nameScore, total: result.total });
         }
       }
     }
-    // Sort: highest score first, then closest time
     candidates.sort(function(a, b) {
-      return b.score - a.score || a.timeDiff - b.timeDiff;
+      return b.nameScore - a.nameScore || b.total - a.total;
     });
-    // Assign: each video to at most one match, each match to at most one video
     var assignedMatches = {};
+    var found = 0;
     for (var ci = 0; ci < candidates.length; ci++) {
       var c = candidates[ci];
       var vid = videos[c.vi].videoId;
       if (usedVideos[vid] || assignedMatches[c.mi]) continue;
       usedVideos[vid] = true;
       assignedMatches[c.mi] = true;
-      var m = matches[c.mi];
-      var url = 'https://www.youtube.com/watch?v=' + vid;
-      m.videoUrl = url;
-      m.videoAuto = true;
-      cache[currentSlug + '_' + m.num] = { url: url, title: videos[c.vi].title, cachedAt: Date.now() };
+      matches[c.mi].videoUrl = 'https://www.youtube.com/watch?v=' + vid;
+
       found++;
     }
-    saveVideoCache(cache);
     return found;
   }
 
-  function applyVideoCache(slug) {
+  function applyVideoMatches() {
     if (!currentMatches) return;
-    var vc = loadVideoCache();
-    for (var i = 0; i < currentMatches.length; i++) {
-      var m = currentMatches[i];
-      if (m.videoUrl) continue;
-      var k = slug + '_' + m.num;
-      if (vc[k]) { m.videoUrl = vc[k].url; m.videoAuto = true; }
-    }
+    var list = loadVideoList();
+    if (!list.length) return 0;
+    var scoped = filterVideosForMatches(list, currentMatches, currentTournament);
+    return matchVideosToMatches(currentMatches, scoped);
   }
 
-  function autoFetchVideos(slug) {
-    fetchYouTubeRSS(DEFAULT_YT_CHANNEL).then(function(videos) {
-      if (currentSlug !== slug || !currentMatches) return;
-      var found = findVideosForMatches(currentMatches, videos);
-      if (found) renderDetail();
-    }).catch(function(err) { console.error('[YT] Video fetch failed:', err); });
+  function addVideos(newVids) {
+    var list = mergeVideos(loadVideoList(), newVids);
+    saveVideoList(list);
+    if (applyVideoMatches()) renderDetail();
+    return list;
   }
+
+  // =====================================================
+  // Google Apps Script web app — remote video store
+  // =====================================================
+  function loadFetchedRanges() {
+    try { return JSON.parse(localStorage.getItem('poolradar_yt_ranges')) || []; }
+    catch(e) { return []; }
+  }
+  function saveFetchedRanges(ranges) {
+    localStorage.setItem('poolradar_yt_ranges', JSON.stringify(ranges));
+  }
+
+  function isRangeCovered(from, to) {
+    var ranges = loadFetchedRanges();
+    var fromMs = new Date(from).getTime();
+    var toMs = new Date(to).getTime();
+    for (var i = 0; i < ranges.length; i++) {
+      if (new Date(ranges[i].from).getTime() <= fromMs && new Date(ranges[i].to).getTime() >= toMs) return true;
+    }
+    return false;
+  }
+
+  function addFetchedRange(from, to) {
+    var ranges = loadFetchedRanges();
+    var fromMs = new Date(from).getTime();
+    var toMs = new Date(to).getTime();
+    // Merge overlapping ranges
+    var merged = [];
+    for (var i = 0; i < ranges.length; i++) {
+      var rFrom = new Date(ranges[i].from).getTime();
+      var rTo = new Date(ranges[i].to).getTime();
+      if (rFrom <= toMs && rTo >= fromMs) {
+        fromMs = Math.min(fromMs, rFrom);
+        toMs = Math.max(toMs, rTo);
+      } else {
+        merged.push(ranges[i]);
+      }
+    }
+    merged.push({ from: new Date(fromMs).toISOString().slice(0, 10), to: new Date(toMs).toISOString().slice(0, 10) });
+    merged.sort(function(a, b) { return a.from < b.from ? -1 : 1; });
+    saveFetchedRanges(merged);
+  }
+
+  function fetchVideosFromWebApp(from, to) {
+    if (YT_WEBAPP_URL === 'YOUR_WEBAPP_URL') return Promise.resolve([]);
+    var url = YT_WEBAPP_URL + '?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+    var t0 = Date.now();
+    console.log('[WebApp] fetching ' + from + ' → ' + to);
+    return fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var videos = data.videos || [];
+        var rt = Date.now() - t0;
+        var t = data._timing;
+        console.log('[WebApp] ' + videos.length + '/' + (t ? t.rows : '?') + ' videos in ' + rt + 'ms' + (t ? ' (rss=' + t.rss + 'ms query=' + t.query + 'ms network=' + (rt - t.total) + 'ms)' : ''));
+        return videos;
+      });
+  }
+
+  function getMatchDateRange(matches, tournament) {
+    var minMs = Infinity, maxMs = -Infinity;
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i].startTime) {
+        var t = new Date(matches[i].startTime).getTime();
+        if (!isNaN(t)) {
+          if (t < minMs) minMs = t;
+          if (t > maxMs) maxMs = t;
+        }
+      }
+    }
+    if (minMs === Infinity && tournament && tournament.date) {
+      var td = new Date(tournament.date).getTime();
+      if (!isNaN(td)) { minMs = td; maxMs = td; }
+    }
+    if (minMs === Infinity) return null;
+    return {
+      from: new Date(minMs - 3600000).toISOString().slice(0, 10),
+      to: new Date(maxMs + 3600000).toISOString().slice(0, 10)
+    };
+  }
+
+  function ensureVideosForMatches(matches, tournament) {
+    var range = getMatchDateRange(matches, tournament);
+    if (!range) return Promise.resolve();
+    var today = new Date().toISOString().slice(0, 10);
+    var coversToday = range.from <= today && range.to >= today;
+    if (!coversToday && isRangeCovered(range.from, range.to)) return Promise.resolve();
+    return fetchVideosFromWebApp(range.from, range.to).then(function(videos) {
+      if (videos.length > 0) addVideos(videos);
+      addFetchedRange(range.from, range.to);
+    }).catch(function() {});
+  }
+
+  window.showYtCacheModal = function() {
+    var list = loadVideoList();
+    var body = document.getElementById('yt-cache-body');
+    var html = '';
+    if (list.length === 0) {
+      html = '<p>No videos cached yet. Videos are added automatically via RSS feed when you view a tournament.</p>';
+    } else {
+      var newest = '', oldest = '', withTime = 0;
+      var dayBuckets = {};
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].matchTime) {
+          withTime++;
+          if (!newest || list[i].matchTime > newest) newest = list[i].matchTime;
+          if (!oldest || list[i].matchTime < oldest) oldest = list[i].matchTime;
+          var day = list[i].matchTime.slice(0, 10);
+          dayBuckets[day] = (dayBuckets[day] || 0) + 1;
+        }
+      }
+      html += '<p><strong>Total videos:</strong> ' + list.length + '</p>';
+      html += '<p><strong>With timestamps:</strong> ' + withTime + ' / ' + list.length + '</p>';
+      if (newest) html += '<p><strong>Range:</strong> ' + new Date(oldest).toLocaleDateString() + ' — ' + new Date(newest).toLocaleDateString() + '</p>';
+      var bytes = 0;
+      try { bytes = localStorage.getItem('poolradar_yt_videos').length * 2; } catch(e) {}
+      if (bytes > 0) html += '<p><strong>Cache size:</strong> ' + (bytes / 1024).toFixed(1) + ' KB</p>';
+      var ranges = loadFetchedRanges();
+      if (ranges.length > 0) {
+        html += '<p><strong>Fetched ranges:</strong></p>';
+        html += '<div style="font-size:11px;color:#94a3b8;margin-left:8px">';
+        for (var ri = 0; ri < ranges.length; ri++) html += ranges[ri].from + ' — ' + ranges[ri].to + '<br>';
+        html += '</div>';
+      }
+      var days = Object.keys(dayBuckets).sort().reverse();
+      if (days.length > 0) {
+        var maxCount = 0;
+        for (var di = 0; di < days.length; di++) { if (dayBuckets[days[di]] > maxCount) maxCount = dayBuckets[days[di]]; }
+        html += '<div style="margin-top:12px"><strong>Videos per day:</strong></div>';
+        html += '<div style="margin-top:6px;font-size:11px;font-family:monospace">';
+        for (var di = 0; di < days.length; di++) {
+          var d = days[di];
+          var c = dayBuckets[d];
+          var barW = Math.round((c / maxCount) * 120);
+          html += '<div style="display:flex;align-items:center;gap:6px;margin:1px 0">'
+            + '<span style="color:#64748b;width:72px">' + d + '</span>'
+            + '<span style="background:#60a5fa;height:10px;width:' + barW + 'px;border-radius:2px;display:inline-block"></span>'
+            + '<span style="color:#94a3b8">' + c + '</span>'
+            + '</div>';
+        }
+        html += '</div>';
+      }
+    }
+    body.innerHTML = html;
+    document.getElementById('yt-cache-modal').classList.remove('hidden');
+  };
+
+
 
   // =====================================================
   // GraphQL helper
@@ -1224,9 +1410,11 @@ button { font-family: inherit; font-size: inherit; }
       currentTournament = cache[slug].tournament;
       currentPlayerList = cache[slug].players || null;
       bracketByNum = cache[slug].bracketByNum || {};
-      applyVideoCache(slug);
+
+      applyVideoMatches();
       renderDetail();
-      autoFetchVideos(slug);
+
+      ensureVideosForMatches(currentMatches, currentTournament);
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
@@ -1256,11 +1444,13 @@ button { font-family: inherit; font-size: inherit; }
       currentMatches = result.matches;
       currentTournament = result.tournament;
       bracketByNum = result.bracketByNum || {};
-      applyVideoCache(slug);
+
+      applyVideoMatches();
       cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
       clearStatus();
       renderDetail();
-      autoFetchVideos(slug);
+
+      ensureVideosForMatches(currentMatches, currentTournament);
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
@@ -1478,8 +1668,8 @@ button { font-family: inherit; font-size: inherit; }
     var playerOrder = [];
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.videoAuto);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.videoAuto);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -1653,13 +1843,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, videoAuto) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, videoAuto: videoAuto });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -1850,7 +2040,9 @@ button { font-family: inherit; font-size: inherit; }
   }
 
   document.addEventListener('visibilitychange', function() {
-    if (!document.hidden && detailInterval && currentSlug) {
+    if (document.hidden) return;
+    // Resume detail refresh
+    if (detailInterval && currentSlug) {
       var elapsed = (Date.now() - lastRefreshTime) / 1000;
       if (elapsed >= REFRESH_INTERVAL) {
         detailCountdown = REFRESH_INTERVAL;
@@ -1872,10 +2064,13 @@ button { font-family: inherit; font-size: inherit; }
       currentMatches = result.matches;
       currentTournament = result.tournament;
       bracketByNum = result.bracketByNum || {};
-      applyVideoCache(slug);
-      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
+
+      applyVideoMatches();
+      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum, players: currentPlayerList };
       renderDetail();
       if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
+      // Refresh videos from web app for live tournaments (fetches fresh RSS server-side)
+      ensureVideosForMatches(currentMatches, currentTournament);
     }).catch(function() { /* silent retry next cycle */ });
   }
 
