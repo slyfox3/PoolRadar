@@ -472,12 +472,81 @@ button { font-family: inherit; font-size: inherit; }
     return found;
   }
 
+  function extractTableNum(s) {
+    if (!s) return null;
+    var m = s.match(/(?:table\s*)(\d+)/i);
+    return m ? m[1] : null;
+  }
+
+  function extractVenueFromTitle(title) {
+    // EvoSports format: "PLAYER vs PLAYER - VENUE NAME - TABLE N | EvoSports"
+    var parts = title.split(/\s*[\-\|]\s*/);
+    // Venue is typically the second-to-last segment before "EvoSports" or "TABLE N"
+    for (var i = parts.length - 1; i >= 0; i--) {
+      if (/table\s+\d+/i.test(parts[i])) continue;
+      if (/evosports/i.test(parts[i])) continue;
+      if (/\bvs\b/i.test(parts[i])) continue;
+      if (parts[i].trim().length > 2) return parts[i].trim();
+    }
+    return '';
+  }
+
+  function matchLivestreamsToMatches(matches, videos, tournament) {
+    var venueName = (tournament && tournament.venue && tournament.venue.name) || '';
+    var venueTokens = venueName.toLowerCase().split(/\s+/).filter(function(t) { return t.length > 2; });
+    if (venueTokens.length === 0) return 0;
+
+    var found = 0;
+    for (var mi = 0; mi < matches.length; mi++) {
+      var m = matches[mi];
+      if (m.videoUrl || !m.startTime || !m.tableName) continue;
+      var matchTable = extractTableNum(m.tableName);
+      if (!matchTable) continue;
+      var matchMs = new Date(m.startTime).getTime();
+
+      var bestVideo = null;
+      var bestOffset = Infinity;
+
+      for (var vi = 0; vi < videos.length; vi++) {
+        var v = videos[vi];
+        if (!v.matchTime) continue;
+        var videoTable = extractTableNum(v.title);
+        if (videoTable !== matchTable) continue;
+
+        // Verify venue matches
+        var videoVenue = extractVenueFromTitle(v.title).toLowerCase();
+        var venueHit = false;
+        for (var ti = 0; ti < venueTokens.length; ti++) {
+          if (videoVenue.indexOf(venueTokens[ti]) !== -1) { venueHit = true; break; }
+        }
+        if (!venueHit) continue;
+
+        var videoMs = new Date(v.matchTime).getTime();
+        var offsetSec = Math.round((matchMs - videoMs) / 1000);
+        // Accept: match started after stream start (or up to 5min before for clock skew)
+        // and within 8 hours of stream start
+        if (offsetSec >= -300 && offsetSec <= 28800 && Math.abs(offsetSec) < bestOffset) {
+          bestOffset = Math.abs(offsetSec);
+          bestVideo = { videoId: v.videoId, offset: Math.max(0, offsetSec) };
+        }
+      }
+
+      if (bestVideo) {
+        m.videoUrl = 'https://www.youtube.com/watch?v=' + bestVideo.videoId + '&t=' + bestVideo.offset;
+        found++;
+      }
+    }
+    return found;
+  }
+
   function applyVideoMatches() {
     if (!currentMatches) return;
     var list = loadVideoList();
     if (!list.length) return 0;
     var scoped = filterVideosForMatches(list, currentMatches, currentTournament);
-    return matchVideosToMatches(currentMatches, scoped);
+    var found = matchVideosToMatches(currentMatches, scoped);
+    found += matchLivestreamsToMatches(currentMatches, scoped, currentTournament);
+    return found;
   }
 
   function addVideos(newVids) {
