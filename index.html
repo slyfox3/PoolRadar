@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PoolRadar</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><clipPath id='b'><circle cx='16' cy='16' r='14'/></clipPath></defs><circle cx='16' cy='16' r='14' fill='%23ffffff'/><rect x='0' y='9' width='32' height='14' fill='%23fbbf24' clip-path='url(%23b)'/><ellipse cx='16' cy='16' rx='7' ry='6' fill='%23ffffff'/><text x='16' y='20' text-anchor='middle' font-size='12' font-weight='700' font-family='Arial,sans-serif' fill='%23000000'>9</text><circle cx='16' cy='16' r='14' fill='none' stroke='%2394a3b8' stroke-width='0.4'/></svg>">
+<script>
+// If a tournament slug is in the URL, hide the feed section immediately via CSS
+// to prevent the tournament list table header from flashing before JS takes over.
+// Uses a class on <html> so the init code can remove it later when navigating back.
+if (new URLSearchParams(window.location.search).has('digitalpool')) {
+  document.documentElement.classList.add('slug-loading');
+}
+</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #0f172a; color: #e2e8f0; font-size: 14px; }
@@ -87,6 +95,7 @@ button { font-family: inherit; font-size: inherit; }
 .feed-table tr.active td { background: #1e3a5f; }
 .feed-table .fav-names { font-size: 12px; }
 .feed-section-collapsed { display: none; }
+.slug-loading #feed-section { display: none; }
 .back-to-list { background: none; border: none; color: #64748b; cursor: pointer; font-size: 12px; padding: 0 0 8px 0; font-family: inherit; }
 .back-to-list:hover { color: #e2e8f0; }
 
@@ -1540,7 +1549,7 @@ button { font-family: inherit; font-size: inherit; }
     urlInput.value = '';
     clearDetailTimer();
 
-    showStatus('<span class="spinner"></span> Loading player list...', 'info');
+    showLoadingToast();
 
     var rows = document.querySelectorAll('.feed-table tbody tr');
     for (var i = 0; i < rows.length; i++) {
@@ -1556,12 +1565,13 @@ button { font-family: inherit; font-size: inherit; }
       currentTournament = { name: t.name || '', date: t.start_date_time, status: t.status || 'NOT_STARTED', venue: t.venue, organizer: t.organizer, director: t.director, slug: slug };
       currentMatches = [];
       currentPlayerList = players;
-      clearStatus();
+      updateLoadingToast('Loaded ' + players.length + ' players');
       renderPlayerList(players);
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
     }).catch(function(err) {
+      dismissLoadingToast();
       showStatus('Failed to load player list: ' + esc(err.message), 'error');
     });
   }
@@ -1670,13 +1680,14 @@ button { font-family: inherit; font-size: inherit; }
       return;
     }
 
-    showStatus('<span class="spinner"></span> Loading matches...', 'info');
+    var fetchT0 = performance.now();
+    showLoadingToast();
 
     fetchMatches(slug).then(function(result) {
       if (currentSlug !== slug) return; // stale response from rapid clicking
+      var fetchMs = Math.round(performance.now() - fetchT0);
       if (result.matches.length === 0) {
-        // No matches yet — show player list instead
-        clearStatus();
+        dismissLoadingToast();
         loadPlayerList(slug);
         return;
       }
@@ -1686,7 +1697,7 @@ button { font-family: inherit; font-size: inherit; }
 
       applyVideoMatches();
       cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
-      clearStatus();
+      updateLoadingToast('Loaded ' + result.matches.length + ' matches in ' + fetchMs + ' ms');
       renderDetail();
 
       ensureVideosForMatches(currentMatches, currentTournament);
@@ -1705,6 +1716,7 @@ button { font-family: inherit; font-size: inherit; }
         renderDetail();
       });
     }).catch(function(err) {
+      dismissLoadingToast();
       showStatus('Failed to load matches: ' + esc(err.message), 'error');
     });
   }
@@ -2008,6 +2020,10 @@ button { font-family: inherit; font-size: inherit; }
           html += '<span class="mr-s1 ' + cls + '">' + pm.myScore + '</span>';
           html += '<span class="mr-sep ' + cls + '">-</span>';
           html += '<span class="mr-s2 ' + cls + '">' + pm.oppScore + '</span>';
+        } else if (pm.status === 'COMPLETED' && (pm.won !== undefined)) {
+          var cls = pm.won ? 'mr-win' : 'mr-loss';
+          html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
+          html += '<span style="grid-column:span 3;text-align:center;font-size:11px;font-weight:300;color:#64748b">' + (pm.won ? 'walkover' : 'forfeit') + '</span>';
         } else {
           html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
         }
@@ -2512,6 +2528,40 @@ button { font-family: inherit; font-size: inherit; }
     el.className = '';
     el.innerHTML = '';
   }
+  function showToast(msg) {
+    var el = document.createElement('div');
+    el.textContent = msg;
+    var anchor = document.getElementById('detail-section');
+    var rect = anchor.getBoundingClientRect();
+    el.style.cssText = 'position:fixed;top:' + Math.round(rect.top) + 'px;left:' + Math.round(rect.left) + 'px;background:#334155;color:#e2e8f0;padding:4px 12px;border-radius:4px;font-size:12px;z-index:9999;opacity:1;transition:opacity 0.5s';
+    document.body.appendChild(el);
+    setTimeout(function() { el.style.opacity = '0'; }, 1500);
+    setTimeout(function() { el.remove(); }, 2000);
+  }
+
+  var _loadToast = null;
+  function showLoadingToast() {
+    dismissLoadingToast();
+    var el = document.createElement('div');
+    el.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:1.5px;margin-right:6px"></span><span style="color:#94a3b8">Loading matches\u2026</span>';
+    var anchor = document.getElementById('detail-section');
+    var rect = anchor.getBoundingClientRect();
+    el.style.cssText = 'position:fixed;top:' + Math.round(rect.top) + 'px;left:' + Math.round(rect.left) + 'px;width:' + Math.round(rect.width) + 'px;box-sizing:border-box;background:#334155;color:#e2e8f0;padding:6px 14px;border-radius:4px;font-size:12px;z-index:9999;display:flex;align-items:center';
+    document.body.appendChild(el);
+    _loadToast = el;
+  }
+  function updateLoadingToast(msg) {
+    if (_loadToast) {
+      _loadToast.innerHTML = '';
+      _loadToast.textContent = msg;
+      _loadToast.style.transition = 'opacity 0.5s';
+      setTimeout(function() { if (_loadToast) _loadToast.style.opacity = '0'; }, 1500);
+      setTimeout(function() { dismissLoadingToast(); }, 2000);
+    }
+  }
+  function dismissLoadingToast() {
+    if (_loadToast) { _loadToast.remove(); _loadToast = null; }
+  }
 
   // =====================================================
   // Init
@@ -2521,7 +2571,8 @@ button { font-family: inherit; font-size: inherit; }
   var hasSlug = new URLSearchParams(window.location.search).has('digitalpool');
   if (hasSlug) {
     document.getElementById('feed-section').classList.add('feed-section-collapsed');
-    showStatus('<span class="spinner"></span> Loading matches...', 'info');
+    document.documentElement.classList.remove('slug-loading');
+    showLoadingToast();
   }
   checkUrlParams();
   if (!hasSlug) loadFeed();
