@@ -133,6 +133,8 @@ button { font-family: inherit; font-size: inherit; }
 .mr-video { padding-left: 6px; }
 .mr-video a { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 10px; background: #dc2626; border-radius: 2px; color: #fff; text-decoration: none; font-size: 6px; line-height: 1; vertical-align: middle; }
 .mr-video a:hover { background: #ef4444; }
+.mr-video-hidden a { opacity: 0; }
+.mr-video-hidden a:hover { opacity: 0.4; }
 .match-num { padding-right: 6px; }
 .match-vs-label { padding-left: 4px; padding-right: 4px; }
 .match-opponent { padding-right: 6px; }
@@ -413,9 +415,8 @@ button { font-family: inherit; font-size: inherit; }
   function filterVideosForMatches(videos, matches, tournament) {
     var range = getCachedMatchRange(matches, tournament);
     if (!range) return videos;
-    var PADDING = 3600000;
-    var lo = new Date(range.from).getTime() - PADDING;
-    var hi = new Date(range.to).getTime() + PADDING;
+    var lo = new Date(range.from).getTime() - RANGE_PAD_BEFORE;
+    var hi = new Date(range.to).getTime() + RANGE_PAD_AFTER;
     var startIdx = bsearchVideoDesc(videos, hi);
     var dated = [];
     var undated = [];
@@ -537,6 +538,157 @@ button { font-family: inherit; font-size: inherit; }
     return found;
   }
 
+  function inferStreamTableMatches(matches, bracketByNum, unassociatedVideos) {
+    if (!unassociatedVideos || unassociatedVideos.length === 0) return 0;
+    if (matches.some(function(m) { return m.tableName; })) return 0;
+
+    // Build feeder map: destNum → [sourceNums]
+    var feeders = {};
+    for (var num in bracketByNum) {
+      var b = bracketByNum[num];
+      if (b.winnerTo) { if (!feeders[b.winnerTo]) feeders[b.winnerTo] = []; feeders[b.winnerTo].push(b.num); }
+      if (b.loserTo) { if (!feeders[b.loserTo]) feeders[b.loserTo] = []; feeders[b.loserTo].push(b.num); }
+    }
+
+    // Build match lookup by num
+    var matchByNum = {};
+    for (var mi = 0; mi < matches.length; mi++) matchByNum[matches[mi].num] = matches[mi];
+
+    // Collect matches, estimate start time from feeders if missing
+    var timed = [];
+    for (var i = 0; i < matches.length; i++) {
+      var m = matches[i];
+      if (m.videoUrl || m.status !== 'COMPLETED' || m.isSplit || m.isBye) continue;
+      var start = null;
+      if (m.startTime) {
+        start = new Date(m.startTime).getTime();
+      } else if (feeders[m.num]) {
+        var latestFeeder = 0;
+        for (var fi = 0; fi < feeders[m.num].length; fi++) {
+          var feeder = matchByNum[feeders[m.num][fi]];
+          if (feeder && feeder.updatedAt) {
+            var fu = new Date(feeder.updatedAt).getTime();
+            if (fu > latestFeeder) latestFeeder = fu;
+          }
+        }
+        if (latestFeeder > 0) start = latestFeeder;
+      }
+      if (start) timed.push({ num: m.num, idx: i, start: start });
+    }
+    timed.sort(function(a, b) { return a.start - b.start; });
+
+    // Detect bulk-edited updatedAt (all same value = useless for end time)
+    var updateTimes = {};
+    for (var ui = 0; ui < matches.length; ui++) {
+      if (matches[ui].updatedAt) {
+        var uk = matches[ui].updatedAt;
+        updateTimes[uk] = (updateTimes[uk] || 0) + 1;
+      }
+    }
+    var bulkEdit = false;
+    for (var key in updateTimes) {
+      if (updateTimes[key] > matches.length * 0.5) { bulkEdit = true; break; }
+    }
+
+    // Build windows with start + end
+    var windows = [];
+    for (var wi = 0; wi < timed.length; wi++) {
+      var m = matches[timed[wi].idx];
+      var end = null;
+      if (!bulkEdit && m.updatedAt) {
+        var ut = new Date(m.updatedAt).getTime();
+        if (ut > timed[wi].start) end = ut;
+      }
+      if (!end) end = timed[wi].start + 20 * 60000;
+      windows.push({ num: timed[wi].num, idx: timed[wi].idx, start: timed[wi].start, end: end });
+    }
+
+    windows.sort(function(a, b) { return b.end - a.end; });
+
+    // Last 3 matches = LB final + 2 double dip matches
+    var maxNum = 0;
+    for (var mn in bracketByNum) {
+      var n = parseInt(mn);
+      if (n > maxNum) maxNum = n;
+    }
+    var finalNums = [maxNum, maxNum - 1, maxNum - 2];
+
+    var video = unassociatedVideos[0];
+    var found = 0;
+
+    for (var si = 0; si < windows.length; si++) {
+      var w = windows[si];
+      var hasOverlap = false;
+      for (var oi = 0; oi < windows.length; oi++) {
+        if (oi === si) continue;
+        if (windows[oi].start < w.end && windows[oi].end > w.start) {
+          hasOverlap = true;
+          break;
+        }
+      }
+      if (hasOverlap) continue;
+
+      var offsetSec = Math.round((w.start - video.matchTime) / 1000);
+      if (offsetSec >= -300 && offsetSec <= 43200) {
+        var url = 'https://www.youtube.com/watch?v=' + video.videoId + '&t=' + Math.max(0, offsetSec);
+        if (finalNums.indexOf(w.num) !== -1) {
+          matches[w.idx].videoUrl = url;
+        } else {
+          matches[w.idx].inferredVideoUrl = url;
+        }
+        found++;
+      }
+    }
+    return found;
+  }
+
+  var currentUnassociatedVideos = [];
+
+  function findUnassociatedVenueVideos(matches, videos, tournament) {
+    var venueName = (tournament && tournament.venue && tournament.venue.name) || '';
+    var venueTokens = venueName.toLowerCase().split(/\s+/).filter(function(t) {
+      return t.length > 2 && GENERIC_VENUE_WORDS.indexOf(t) === -1;
+    });
+    if (venueTokens.length === 0) return [];
+
+    // Only exclude single-match recordings (no &t= timestamp), not livestreams
+    var assignedVideoIds = {};
+    for (var mi = 0; mi < matches.length; mi++) {
+      if (matches[mi].videoUrl && matches[mi].videoUrl.indexOf('&t=') === -1) {
+        var m = matches[mi].videoUrl.match(/[?&]v=([^&]+)/);
+        if (m) assignedVideoIds[m[1]] = true;
+      }
+    }
+
+    var minMs = Infinity, maxMs = -Infinity;
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i].startTime) {
+        var t = new Date(matches[i].startTime).getTime();
+        if (t < minMs) minMs = t;
+        if (t > maxMs) maxMs = t;
+      }
+    }
+    if (minMs === Infinity && tournament && tournament.date) {
+      var td = new Date(tournament.date).getTime();
+      minMs = td; maxMs = td + 6 * 3600000;
+    }
+    if (minMs === Infinity) return [];
+    var result = [];
+    for (var vi = 0; vi < videos.length; vi++) {
+      var v = videos[vi];
+      if (!v.matchTime || assignedVideoIds[v.videoId]) continue;
+      if (v.matchTime < minMs - RANGE_PAD_BEFORE || v.matchTime > maxMs + RANGE_PAD_AFTER) continue;
+      var videoVenue = extractVenueFromTitle(v.title).toLowerCase();
+      var venueHit = false;
+      for (var ti = 0; ti < venueTokens.length; ti++) {
+        if (videoVenue.indexOf(venueTokens[ti]) !== -1) { venueHit = true; break; }
+      }
+      if (venueHit) result.push(v);
+    }
+    result.sort(function(a, b) { return a.matchTime - b.matchTime; });
+    return result;
+  }
+
   function applyVideoMatches() {
     if (!currentMatches) return;
     var list = loadVideoList();
@@ -544,6 +696,9 @@ button { font-family: inherit; font-size: inherit; }
     var scoped = filterVideosForMatches(list, currentMatches, currentTournament);
     var found = matchVideosToMatches(currentMatches, scoped);
     found += matchLivestreamsToMatches(currentMatches, scoped, currentTournament);
+    currentUnassociatedVideos = findUnassociatedVenueVideos(currentMatches, scoped, currentTournament);
+    found += inferStreamTableMatches(currentMatches, bracketByNum, currentUnassociatedVideos);
+    if (found) currentUnassociatedVideos = findUnassociatedVenueVideos(currentMatches, scoped, currentTournament);
     return found;
   }
 
@@ -641,14 +796,21 @@ button { font-family: inherit; font-size: inherit; }
     return { from: new Date(minMs).toISOString(), to: new Date(maxMs).toISOString() };
   }
 
-  var RANGE_PADDING = 3600000;
+  var RANGE_PAD_BEFORE = 2 * 3600000;
+  var RANGE_PAD_AFTER = 30 * 60000;
 
   function ensureVideosForMatches(matches, tournament) {
     var range = getCachedMatchRange(matches, tournament);
     if (!range) return Promise.resolve();
-    var paddedFrom = new Date(new Date(range.from).getTime() - RANGE_PADDING).toISOString();
-    var paddedTo = new Date(new Date(range.to).getTime() + RANGE_PADDING).toISOString();
-    if (isRangeCovered(paddedFrom, paddedTo)) return Promise.resolve();
+    var paddedFrom = new Date(new Date(range.from).getTime() - RANGE_PAD_BEFORE).toISOString();
+    var paddedTo = new Date(new Date(range.to).getTime() + RANGE_PAD_AFTER).toISOString();
+    if (isRangeCovered(paddedFrom, paddedTo)) {
+      var ago = Date.now() - new Date(range.to).getTime();
+      var days = Math.floor(ago / 86400000);
+      var hours = Math.floor((ago % 86400000) / 3600000);
+      console.log('[WebApp] range covered, last tournament update ' + days + 'd ' + hours + 'h ago');
+      return Promise.resolve();
+    }
     return fetchVideosFromWebApp(paddedFrom, paddedTo).then(function(videos) {
       if (videos.length > 0) addVideos(videos);
       var nowMs = Date.now();
@@ -1361,6 +1523,7 @@ button { font-family: inherit; font-size: inherit; }
   var showBlockers = true;
   var playerListSort = 'name';
   var registeredPlayersExpanded = false;
+  var unassociatedVideosExpanded = true;
   var bracketByNum = {};
   var cache = {}; // slug → { type: 'matches'|'players', data: ..., time: ... }
 
@@ -1687,6 +1850,25 @@ button { font-family: inherit; font-size: inherit; }
       html += renderFlatMatches(matches);
     }
 
+    // Unassociated venue videos section
+    if (currentUnassociatedVideos.length > 0) {
+      html += '<div class="registered-players-section">';
+      html += '<div class="registered-players-header" onclick="toggleUnassociatedVideos()">';
+      html += '<span>' + (unassociatedVideosExpanded ? '&#9660;' : '&#9654;') + ' Venue Videos (' + currentUnassociatedVideos.length + ')</span>';
+      html += '</div>';
+      html += '<div id="unassociated-videos-body" style="padding:8px 12px;' + (unassociatedVideosExpanded ? '' : 'display:none;') + '">';
+      for (var uvi = 0; uvi < currentUnassociatedVideos.length; uvi++) {
+        var uv = currentUnassociatedVideos[uvi];
+        var uvTime = new Date(uv.matchTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        html += '<div style="margin:3px 0;font-size:12px;display:flex;align-items:center;gap:6px">';
+        html += '<span class="mr-video"><a href="https://www.youtube.com/watch?v=' + esc(uv.videoId) + '" target="_blank" title="Watch on YouTube">&#9654;</a></span>';
+        html += '<a href="https://www.youtube.com/watch?v=' + esc(uv.videoId) + '" target="_blank" style="color:#60a5fa">' + esc(uv.title) + '</a>';
+        html += ' <span style="color:#64748b">(' + uvTime + ')</span>';
+        html += '</div>';
+      }
+      html += '</div></div>';
+    }
+
     // Registered players section
     if (currentPlayerList && currentPlayerList.length > 0) {
       html += '<div class="registered-players-section">';
@@ -1743,10 +1925,12 @@ button { font-family: inherit; font-size: inherit; }
     // Build per-player match lists
     var playerMap = {};
     var playerOrder = [];
+    var inflightCount = 0;
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName);
+      if (m.status === 'IN_PROGRESS') inflightCount++;
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl);
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -1827,7 +2011,13 @@ button { font-family: inherit; font-size: inherit; }
         } else {
           html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
         }
-        html += '<span class="mr-video">' + (pm.videoUrl ? '<a href="' + esc(pm.videoUrl) + '" target="_blank" title="Watch on YouTube"' + '>&#9654;</a>' : '') + '</span>';
+        var vidHtml = '';
+        if (pm.videoUrl) {
+          vidHtml = '<a href="' + esc(pm.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>';
+        } else if (pm.inferredVideoUrl && inflightCount <= 2) {
+          vidHtml = '<a href="' + esc(pm.inferredVideoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>';
+        }
+        html += '<span class="mr-video' + (!pm.videoUrl && pm.inferredVideoUrl && inflightCount <= 2 ? ' mr-video-hidden' : '') + '">' + vidHtml + '</span>';
         html += '</div>';
       }
       html += '</div>'; // match-rows
@@ -1920,13 +2110,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -1942,6 +2132,10 @@ button { font-family: inherit; font-size: inherit; }
   function renderFlatMatches(matches) {
     // Sort by match number descending (latest first)
     var sorted = matches.slice().sort(function(a, b) { return b.num - a.num; });
+    var inflightCount = 0;
+    for (var ic = 0; ic < matches.length; ic++) {
+      if (matches[ic].status === 'IN_PROGRESS') inflightCount++;
+    }
     var html = '<div class="flat-matches">';
     for (var i = 0; i < sorted.length; i++) {
       var m = sorted[i];
@@ -1983,7 +2177,13 @@ button { font-family: inherit; font-size: inherit; }
       html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
       var p2PgId = 'pg-' + esc(m.p2.name).replace(/\s/g, '-').toLowerCase();
       html += '<span class="fm-p2 match-opponent-link' + (p2Fav ? ' is-fav' : '') + (completed && p2Win ? ' fm-winner' : '') + (completed && p1Win ? ' fm-loser' : '') + '" data-player="' + p2PgId + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
-      html += '<span class="mr-video">' + (m.videoUrl ? '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube"' + '>&#9654;</a>' : '') + '</span>';
+      var fmVidHtml = '';
+      if (m.videoUrl) {
+        fmVidHtml = '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>';
+      } else if (m.inferredVideoUrl && inflightCount <= 2) {
+        fmVidHtml = '<a href="' + esc(m.inferredVideoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>';
+      }
+      html += '<span class="mr-video' + (!m.videoUrl && m.inferredVideoUrl && inflightCount <= 2 ? ' mr-video-hidden' : '') + '">' + fmVidHtml + '</span>';
       html += '</div>';
     }
     html += '</div>';
@@ -2019,6 +2219,16 @@ button { font-family: inherit; font-size: inherit; }
     if (body) {
       body.style.display = registeredPlayersExpanded ? '' : 'none';
       if (header) header.innerHTML = '<span>' + (registeredPlayersExpanded ? '&#9660;' : '&#9654;') + ' Registered Players (' + currentPlayerList.length + ')</span>';
+    }
+  };
+
+  window.toggleUnassociatedVideos = function() {
+    unassociatedVideosExpanded = !unassociatedVideosExpanded;
+    var body = document.getElementById('unassociated-videos-body');
+    var header = body ? body.previousElementSibling : null;
+    if (body) {
+      body.style.display = unassociatedVideosExpanded ? '' : 'none';
+      if (header) header.innerHTML = '<span>' + (unassociatedVideosExpanded ? '&#9660;' : '&#9654;') + ' Venue Videos (' + currentUnassociatedVideos.length + ')</span>';
     }
   };
 
