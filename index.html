@@ -1233,9 +1233,10 @@ button { font-family: inherit; font-size: inherit; }
     for (var i = 0; i < sorted.length; i++) {
       var t = sorted[i];
       var d = new Date(t.date);
-      var hasProgress = t.progress != null && parseFloat(t.progress) > 0 && parseFloat(t.progress) < 100;
+      var progressVal = t.progress != null ? parseFloat(t.progress) : 0;
+      var hasProgress = progressVal > 0 && progressVal < 100;
       var isLive = t.status === 'IN_PROGRESS' || (t.status !== 'COMPLETED' && hasProgress);
-      var isFuture = d > new Date() && !isLive;
+      var isFuture = d > new Date() && !isLive && t.status !== 'COMPLETED' && progressVal === 0;
       var tr = document.createElement('tr');
       tr.dataset.slug = t.slug;
       tr.dataset.status = t.status;
