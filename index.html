@@ -799,7 +799,7 @@ button { font-family: inherit; font-size: inherit; }
     }
     if (minMs === Infinity && tournament && tournament.date) {
       var td = new Date(tournament.date).getTime();
-      if (!isNaN(td)) { minMs = td; maxMs = td; }
+      if (!isNaN(td)) { minMs = td; if (td > maxMs) maxMs = td; }
     }
     if (minMs === Infinity) return null;
     return { from: new Date(minMs).toISOString(), to: new Date(maxMs).toISOString() };
