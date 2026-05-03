@@ -1757,7 +1757,7 @@ button { font-family: inherit; font-size: inherit; }
         var m = brackets[i];
         if (m.is_bye) continue;
         if (!m.challenger1 || !m.challenger2) continue;
-        if (m.challenger1_is_forfeit || m.challenger1_is_withdraw || m.challenger2_is_forfeit || m.challenger2_is_withdraw) continue;
+        var isForfeit = !!(m.challenger1_is_forfeit || m.challenger1_is_withdraw || m.challenger2_is_forfeit || m.challenger2_is_withdraw);
 
         matches.push({
           num: m.match_number,
@@ -1774,6 +1774,7 @@ button { font-family: inherit; font-size: inherit; }
           updatedAt: m.updated_at || null,
           round: m.round || null,
           identifier: m.identifier || null,
+          isForfeit: isForfeit,
         });
       }
 
@@ -1785,7 +1786,7 @@ button { font-family: inherit; font-size: inherit; }
         }
         for (var si = 0; si < matches.length; si++) {
           var sm = matches[si];
-          if (sm.num >= maxNum - 2 && sm.status === 'COMPLETED' && (sm.s1 == null || sm.s1 === 0) && (sm.s2 == null || sm.s2 === 0)) {
+          if (sm.num >= maxNum - 2 && sm.status === 'COMPLETED' && !sm.isForfeit && (sm.s1 == null || sm.s1 === 0) && (sm.s2 == null || sm.s2 === 0)) {
             sm.isSplit = true;
           }
         }
@@ -1941,8 +1942,8 @@ button { font-family: inherit; font-size: inherit; }
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
       if (m.status === 'IN_PROGRESS') inflightCount++;
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit);
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -2008,6 +2009,10 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
         if (pm.isSplit) {
           html += '<span></span><span style="grid-column:span 3">Split</span>';
+        } else if (pm.isForfeit && pm.status === 'COMPLETED' && (pm.won !== undefined)) {
+          var cls = pm.won ? 'mr-win' : 'mr-loss';
+          html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
+          html += '<span style="grid-column:span 3;text-align:center;font-size:11px;font-weight:300;color:#64748b">' + (pm.won ? 'walkover' : 'forfeit') + '</span>';
         } else if (pm.status === 'IN_PROGRESS') {
           var tbl = pm.tableName ? 'T' + pm.tableName.replace(/^Table\s*/i, '') : '';
           html += '<span class="mr-label mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
@@ -2126,13 +2131,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl, isForfeit) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl, isForfeit: isForfeit });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -2175,6 +2180,9 @@ button { font-family: inherit; font-size: inherit; }
       html += '<span class="fm-p1 match-opponent-link' + (p1Fav ? ' is-fav' : '') + (completed && p1Win ? ' fm-winner' : '') + (completed && p2Win ? ' fm-loser' : '') + '" data-player="' + p1PgId + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
       if (m.isSplit) {
         html += '<span class="fm-status"></span><span style="grid-column:span 3">Split</span>';
+      } else if (m.isForfeit && m.status === 'COMPLETED') {
+        html += '<span class="fm-status"></span>';
+        html += '<span style="grid-column:span 3;text-align:center;font-size:11px;font-weight:300;color:#64748b">forfeit</span>';
       } else if (m.status === 'IN_PROGRESS') {
         var tbl = m.tableName ? 'T' + m.tableName.replace(/^Table\s*/i, '') : '';
         html += '<span class="fm-status mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
