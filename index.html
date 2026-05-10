@@ -447,7 +447,7 @@ button { font-family: inherit; font-size: inherit; }
     var usedVideos = {};
     for (var mi = 0; mi < matches.length; mi++) {
       var m = matches[mi];
-      if (m.videoUrl) continue; // already has DigitalPool link
+      if (m.isBye || m.videoUrl) continue;
       for (var vi = 0; vi < videos.length; vi++) {
         // Skip videos too far in time (>30min) when both timestamps available
         if (m.startTime && videos[vi].matchTime) {
@@ -1755,7 +1755,19 @@ button { font-family: inherit; font-size: inherit; }
 
       for (var i = 0; i < brackets.length; i++) {
         var m = brackets[i];
-        if (m.is_bye) continue;
+        if (m.is_bye) {
+          var byePlayer = m.challenger1 || m.challenger2;
+          if (byePlayer) {
+            matches.push({
+              num: m.match_number,
+              p1: { id: byePlayer.id, name: byePlayer.name, rating: byePlayer.skill_level, fargoId: byePlayer.fargo_id, place: byePlayer.place, playerId: byePlayer.player_id },
+              p2: null, s1: null, s2: null, p1Won: false, p2Won: false,
+              status: m.status, videoUrl: null, tableName: null, startTime: null, updatedAt: null,
+              round: m.round || null, identifier: m.identifier || null, isForfeit: false, isBye: true,
+            });
+          }
+          continue;
+        }
         if (!m.challenger1 || !m.challenger2) continue;
         var isForfeit = !!(m.challenger1_is_forfeit || m.challenger1_is_withdraw || m.challenger2_is_forfeit || m.challenger2_is_withdraw);
 
@@ -1941,6 +1953,14 @@ button { font-family: inherit; font-size: inherit; }
     var inflightCount = 0;
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
+      if (m.isBye) {
+        var key = m.p1.name;
+        if (!playerMap[key]) {
+          playerMap[key] = { player: m.p1, matches: [], wins: 0, losses: 0, byeMatchNum: m.num };
+          playerOrder.push(key);
+        }
+        continue;
+      }
       if (m.status === 'IN_PROGRESS') inflightCount++;
       addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit);
       addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit);
@@ -2160,6 +2180,7 @@ button { font-family: inherit; font-size: inherit; }
     var html = '<div class="flat-matches">';
     for (var i = 0; i < sorted.length; i++) {
       var m = sorted[i];
+      if (m.isBye) continue;
       var p1Fav = isPlayerFav(m.p1);
       var p2Fav = isPlayerFav(m.p2);
       var p1Win = m.p1Won;

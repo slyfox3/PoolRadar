@@ -39,10 +39,13 @@ function buildBlockerMap(bracketByNum) {
 }
 
 function getBlockersForPlayer(pd, bMap, tournamentStatus) {
-  if (!pd.matches.length) return [];
   if (tournamentStatus === 'COMPLETED') return [];
-  var lastMatch = pd.matches[pd.matches.length - 1];
-  if (lastMatch.status === 'IN_PROGRESS') return [];
+  if (pd.matches.length) {
+    var lastMatch = pd.matches[pd.matches.length - 1];
+    if (lastMatch.status === 'IN_PROGRESS') return [];
+  } else if (!pd.byeMatchNum) {
+    return [];
+  }
   var pendingNum = bMap.blockedPlayers[pd.player.name.toLowerCase()];
   if (!pendingNum) return [];
   var level1 = (bMap.blockedMatches[pendingNum] || []).slice();
