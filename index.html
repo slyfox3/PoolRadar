@@ -233,6 +233,11 @@ button { font-family: inherit; font-size: inherit; }
   .fav-card { left: 0; top: 100%; margin-left: 0; margin-top: 4px; }
   .venue-col { display: none; }
 }
+.nav-back-pill { position: fixed; bottom: 24px; right: 24px; background: #1e293b; border: 1px solid #334155; border-radius: 20px; padding: 8px 16px; color: #60a5fa; font-size: 13px; cursor: pointer; display: none; align-items: center; gap: 6px; z-index: 999; box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: opacity 0.2s; min-height: 44px; }
+.nav-back-pill:hover { background: #334155; }
+.nav-back-pill svg { width: 14px; height: 14px; flex-shrink: 0; }
+.nav-back-pill .nav-back-dismiss { background: none; border: none; color: #64748b; font-size: 16px; cursor: pointer; padding: 0 0 0 4px; line-height: 1; }
+.nav-back-pill .nav-back-dismiss:hover { color: #e2e8f0; }
 </style>
 </head>
 <body>
@@ -320,6 +325,12 @@ button { font-family: inherit; font-size: inherit; }
     </div>
     <div id="detail-section" class="hidden"></div>
   </div>
+</div>
+
+<div class="nav-back-pill" id="nav-back-pill" role="button" aria-label="Navigate back" tabindex="0">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+  <span id="nav-back-name"></span>
+  <button class="nav-back-dismiss" id="nav-back-dismiss" aria-label="Dismiss">&times;</button>
 </div>
 
 <script src="bracket-algo.js"></script>
@@ -1534,6 +1545,8 @@ button { font-family: inherit; font-size: inherit; }
   var registeredPlayersExpanded = false;
   var unassociatedVideosExpanded = true;
   var bracketByNum = {};
+  var navHistory = [];
+  var NAV_HISTORY_MAX = 20;
   var cache = {}; // slug → { type: 'matches'|'players', data: ..., time: ... }
 
   function fetchPlayerList(slug) {
@@ -1647,6 +1660,8 @@ button { font-family: inherit; font-size: inherit; }
     updateUrlBar(slug);
     urlInput.value = '';
     clearDetailTimer();
+    navHistory = [];
+    updateNavPill();
 
     // Highlight active row in feed
     var rows = document.querySelectorAll('.feed-table tbody tr');
@@ -2248,6 +2263,8 @@ button { font-family: inherit; font-size: inherit; }
     currentTournament = null;
     currentPlayerList = null;
     bracketByNum = {};
+    navHistory = [];
+    updateNavPill();
     var url = new URL(window.location);
     url.searchParams.delete('digitalpool');
     history.replaceState(null, '', url);
@@ -2282,6 +2299,51 @@ button { font-family: inherit; font-size: inherit; }
     else if (currentPlayerList) renderPlayerList(currentPlayerList);
   }
 
+  function updateNavPill() {
+    var pill = document.getElementById('nav-back-pill');
+    if (navHistory.length === 0) {
+      pill.style.display = 'none';
+      return;
+    }
+    pill.style.display = 'flex';
+    document.getElementById('nav-back-name').textContent = navHistory[navHistory.length - 1].name;
+  }
+
+  function scrollToCard(id) {
+    var el = document.getElementById(id);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('highlight');
+    setTimeout(function() { el.classList.remove('highlight'); }, 3000);
+    return true;
+  }
+
+  function navBack() {
+    while (navHistory.length > 0) {
+      var entry = navHistory.pop();
+      if (scrollToCard(entry.id)) break;
+    }
+    updateNavPill();
+  }
+
+  document.getElementById('nav-back-pill').addEventListener('click', function(e) {
+    if (e.target.closest('.nav-back-dismiss')) return;
+    navBack();
+  });
+  document.getElementById('nav-back-dismiss').addEventListener('click', function() {
+    navHistory = [];
+    updateNavPill();
+  });
+  document.getElementById('nav-back-pill').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navBack(); }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === ',' && !e.target.closest('input, textarea, [contenteditable]')) {
+      if (navHistory.length > 0) { e.preventDefault(); navBack(); }
+    }
+  });
+
   // Delegated click handler for add/remove fav buttons and opponent links
   document.getElementById('main').addEventListener('click', function(e) {
     // Opponent name click → scroll to their card
@@ -2292,12 +2354,19 @@ button { font-family: inherit; font-size: inherit; }
         groupByPlayer = true;
         renderDetail();
       }
-      var targetEl = document.getElementById(targetId);
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        targetEl.classList.add('highlight');
-        setTimeout(function() { targetEl.classList.remove('highlight'); }, 3000);
+      // Push source player onto nav history
+      var sourceGroup = oppLink.closest('.player-group');
+      if (sourceGroup) {
+        var sourceNameEl = sourceGroup.querySelector('.player-group-name');
+        var sourceName = sourceNameEl ? sourceNameEl.textContent : '';
+        var sourceId = sourceGroup.id;
+        if (sourceName && (navHistory.length === 0 || navHistory[navHistory.length - 1].id !== sourceId)) {
+          navHistory.push({ id: sourceId, name: sourceName });
+          if (navHistory.length > NAV_HISTORY_MAX) navHistory.shift();
+        }
+        updateNavPill();
       }
+      scrollToCard(targetId);
       return;
     }
     var btn = e.target.closest('[data-action]');
