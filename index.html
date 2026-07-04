@@ -1844,6 +1844,17 @@ button { font-family: inherit; font-size: inherit; }
     var t = currentTournament;
     var d = t.date ? new Date(t.date) : null;
     var dateStr = d ? d.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : '';
+    var earliestStart = null;
+    for (var mi = 0; mi < currentMatches.length; mi++) {
+      var st = currentMatches[mi].startTime;
+      if (!st) continue;
+      var ms = new Date(st).getTime();
+      if (!isNaN(ms) && (earliestStart === null || ms < earliestStart)) earliestStart = ms;
+    }
+    if (earliestStart !== null) {
+      var startTimeStr = new Date(earliestStart).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      dateStr = dateStr ? dateStr + ' · ' + startTimeStr : startTimeStr;
+    }
     var venueStr = t.venue ? t.venue.name + (t.venue.city ? ', ' + t.venue.city : '') + (t.venue.region ? ', ' + t.venue.region : '') : '';
     var tdName = t.director ? t.director.display_name : (t.organizer ? t.organizer.display_name : '');
     var tdId = t.director ? t.director.id : (t.organizer ? t.organizer.id : null);
