@@ -179,6 +179,8 @@ button { font-family: inherit; font-size: inherit; }
 .fm-loser { opacity: 0.45; }
 .mr-live { color: #60a5fa; animation: blink 3s ease-in-out infinite; }
 .mr-none { color: #64748b; }
+/* Scheduled start time shown in place of a score — spans the 4 score columns */
+.mr-sched { grid-column: span 4; text-align: right; white-space: nowrap; font-size: 11px; color: #94a3b8; padding-left: 6px; padding-right: 5px; }
 
 /* Player list grid for future events */
 .player-list-grid { columns: 200px auto; column-gap: 16px; }
@@ -248,11 +250,34 @@ button { font-family: inherit; font-size: inherit; }
   .fav-card { left: 0; top: 100%; margin-left: 0; margin-top: 4px; }
   .venue-col { display: none; }
 }
-.nav-back-pill { position: fixed; bottom: 24px; right: 24px; background: #1e293b; border: 1px solid #334155; border-radius: 20px; padding: 8px 16px; color: #60a5fa; font-size: 13px; cursor: pointer; display: none; align-items: center; gap: 6px; z-index: 999; box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: opacity 0.2s; min-height: 44px; }
+.nav-back-pill { position: fixed; bottom: calc(88px + env(safe-area-inset-bottom)); right: 24px; background: #1e293b; border: 1px solid #334155; border-radius: 20px; padding: 8px 16px; color: #60a5fa; font-size: 13px; cursor: pointer; display: none; align-items: center; gap: 6px; z-index: 999; box-shadow: 0 4px 12px rgba(0,0,0,0.4); transition: opacity 0.2s; min-height: 44px; }
 .nav-back-pill:hover { background: #334155; }
 .nav-back-pill svg { width: 14px; height: 14px; flex-shrink: 0; }
 .nav-back-pill .nav-back-dismiss { background: none; border: none; color: #64748b; font-size: 16px; cursor: pointer; padding: 0 0 0 4px; line-height: 1; }
 .nav-back-pill .nav-back-dismiss:hover { color: #e2e8f0; }
+
+/* Floating player search */
+.player-search-fab { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); right: 24px; width: 52px; height: 52px; border-radius: 50%; background: #2563eb; border: none; color: #fff; display: none; align-items: center; justify-content: center; cursor: pointer; z-index: 998; box-shadow: 0 4px 14px rgba(0,0,0,0.5); -webkit-tap-highlight-color: transparent; }
+.player-search-fab.visible { display: flex; }
+.player-search-fab:hover { background: #3b82f6; }
+.player-search-fab svg { width: 22px; height: 22px; }
+.player-search-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.94); z-index: 1001; display: none; padding: max(12px, env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
+.player-search-overlay.open { display: block; }
+.player-search-box { max-width: 520px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+.player-search-bar { display: flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 6px 10px; flex-shrink: 0; }
+.player-search-bar .pse-icon { width: 16px; height: 16px; color: #64748b; flex-shrink: 0; }
+/* 16px keeps iOS Safari from zooming on focus */
+#player-search-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e2e8f0; font-size: 16px; padding: 8px 0; }
+.player-search-close { background: none; border: none; color: #94a3b8; font-size: 26px; line-height: 1; cursor: pointer; padding: 0 4px; min-width: 32px; }
+.player-search-close:hover { color: #e2e8f0; }
+.player-search-results { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
+.pse-item { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: #e2e8f0; font-size: 15px; }
+.pse-item.active, .pse-item:hover { background: #1e293b; }
+.pse-item.is-fav .pse-name { color: #fbbf24; }
+.pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
+.pse-meta { margin-left: auto; padding-left: 8px; color: #64748b; font-size: 12px; white-space: nowrap; }
+.pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
+.player-list-item.highlight { animation: card-blink 1s ease-in-out 3; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -346,6 +371,21 @@ button { font-family: inherit; font-size: inherit; }
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
   <span id="nav-back-name"></span>
   <button class="nav-back-dismiss" id="nav-back-dismiss" aria-label="Dismiss">&times;</button>
+</div>
+
+<button class="player-search-fab" id="player-search-fab" aria-label="Search players" title="Search players (/)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
+</button>
+
+<div class="player-search-overlay" id="player-search-overlay" role="dialog" aria-modal="true" aria-label="Search players">
+  <div class="player-search-box">
+    <div class="player-search-bar">
+      <svg class="pse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
+      <input type="text" id="player-search-input" placeholder="Search players…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" aria-label="Player name" aria-autocomplete="list" aria-controls="player-search-results">
+      <button class="player-search-close" id="player-search-close" aria-label="Close search">&times;</button>
+    </div>
+    <div class="player-search-results" id="player-search-results" role="listbox"></div>
+  </div>
 </div>
 
 <script src="bracket-algo.js"></script>
@@ -1655,7 +1695,7 @@ button { font-family: inherit; font-size: inherit; }
       var pid = p.player_id || (p.player ? p.player.id : null);
       var pObj = { id: p.id, name: p.name, playerId: pid };
       var isFav = isPlayerFav(pObj);
-      html += '<div class="player-list-item">';
+      html += '<div class="player-list-item" id="' + playerListAnchorId(p.name) + '">';
       html += isFav
         ? '<button class="remove-fav-btn" data-action="remove-fav" data-name="' + esc(p.name) + '" title="Remove favorite">&#9733;</button>'
         : '<button class="add-fav-btn" data-action="add-fav" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Add favorite">&#9734;</button>';
@@ -1667,6 +1707,7 @@ button { font-family: inherit; font-size: inherit; }
 
     html += '</div>';
     section.innerHTML = html;
+    updateSearchFab();
   }
 
   function loadTournament(slug) {
@@ -1753,7 +1794,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchMatches(slug) {
     return gql(
-      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num table_name start_time updated_at status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
+      'query($s:String!){tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){match_number round identifier livestream_url challenger1{id name skill_level fargo_id place player_id}challenger2{id name skill_level fargo_id place player_id}challenger1_score challenger2_score challenger1_is_winner challenger2_is_winner challenger1_is_forfeit challenger1_is_withdraw challenger2_is_forfeit challenger2_is_withdraw winner_to_num loser_to_num table_name start_time scheduled_time updated_at status is_bye tournament{name slug start_date_time status venue{id name city region}organizer{id display_name slug}director{id display_name slug}}}}',
       { s: slug }
     ).then(function(res) {
       var brackets = (res.data && res.data.tournament_brackets) || [];
@@ -1792,7 +1833,7 @@ button { font-family: inherit; font-size: inherit; }
               num: m.match_number,
               p1: { id: byePlayer.id, name: byePlayer.name, rating: byePlayer.skill_level, fargoId: byePlayer.fargo_id, place: byePlayer.place, playerId: byePlayer.player_id },
               p2: null, s1: null, s2: null, p1Won: false, p2Won: false,
-              status: m.status, videoUrl: null, tableName: null, startTime: null, updatedAt: null,
+              status: m.status, videoUrl: null, tableName: null, startTime: null, scheduledTime: null, updatedAt: null,
               round: m.round || null, identifier: m.identifier || null, isForfeit: false, isBye: true,
             });
           }
@@ -1813,6 +1854,7 @@ button { font-family: inherit; font-size: inherit; }
           videoUrl: m.livestream_url || null,
           tableName: m.table_name || null,
           startTime: m.start_time || null,
+          scheduledTime: m.scheduled_time || null,
           updatedAt: m.updated_at || null,
           round: m.round || null,
           identifier: m.identifier || null,
@@ -1960,7 +2002,7 @@ button { font-family: inherit; font-size: inherit; }
         var pid = p.player_id || (p.player ? p.player.id : null);
         var pObj = { id: p.id, name: p.name, playerId: pid };
         var isFav = isPlayerFav(pObj);
-        html += '<div class="player-list-item">';
+        html += '<div class="player-list-item" id="' + playerListAnchorId(p.name) + '">';
         html += isFav
           ? '<button class="remove-fav-btn" data-action="remove-fav" data-name="' + esc(p.name) + '" title="Remove favorite">&#9733;</button>'
           : '<button class="add-fav-btn" data-action="add-fav" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Add favorite">&#9734;</button>';
@@ -1973,6 +2015,7 @@ button { font-family: inherit; font-size: inherit; }
 
     html += '</div>';
     section.innerHTML = html;
+    updateSearchFab();
   }
 
   function isPlayerFav(p) {
@@ -1985,6 +2028,27 @@ button { font-family: inherit; font-size: inherit; }
     } else {
       return '<button class="add-fav-btn" data-action="add-fav" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Add favorite">&#9734;</button>';
     }
+  }
+
+  // Scheduled/expected start of a match that has no score yet.
+  // "10:00am" today, "Sun 10:00am" within a week, "Aug 9 10:00am" beyond.
+  function matchTimeInfo(m) {
+    var iso = m.scheduledTime || m.startTime;
+    if (!iso) return null;
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    var time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+      .replace(/\s*([AP])M$/i, function(_, p) { return p.toLowerCase() + 'm'; });
+    var now = new Date();
+    var days = Math.floor((d - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+    var label;
+    if (days === 0) label = time;
+    else if (days > 0 && days < 7) label = d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + time;
+    else label = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + time;
+    return {
+      label: label,
+      title: d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+    };
   }
 
   function renderGroupedByPlayer(matches) {
@@ -2003,8 +2067,8 @@ button { font-family: inherit; font-size: inherit; }
         continue;
       }
       if (m.status === 'IN_PROGRESS') inflightCount++;
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime);
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -2091,7 +2155,12 @@ button { font-family: inherit; font-size: inherit; }
           html += '<span class="mr-label ' + cls + '">' + (pm.won ? 'W' : 'L') + '</span>';
           html += '<span style="grid-column:span 3;text-align:center;font-size:11px;font-weight:300;color:#64748b">' + (pm.won ? 'walkover' : 'forfeit') + '</span>';
         } else {
-          html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
+          var schedInfo = matchTimeInfo(pm);
+          if (schedInfo) {
+            html += '<span class="mr-sched" title="' + esc(schedInfo.title) + '">' + esc(schedInfo.label) + '</span>';
+          } else {
+            html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
+          }
         }
         var vidHtml = '';
         if (pm.videoUrl) {
@@ -2192,13 +2261,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl, isForfeit) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl, isForfeit, scheduledTime, startTime) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl, isForfeit: isForfeit });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl, isForfeit: isForfeit, scheduledTime: scheduledTime, startTime: startTime });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -2257,8 +2326,13 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="mr-sep">-</span>';
         html += '<span class="mr-s2">' + m.s2 + '</span>';
       } else {
-        html += '<span class="fm-status"></span>';
-        html += '<span class="mr-s1 mr-none">&mdash;</span><span class="mr-sep"></span><span class="mr-s2"></span>';
+        var fmSched = matchTimeInfo(m);
+        if (fmSched) {
+          html += '<span class="mr-sched" title="' + esc(fmSched.title) + '">' + esc(fmSched.label) + '</span>';
+        } else {
+          html += '<span class="fm-status"></span>';
+          html += '<span class="mr-s1 mr-none">&mdash;</span><span class="mr-sep"></span><span class="mr-s2"></span>';
+        }
       }
       html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
       var p2PgId = 'pg-' + esc(m.p2.name).replace(/\s/g, '-').toLowerCase();
@@ -2291,6 +2365,7 @@ button { font-family: inherit; font-size: inherit; }
     bracketByNum = {};
     navHistory = [];
     updateNavPill();
+    updateSearchFab();
     var url = new URL(window.location);
     url.searchParams.delete('digitalpool');
     history.replaceState(null, '', url);
@@ -2352,6 +2427,204 @@ button { font-family: inherit; font-size: inherit; }
     updateNavPill();
   }
 
+  // =====================================================
+  // Floating player search
+  // =====================================================
+  function playerAnchorId(name) {
+    return 'pg-' + esc(name).replace(/\s/g, '-').toLowerCase();
+  }
+  function playerListAnchorId(name) {
+    return 'pl-' + esc(name).replace(/\s/g, '-').toLowerCase();
+  }
+
+  var searchFabEl = document.getElementById('player-search-fab');
+  var searchOverlayEl = document.getElementById('player-search-overlay');
+  var searchInputEl = document.getElementById('player-search-input');
+  var searchResultsEl = document.getElementById('player-search-results');
+  var searchHits = [];
+  var searchCursor = -1;
+  var SEARCH_RESULT_CAP = 200;
+
+  // Every player we can jump to: everyone with a match, plus the registered list
+  function collectSearchablePlayers() {
+    var byName = Object.create(null), out = [];
+    function add(name, rating, place) {
+      if (!name) return;
+      var key = name.toLowerCase();
+      if (byName[key]) {
+        if (rating && !byName[key].rating) byName[key].rating = rating;
+        if (place && !byName[key].place) byName[key].place = place;
+        return;
+      }
+      byName[key] = { name: name, rating: rating || null, place: place || null };
+      out.push(byName[key]);
+    }
+    if (currentMatches) {
+      for (var i = 0; i < currentMatches.length; i++) {
+        var m = currentMatches[i];
+        if (m.p1) add(m.p1.name, m.p1.rating, m.p1.place);
+        if (m.p2) add(m.p2.name, m.p2.rating, m.p2.place);
+      }
+    }
+    if (currentPlayerList) {
+      for (var j = 0; j < currentPlayerList.length; j++) {
+        var p = currentPlayerList[j];
+        add(p.name, p.skill_level, null);
+      }
+    }
+    return out;
+  }
+
+  // Keyed off loaded data, not the section's visibility — renderDetail() runs
+  // before the detail section is unhidden.
+  function updateSearchFab() {
+    var hasPlayers = (currentMatches && currentMatches.length > 0) || (currentPlayerList && currentPlayerList.length > 0);
+    searchFabEl.classList.toggle('visible', !!hasPlayers);
+    if (!hasPlayers) closeSearch();
+  }
+
+  function reEsc(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Prefix matches rank above mid-word ones; every token must match somewhere
+  function rankPlayers(query) {
+    var players = collectSearchablePlayers();
+    var toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (!toks.length) {
+      return players.slice().sort(function(a, b) { return a.name.localeCompare(b.name); });
+    }
+    var scored = [];
+    for (var i = 0; i < players.length; i++) {
+      var lname = players[i].name.toLowerCase();
+      var words = lname.split(/\s+/);
+      var score = 0, ok = true;
+      for (var t = 0; t < toks.length; t++) {
+        var tk = toks[t];
+        if (lname.indexOf(tk) === 0) continue;
+        var wordHit = false;
+        for (var w = 0; w < words.length; w++) {
+          if (words[w].indexOf(tk) === 0) { wordHit = true; break; }
+        }
+        if (wordHit) { score += 1; continue; }
+        if (lname.indexOf(tk) !== -1) { score += 3; continue; }
+        ok = false;
+        break;
+      }
+      if (ok) scored.push({ p: players[i], score: score });
+    }
+    scored.sort(function(a, b) { return a.score - b.score || a.p.name.localeCompare(b.p.name); });
+    return scored.map(function(s) { return s.p; });
+  }
+
+  function highlightName(name, toks) {
+    if (!toks.length) return esc(name);
+    var parts = name.split(new RegExp('(' + toks.map(reEsc).join('|') + ')', 'ig'));
+    var out = '';
+    for (var i = 0; i < parts.length; i++) {
+      out += (i % 2 === 1) ? '<mark>' + esc(parts[i]) + '</mark>' : esc(parts[i]);
+    }
+    return out;
+  }
+
+  function renderSearchResults() {
+    var query = searchInputEl.value;
+    var toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    var all = rankPlayers(query);
+    searchHits = all.slice(0, SEARCH_RESULT_CAP);
+    searchCursor = searchHits.length ? 0 : -1;
+    if (!searchHits.length) {
+      searchResultsEl.innerHTML = '<div class="pse-empty">No player matches &ldquo;' + esc(query) + '&rdquo;</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < searchHits.length; i++) {
+      var p = searchHits[i];
+      var isFav = isPlayerFav({ id: null, name: p.name });
+      var meta = [];
+      if (p.rating) meta.push('(' + p.rating + ')');
+      if (p.place) meta.push('Place: ' + p.place);
+      html += '<div class="pse-item' + (i === 0 ? ' active' : '') + (isFav ? ' is-fav' : '') + '" role="option" data-name="' + esc(p.name) + '">';
+      html += '<span class="pse-name">' + highlightName(p.name, toks) + '</span>';
+      if (meta.length) html += '<span class="pse-meta">' + esc(meta.join(' · ')) + '</span>';
+      html += '</div>';
+    }
+    if (all.length > searchHits.length) {
+      html += '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + all.length + ' &mdash; keep typing to narrow</div>';
+    }
+    searchResultsEl.innerHTML = html;
+    searchResultsEl.scrollTop = 0;
+  }
+
+  function moveSearchCursor(delta) {
+    if (!searchHits.length) return;
+    var items = searchResultsEl.querySelectorAll('.pse-item');
+    if (searchCursor >= 0 && items[searchCursor]) items[searchCursor].classList.remove('active');
+    searchCursor = (searchCursor + delta + searchHits.length) % searchHits.length;
+    var el = items[searchCursor];
+    if (el) {
+      el.classList.add('active');
+      el.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function openSearch() {
+    searchOverlayEl.classList.add('open');
+    searchInputEl.value = '';
+    renderSearchResults();
+    searchInputEl.focus();
+  }
+
+  function closeSearch() {
+    searchOverlayEl.classList.remove('open');
+    searchInputEl.blur();
+  }
+
+  function jumpToPlayer(name) {
+    closeSearch();
+    // Player cards only exist in the grouped view — switch to it first
+    if (currentMatches && currentMatches.length > 0 && !groupByPlayer) {
+      groupByPlayer = true;
+      renderDetail();
+    }
+    if (scrollToCard(playerAnchorId(name))) return;
+    // No card yet (registered but unpaired) — land on their row in the player
+    // list, expanding that section first if it is collapsed.
+    var listId = playerListAnchorId(name);
+    var listEl = document.getElementById(listId);
+    if (listEl && !registeredPlayersExpanded && listEl.closest('.registered-players-body')) {
+      registeredPlayersExpanded = true;
+      reRenderCurrentView();
+    }
+    scrollToCard(listId);
+  }
+
+  searchFabEl.addEventListener('click', openSearch);
+  document.getElementById('player-search-close').addEventListener('click', closeSearch);
+  searchInputEl.addEventListener('input', renderSearchResults);
+
+  searchOverlayEl.addEventListener('click', function(e) {
+    // Tapping the dimmed backdrop closes
+    if (e.target === searchOverlayEl) closeSearch();
+  });
+
+  searchResultsEl.addEventListener('click', function(e) {
+    var item = e.target.closest('.pse-item');
+    if (item) jumpToPlayer(item.dataset.name);
+  });
+
+  searchInputEl.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveSearchCursor(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveSearchCursor(-1); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (searchCursor >= 0 && searchHits[searchCursor]) jumpToPlayer(searchHits[searchCursor].name);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSearch();
+    }
+  });
+
   document.getElementById('nav-back-pill').addEventListener('click', function(e) {
     if (e.target.closest('.nav-back-dismiss')) return;
     navBack();
@@ -2365,8 +2638,12 @@ button { font-family: inherit; font-size: inherit; }
   });
 
   document.addEventListener('keydown', function(e) {
-    if (e.key === ',' && !e.target.closest('input, textarea, [contenteditable]')) {
+    if (e.target.closest('input, textarea, [contenteditable]')) return;
+    if (e.key === ',') {
       if (navHistory.length > 0) { e.preventDefault(); navBack(); }
+    } else if (e.key === '/' && searchFabEl.classList.contains('visible')) {
+      e.preventDefault();
+      openSearch();
     }
   });
 
