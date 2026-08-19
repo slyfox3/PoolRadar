@@ -243,7 +243,10 @@ button { font-family: inherit; font-size: inherit; }
   .header .url-input { order: 10; flex-basis: 100%; max-width: none; }
   .app { flex-direction: column; }
   .sidebar { display: none; width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid #334155; max-height: 40vh; }
-  .sidebar.mobile-open { display: block; }
+  /* Collapsed leaves a zero-width but full-height block on mobile; hide it outright */
+  .sidebar.collapsed { display: none; }
+  .sidebar.mobile-open { display: block; width: 100%; min-width: 0; padding: 12px; overflow-y: auto; }
+  .sidebar-expand, .sidebar-expand.visible { display: none; }
   .mobile-fav-toggle { display: block; }
   .flat-match { font-size: 12px; }
   .flat-match .fm-place { display: none; }
@@ -2870,15 +2873,29 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   // Sidebar collapse / Mobile
   // =====================================================
+  function isMobileLayout() {
+    return window.matchMedia('(max-width: 768px)').matches;
+  }
+
   window.toggleSidebar = function() {
     var sb = document.getElementById('sidebar');
     var exp = document.getElementById('sidebar-expand');
+    // On mobile the sidebar is a stacked panel, not a column: closing it means
+    // dropping mobile-open so it stops taking vertical space.
+    if (isMobileLayout()) {
+      sb.classList.remove('mobile-open');
+      return;
+    }
     sb.classList.toggle('collapsed');
     exp.classList.toggle('visible', sb.classList.contains('collapsed'));
   };
 
   window.toggleMobileFavs = function() {
-    document.getElementById('sidebar').classList.toggle('mobile-open');
+    var sb = document.getElementById('sidebar');
+    // Clear any desktop collapse state so reopening on mobile actually shows content.
+    sb.classList.remove('collapsed');
+    document.getElementById('sidebar-expand').classList.remove('visible');
+    sb.classList.toggle('mobile-open');
   };
 
   // =====================================================
