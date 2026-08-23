@@ -217,6 +217,9 @@ button { font-family: inherit; font-size: inherit; }
 .flat-match .fm-status { text-align: center; font-size: 11px; white-space: nowrap; }
 .flat-match .fm-p1 { padding-right: 4px; }
 .flat-match .fm-p2 { padding-left: 4px; }
+.flat-match .fm-tbd { color: #475569; font-style: italic; font-size: 11px; white-space: nowrap; }
+.flat-match .fm-tbd-prefix { margin-right: 6px; }
+.flat-match .fm-tbd-name { color: #64748b; }
 
 /* Add-fav button inline */
 .add-fav-btn { background: none; border: none; color: #475569; cursor: pointer; padding: 0 2px; font-size: 13px; }
@@ -1819,11 +1822,13 @@ button { font-family: inherit; font-size: inherit; }
         var m = brackets[i];
         bByNum[m.match_number] = {
           num: m.match_number, status: m.status, is_bye: m.is_bye, identifier: m.identifier || null,
-          p1: m.challenger1 ? { name: m.challenger1.name, rating: m.challenger1.skill_level } : null,
-          p2: m.challenger2 ? { name: m.challenger2.name, rating: m.challenger2.skill_level } : null,
+          round: m.round || null,
+          p1: m.challenger1 ? { id: m.challenger1.id, name: m.challenger1.name, rating: m.challenger1.skill_level, fargoId: m.challenger1.fargo_id, place: m.challenger1.place, playerId: m.challenger1.player_id } : null,
+          p2: m.challenger2 ? { id: m.challenger2.id, name: m.challenger2.name, rating: m.challenger2.skill_level, fargoId: m.challenger2.fargo_id, place: m.challenger2.place, playerId: m.challenger2.player_id } : null,
           s1: m.challenger1_score, s2: m.challenger2_score,
           p1Won: !!m.challenger1_is_winner, p2Won: !!m.challenger2_is_winner,
           winnerTo: m.winner_to_num, loserTo: m.loser_to_num,
+          scheduledTime: m.scheduled_time || null, startTime: m.start_time || null,
         };
       }
 
@@ -2283,9 +2288,95 @@ button { font-family: inherit; font-size: inherit; }
     }
   }
 
+  // Upcoming matches with exactly one side decided. These are dropped from
+  // `matches` (fetchMatches skips rows missing a challenger), so read them
+  // straight off the bracket map, which keeps every row.
+  function pendingHalfFilled(matches) {
+    var known = {};
+    for (var i = 0; i < matches.length; i++) known[matches[i].num] = true;
+    var out = [];
+    for (var k in bracketByNum) {
+      var b = bracketByNum[k];
+      if (known[b.num] || b.is_bye || b.status === 'COMPLETED') continue;
+      if (!b.p1 === !b.p2) continue; // need exactly one side filled
+      out.push({
+        num: b.num, status: b.status, identifier: b.identifier, round: b.round,
+        p1: b.p1, p2: b.p2, s1: null, s2: null, p1Won: false, p2Won: false,
+        scheduledTime: b.scheduledTime, startTime: b.startTime,
+        isBye: false, isForfeit: false, isPending: true,
+      });
+    }
+    return out;
+  }
+
+  // Full name -> shortest unambiguous form. First name alone where it is
+  // unique in the field, otherwise first name + last initial: a field can hold
+  // two Stephens or three Jasons, so a bare first name can mislead.
+  function buildShortNames() {
+    var byFirst = {}, nums = [], i, j, k, p, parts, first;
+    for (k in bracketByNum) nums.push(bracketByNum[k]);
+    for (i = 0; i < nums.length; i++) {
+      var sides = [nums[i].p1, nums[i].p2];
+      for (j = 0; j < 2; j++) {
+        p = sides[j];
+        if (!p) continue;
+        first = p.name.trim().split(/\s+/)[0];
+        if (!byFirst[first]) byFirst[first] = {};
+        byFirst[first][p.name] = true;
+      }
+    }
+    var out = {};
+    for (i = 0; i < nums.length; i++) {
+      var s2 = [nums[i].p1, nums[i].p2];
+      for (j = 0; j < 2; j++) {
+        p = s2[j];
+        if (!p || out[p.name]) continue;
+        parts = p.name.trim().split(/\s+/);
+        first = parts[0];
+        var last = parts[parts.length - 1];
+        var shared = Object.keys(byFirst[first]).length > 1;
+        out[p.name] = (shared && last !== first) ? first + ' ' + last.charAt(0) + '.' : first;
+      }
+    }
+    return out;
+  }
+
+  // Name the match an undecided slot is waiting on, e.g. "W of Alan/Morgan".
+  // Same one-hop feeder lookup the blockers table uses; names are shortened and
+  // carry no rating/score so the grid column stays narrow — the feeder has its
+  // own row with the live score, and the title holds the full detail.
+  function fmTbdCell(cls, matchNum, bMap, shortNames) {
+    var f = resolveFeeder(matchNum, null, bMap);
+    if (!f) return '<span class="' + cls + ' fm-tbd">TBD</span>';
+    var sides = [f.p1, f.p2], names = [], full = [];
+    for (var i = 0; i < 2; i++) {
+      var p = sides[i];
+      if (!p) { names.push('<span class="fm-tbd-name">TBD</span>'); full.push('TBD'); continue; }
+      full.push(p.name);
+      names.push('<span class="fm-tbd-name match-opponent-link" data-player="pg-' +
+        esc(p.name).replace(/\s/g, '-').toLowerCase() + '">' +
+        esc(shortNames[p.name] || p.name) + '</span>');
+    }
+    var title = (f.wl === 'L' ? 'Loser' : 'Winner') + ' of match #' + f.num +
+      (f.identifier ? ' (' + f.identifier + ')' : '') + ': ' + full[0] + ' vs ' + full[1];
+    return '<span class="' + cls + ' fm-tbd" title="' + esc(title) + '">' +
+      '<span class="fm-tbd-prefix">' + (f.wl || 'W') + ' of</span>' +
+      names[0] + '/' + names[1] + '</span>';
+  }
+
+  function fmPlayerCell(cls, p, isFav, isWinner, isLoser) {
+    var pgId = 'pg-' + esc(p.name).replace(/\s/g, '-').toLowerCase();
+    return '<span class="' + cls + ' match-opponent-link' + (isFav ? ' is-fav' : '') +
+      (isWinner ? ' fm-winner' : '') + (isLoser ? ' fm-loser' : '') +
+      '" data-player="' + pgId + '">' + esc(p.name) +
+      (p.rating ? ' <span class="fm-rating">(' + p.rating + ')</span>' : '') + '</span>';
+  }
+
   function renderFlatMatches(matches) {
     // Sort by match number descending (latest first)
-    var sorted = matches.slice().sort(function(a, b) { return b.num - a.num; });
+    var sorted = matches.concat(pendingHalfFilled(matches)).sort(function(a, b) { return b.num - a.num; });
+    var fmBMap = buildBlockerMap(bracketByNum);
+    var fmShort = buildShortNames();
     var inflightCount = 0;
     for (var ic = 0; ic < matches.length; ic++) {
       if (matches[ic].status === 'IN_PROGRESS') inflightCount++;
@@ -2294,8 +2385,8 @@ button { font-family: inherit; font-size: inherit; }
     for (var i = 0; i < sorted.length; i++) {
       var m = sorted[i];
       if (m.isBye) continue;
-      var p1Fav = isPlayerFav(m.p1);
-      var p2Fav = isPlayerFav(m.p2);
+      var p1Fav = m.p1 && isPlayerFav(m.p1);
+      var p2Fav = m.p2 && isPlayerFav(m.p2);
       var p1Win = m.p1Won;
       var p2Win = m.p2Won;
       var hasScore = m.s1 != null && m.s2 != null && (m.s1 > 0 || m.s2 > 0);
@@ -2308,10 +2399,10 @@ button { font-family: inherit; font-size: inherit; }
       html += '<div class="flat-match">';
       html += '<span class="fm-num">#' + m.num + '</span>';
       html += '<span class="fm-round">' + esc(roundLabel) + '</span>';
-      html += '<span class="fm-add">' + playerFavBtn(m.p1) + '</span>';
+      html += '<span class="fm-add">' + (m.p1 ? playerFavBtn(m.p1) : '') + '</span>';
       var completed = m.status !== 'IN_PROGRESS';
-      var p1PgId = 'pg-' + esc(m.p1.name).replace(/\s/g, '-').toLowerCase();
-      html += '<span class="fm-p1 match-opponent-link' + (p1Fav ? ' is-fav' : '') + (completed && p1Win ? ' fm-winner' : '') + (completed && p2Win ? ' fm-loser' : '') + '" data-player="' + p1PgId + '">' + esc(m.p1.name) + (m.p1.rating ? ' <span class="fm-rating">(' + m.p1.rating + ')</span>' : '') + '</span>';
+      html += m.p1 ? fmPlayerCell('fm-p1', m.p1, p1Fav, completed && p1Win, completed && p2Win)
+                   : fmTbdCell('fm-p1', m.num, fmBMap, fmShort);
       if (m.isSplit) {
         html += '<span class="fm-status"></span><span style="grid-column:span 3">Split</span>';
       } else if (m.isForfeit && m.status === 'COMPLETED') {
@@ -2337,9 +2428,9 @@ button { font-family: inherit; font-size: inherit; }
           html += '<span class="mr-s1 mr-none">&mdash;</span><span class="mr-sep"></span><span class="mr-s2"></span>';
         }
       }
-      html += '<span class="fm-add">' + playerFavBtn(m.p2) + '</span>';
-      var p2PgId = 'pg-' + esc(m.p2.name).replace(/\s/g, '-').toLowerCase();
-      html += '<span class="fm-p2 match-opponent-link' + (p2Fav ? ' is-fav' : '') + (completed && p2Win ? ' fm-winner' : '') + (completed && p1Win ? ' fm-loser' : '') + '" data-player="' + p2PgId + '">' + esc(m.p2.name) + (m.p2.rating ? ' <span class="fm-rating">(' + m.p2.rating + ')</span>' : '') + '</span>';
+      html += '<span class="fm-add">' + (m.p2 ? playerFavBtn(m.p2) : '') + '</span>';
+      html += m.p2 ? fmPlayerCell('fm-p2', m.p2, p2Fav, completed && p2Win, completed && p1Win)
+                   : fmTbdCell('fm-p2', m.num, fmBMap, fmShort);
       var fmVidHtml = '';
       if (m.videoUrl) {
         fmVidHtml = '<a href="' + esc(m.videoUrl) + '" target="_blank" title="Watch on YouTube">&#9654;</a>';
