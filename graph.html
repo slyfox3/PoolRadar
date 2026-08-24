@@ -505,11 +505,15 @@ function buildDiagram(rows, dir, fromStage, player) {
     else links.push({ from: a, to: b, hi: true });
   }
 
-  const hiIdx = [], faintIdx = [];
+  // hiPairs is the player's chain as node-id pairs, which is all the renderer
+  // needs to find those paths again in the SVG. Collected here rather than
+  // re-derived later, where the match numbers would have to be parsed back out.
+  const hiIdx = [], faintIdx = [], hiPairs = [];
   links.forEach((l, i) => {
     lines.push(`  M${l.from} ${l.ghost ? '~~~' : '-->'} M${l.to}`);
     if (l.ghost) return;              // never style an invisible link
     (l.hi ? hiIdx : faintIdx).push(i);
+    if (l.hi) hiPairs.push([l.from, l.to]);
   });
 
   // One uniform look for every match — status is no longer encoded in colour.
@@ -538,7 +542,7 @@ function buildDiagram(rows, dir, fromStage, player) {
     if (!focus || st < focus.st || (st === focus.st && n < focus.n)) focus = { n, st };
   }
 
-  return { src: lines.join('\n'), nodes: keep.size, hits: hiNodes.size, focus: focus && focus.n };
+  return { src: lines.join('\n'), nodes: keep.size, hits: hiNodes.size, focus: focus && focus.n, hiPairs };
 }
 
 // ---------------------------------------------------------------------------
@@ -713,6 +717,185 @@ function findNodeEl(mid) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// The highlighted player's edges, redrawn after Mermaid has rendered
+//
+// Mermaid itself is untouched: it parses and lays the diagram out exactly as
+// before, we drop its SVG into the page, and then we overwrite the `d` string
+// of the handful of paths that make up the selected player's run. No hook, no
+// fork, no custom renderer — the same kind of edit as setting a style on an
+// element after load. Every faint edge keeps the spline Mermaid gave it, so
+// the diagram around the player is pixel-for-pixel what it always was.
+//
+// Each highlighted edge becomes the same cubic. Its two control points sit
+// directly under the start point and directly over the end point, sharing one
+// coordinate between the two ranks — the "lane". A cubic leaves P0 heading at
+// P1 and arrives at P3 coming from P2, so that placement alone makes the edge
+// exit square out of the source's bottom face and enter square into the
+// destination's top face:
+//
+//        ┌──────┐
+//        └──┬───┘   P0 = source's bottom face
+//           ●───────────────●        P1 and P2, both on the lane
+//                           │
+//                      ┌────▼──┐
+//                      └───────┘   P3 = destination's top face
+//
+// The arrowhead is a marker-end declared orient="auto", which is a plain SVG
+// feature: the browser re-aims the marker along whatever path it is attached
+// to. So nothing below touches an arrow.
+//
+// In LR the whole construction is transposed — right face to left face.
+// ---------------------------------------------------------------------------
+
+// Mermaid's pointEnd marker is 8 user units wide with its reference point in
+// the middle, so its tip overhangs the path's last point by 4. Stopping that
+// far short puts the tip on the border instead of inside the box.
+const ARROWHEAD = 4;
+
+// Mermaid names an edge path after the two nodes it joins ("L_M107_M113_0",
+// carried on the path as data-id), and repeats a node's own id inside its
+// group id ("…-flowchart-M107-42"). Those two are the whole interface.
+const EDGE_ID = /^L_(M\d+)_(M\d+)_\d+$/;
+const NODE_ID = /(?:^|[^A-Za-z0-9])(M\d+)(?![0-9])/;
+
+// getBBox measures in the element's own coordinates and leaves the element's
+// own transform out; getCTM includes that transform and every one above it. So
+// the node's CTM composed with the inverse of the edge layer's puts the node's
+// box in exactly the user space the paths' `d` strings are written in.
+function boxInPathSpace(el, inv) {
+  const b = el.getBBox();
+  const m = inv.multiply(el.getCTM());
+  const xs = [], ys = [];
+  for (const p of [[b.x, b.y], [b.x + b.width, b.y],
+                   [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]) {
+    xs.push(m.a * p[0] + m.c * p[1] + m.e);
+    ys.push(m.b * p[0] + m.d * p[1] + m.f);
+  }
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+
+const bez = (t, p0, p1, p2, p3) => {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+};
+
+// How many sample points of a candidate curve land inside some other node's
+// box. Edges paint under nodes, so a route straight through a rank disappears
+// into it — this is the number the lane search minimises.
+function buried(sx, sy, dx, dy, lane, vert, boxes) {
+  let hit = 0;
+  for (let j = 1; j < 40; j++) {
+    const t = j / 40;
+    const x = vert ? bez(t, sx, sx, dx, dx) : bez(t, sx, lane, lane, dx);
+    const y = vert ? bez(t, sy, lane, lane, dy) : bez(t, sy, sy, dy, dy);
+    for (const b of boxes) {
+      if (x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) { hit++; break; }
+    }
+  }
+  return hit;
+}
+
+// pairs is buildDiagram's hiPairs — the selected player's chain, as [from, to]
+// match numbers. Returns how many edges were redrawn, or -1 if it could not run.
+function reroutePath(pairs, dir) {
+  if (!pairs || !pairs.length) return -1;      // no player selected: a real no-op
+  try {
+    const root = $('graph');
+    const want = new Set(pairs.map(([a, b]) => 'M' + a + '|M' + b));
+    const paths = [];
+    for (const p of root.querySelectorAll('path[data-id]')) {
+      const m = (p.getAttribute('data-id') || '').match(EDGE_ID);
+      if (m && want.has(m[1] + '|' + m[2])) paths.push({ p, a: m[1], b: m[2] });
+    }
+    if (!paths.length) return -1;
+
+    // Every edge path is a direct child of the same <g>, with no transform of
+    // its own, so one inverse serves all of them.
+    const ctm = paths[0].p.getCTM();
+    if (!ctm) return -1;
+    const inv = ctm.inverse();
+
+    const box = new Map();
+    for (const g of root.querySelectorAll('g.node')) {
+      const m = (g.id || '').match(NODE_ID);
+      if (m) box.set(m[1], boxInPathSpace(g, inv));
+    }
+
+    const vert = dir !== 'LR' && dir !== 'RL';
+    const face = (bx) => vert ? bx.x1 - bx.x0 : bx.y1 - bx.y0;
+    // The player's run is a chain, so a node carries at most one highlighted
+    // edge per face and there is nothing to spread out. But the faint feeder
+    // Mermaid drew into that same face is still there and still lands near the
+    // middle, so shift off centre towards the other end — two arrowheads on one
+    // spot read as a single broken arrow.
+    const nudge = (size, towards) => Math.sign(towards) * Math.min(size * 0.3, 14);
+
+    // Only needed by the lane search; most chains contain at most one edge
+    // that travels far enough sideways to want it.
+    let allBoxes = null;
+
+    const n = (v) => Math.round(v * 100) / 100;
+    let done = 0;
+
+    for (const { p, a, b } of paths) {
+      const S = box.get(a), D = box.get(b);
+      if (!S || !D) continue;                  // an id we cannot place: leave it alone
+      const scx = (S.x0 + S.x1) / 2, scy = (S.y0 + S.y1) / 2;
+      const dcx = (D.x0 + D.x1) / 2, dcy = (D.y0 + D.y1) / 2;
+      let sx, sy, dx, dy, lo, hi;
+      if (vert) {
+        sx = scx + nudge(S.x1 - S.x0, dcx - scx);
+        dx = dcx + nudge(D.x1 - D.x0, scx - dcx);
+        sy = S.y1; dy = D.y0 - ARROWHEAD;
+        lo = sy; hi = dy;
+      } else {
+        sy = scy + nudge(S.y1 - S.y0, dcy - scy);
+        dy = dcy + nudge(D.y1 - D.y0, scy - dcy);
+        sx = S.x1; dx = D.x0 - ARROWHEAD;
+        lo = sx; hi = dx;
+      }
+      // Not comfortably downstream — a same-rank or backwards edge is not the
+      // case this was written for, so leave Mermaid's own path in place.
+      if (![sx, sy, dx, dy].every(Number.isFinite) || !(hi - lo > 8)) continue;
+
+      // A near-vertical edge — every winners→winners and losers→losers hop —
+      // can only run through the empty gutter between two ranks, so the
+      // midpoint lane is always right and there is nothing to search for. The
+      // drop across to the losers side crosses a whole row of boxes and would
+      // vanish behind them, so for that one, try 19 lanes and keep the least
+      // buried. Ties go to the midpoint, the symmetric S you want when clear.
+      let lane = (lo + hi) / 2;
+      const travel = Math.abs(vert ? dx - sx : dy - sy);
+      if (travel > 3 * face(S)) {
+        if (!allBoxes) allBoxes = [...box.values()];
+        const near = allBoxes.filter(bx => bx !== S && bx !== D &&
+          bx.x1 >= Math.min(sx, dx) - 2 && bx.x0 <= Math.max(sx, dx) + 2 &&
+          bx.y1 >= Math.min(sy, dy) - 2 && bx.y0 <= Math.max(sy, dy) + 2);
+        let best = null;
+        for (let i = 1; i <= 19; i++) {
+          const f = i / 20, cand = lo + (hi - lo) * f;
+          const hitN = buried(sx, sy, dx, dy, cand, vert, near);
+          const off = Math.abs(f - 0.5);
+          if (!best || hitN < best.hit || (hitN === best.hit && off < best.off)) best = { cand, hit: hitN, off };
+        }
+        if (best) lane = best.cand;
+      }
+
+      p.setAttribute('d', vert
+        ? `M${n(sx)},${n(sy)} C${n(sx)},${n(lane)} ${n(dx)},${n(lane)} ${n(dx)},${n(dy)}`
+        : `M${n(sx)},${n(sy)} C${n(lane)},${n(sy)} ${n(lane)},${n(dy)} ${n(dx)},${n(dy)}`);
+      done++;
+    }
+    return done;
+  } catch (err) {
+    // A selector or a coordinate space that moved under us is not worth losing
+    // the graph over: Mermaid's own paths are still there, detours and all.
+    console.warn('Highlighted edges left as Mermaid routed them:', err);
+    return -1;
+  }
+}
+
 // The page is the only scroll container now, on both axes.
 function centerOn(el) {
   const er = el.getBoundingClientRect();
@@ -723,7 +906,7 @@ function centerOn(el) {
 
 async function render() {
   if (!state.rows.length) return;
-  const { src, nodes, hits, focus } = buildDiagram(state.rows, state.dir, state.fromStage, state.player);
+  const { src, nodes, hits, focus, hiPairs } = buildDiagram(state.rows, state.dir, state.fromStage, state.player);
 
   const total = state.rows.filter(r => !r.is_bye).length;
   const live = state.rows.filter(r => r.status === 'IN_PROGRESS').length;
@@ -736,10 +919,20 @@ async function render() {
     const { svg } = await mermaid.render('bracket-' + Date.now(), src);
     $('graph').innerHTML = svg;
     setStatus('');
+    // Straight away rather than on the next frame, so there is never a painted
+    // frame with the old splines on screen. getBBox/getCTM force the layout
+    // they need, so the numbers are real already.
+    const t0 = performance.now();
+    const routed = reroutePath(hiPairs, state.dir);
+    if (routed > 0) console.log('[reroute] %d edges in %s ms', routed, (performance.now() - t0).toFixed(1));
     // After a frame, so the SVG has been laid out and the rects are real.
-    if (focus != null) requestAnimationFrame(() => {
-      const el = findNodeEl('M' + focus);
-      if (el) centerOn(el);
+    requestAnimationFrame(() => {
+      // Second chance only if there was something to do and it could not measure.
+      if (routed < 0 && hiPairs.length) reroutePath(hiPairs, state.dir);
+      if (focus != null) {
+        const el = findNodeEl('M' + focus);
+        if (el) centerOn(el);
+      }
     });
   } catch (err) {
     // Source is no longer shown on the page, so put it where it is still
