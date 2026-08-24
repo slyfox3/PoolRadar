@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- minimum-scale under 1 is what lets a pinch go below the default zoom; no
+     maximum-scale so zooming in keeps the browser's own generous ceiling. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.2">
 <title>PoolRadar &mdash; Bracket Graph</title>
 <style>
 * { box-sizing: border-box; }
@@ -26,10 +28,37 @@ a:hover { text-decoration: underline; }
 .tb-label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
 .spacer { flex: 1; }
 
+.psearch { position: relative; display: flex; align-items: center; gap: 4px; }
+.psearch input { width: 190px; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; border-radius: 6px;
+  padding: 5px 24px 5px 26px; font-size: 12px; font-family: inherit; outline: none; }
+.psearch input:focus { border-color: #3b82f6; }
+.pse-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px;
+  color: #64748b; pointer-events: none; }
+.psearch:hover .pse-icon, .psearch:focus-within .pse-icon { color: #94a3b8; }
+.pse-kbd { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); color: #475569;
+  font: 10px/1 'SF Mono', Menlo, Consolas, monospace; border: 1px solid #334155; border-radius: 3px;
+  padding: 2px 4px; pointer-events: none; }
+.psearch input:focus ~ .pse-kbd, .psearch input.picked ~ .pse-kbd { display: none; }
+.psearch input.picked { border-color: #60a5fa; color: #dbeafe; }
+.pse-list { position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 60; min-width: 240px; max-height: 300px;
+  overflow-y: auto; background: #1e293b; border: 1px solid #475569; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none; }
+.pse-list.open { display: block; }
+.pse-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; color: #e2e8f0; font-size: 13px; }
+.pse-item.active, .pse-item:hover { background: #334155; }
+.pse-item.out { cursor: default; }
+.pse-item.out:hover { background: none; }
+.pse-item.out .pse-name, .pse-item.out .pse-name mark { color: #f87171; }
+.pse-item.out .pse-meta { color: #7f1d1d; }
+.pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
+.pse-meta { margin-left: auto; padding-left: 8px; color: #64748b; font-size: 11px; white-space: nowrap; }
+.pse-empty { padding: 12px 10px; color: #64748b; font-size: 12px; }
+
 .legend { display: flex; gap: 14px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155; font-size: 11px; color: #64748b; flex-wrap: wrap; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
 .swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid; display: inline-block; }
 .lg-win { color: #fbbf24; }
+.lg-lose { color: #f87171; }
 .lg-drop { color: #64748b; font-size: 10px; }
 .solid { width: 18px; border-top: 2px solid #64748b; display: inline-block; }
 
@@ -38,9 +67,14 @@ a:hover { text-decoration: underline; }
 .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #334155; border-top-color: #60a5fa; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-#viewport { overflow: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
-#graph { transform-origin: 0 0; }
-#graph svg { max-width: none !important; height: auto; }
+/* The graph overflows the page rather than sitting in its own scroll box: a
+   device-width scroll container would clip at the same place however far you
+   pinched out, so zooming out would shrink everything and reveal nothing. */
+#viewport { padding: 16px; touch-action: pan-x pan-y pinch-zoom; }
+#graph { display: inline-block; }
+/* Full-bleed bars, so they still span when scrolled right past device width */
+.header, .toolbar, .legend, #status { min-width: max-content; }
+#graph svg { max-width: none !important; }
 /* Mermaid renders labels as HTML in a foreignObject, so the tags inside a
    node label are stylable from here: <b> the match winner, <i> a slot still
    waiting on a feeder, <small> the loser's drop destination. classDef sets
@@ -48,6 +82,9 @@ a:hover { text-decoration: underline; }
 #graph b { color: #fbbf24 !important; font-weight: 400; }
 #graph i { color: #64748b !important; font-style: italic; }
 #graph small { color: #64748b !important; font-size: 10px; }
+#graph em { color: #f87171 !important; font-style: normal; }
+#graph .pn1, #graph .pn2 { cursor: pointer; }
+#graph .pn1:hover, #graph .pn2:hover { text-decoration: underline; }
 
 @media (max-width: 768px) {
   .header h1 { font-size: 16px; }
@@ -69,14 +106,20 @@ a:hover { text-decoration: underline; }
   <span class="tb-group"><span class="tb-label">From</span>
     <select class="select-input" id="round-from"><option value="0">All stages</option></select>
   </span>
+  <span class="tb-group"><span class="tb-label">Player</span>
+    <span class="psearch" title="Highlight a player (/)">
+      <svg class="pse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
+      <input type="text" id="player-input" placeholder="Highlight a player…" autocomplete="off"
+             autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Highlight a player (press / to focus)">
+      <kbd class="pse-kbd">/</kbd>
+      <div class="pse-list" id="player-list" role="listbox"></div>
+    </span>
+    <button class="toggle-btn" id="player-clear" hidden>&times;</button>
+  </span>
   <span class="tb-group"><span class="tb-label">Flow</span>
     <button class="toggle-btn" data-dir="TB">&darr;</button>
     <button class="toggle-btn" data-dir="LR">&rarr;</button>
-  </span>
-  <span class="tb-group"><span class="tb-label">Zoom</span>
-    <button class="toggle-btn" id="zoom-out">&minus;</button>
-    <button class="toggle-btn" id="zoom-reset">100%</button>
-    <button class="toggle-btn" id="zoom-in">+</button>
   </span>
   <span class="spacer"></span>
   <span class="sub" id="counts"></span>
@@ -84,8 +127,10 @@ a:hover { text-decoration: underline; }
 
 <div class="legend">
   <span><b class="lg-win">Gold</b> = won the match</span>
+  <span><span class="lg-lose">Red</span> = highlighted player lost this one</span>
   <span><i class="solid"></i> winner advances</span>
   <span><span class="lg-drop">(L to L4-4)</span> = where this match sends its loser</span>
+  <span>click a name to highlight that player &middot; click again to clear</span>
 </div>
 
 <div id="status"></div>
@@ -103,14 +148,18 @@ mermaid.initialize({
   // A full double-elim bracket is ~126 nodes / ~250 edges, well past the defaults.
   maxTextSize: 500000,
   maxEdges: 2000,
-  flowchart: { curve: 'basis', nodeSpacing: 22, rankSpacing: 60, padding: 6 },
+  // useMaxWidth:false is the important one — left on, Mermaid emits a
+  // responsive SVG that scales to the container, so the more rounds are shown
+  // the smaller every box gets. Off, nodes keep a constant readable size and
+  // the page scrolls instead.
+  flowchart: { curve: 'basis', nodeSpacing: 22, rankSpacing: 60, padding: 6, useMaxWidth: false },
 });
 
 const QUERY = `query($s:String!){
   tournaments(where:{slug:{_eq:$s}},limit:1){name status}
   tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){
     match_number round identifier status is_bye
-    challenger1{name} challenger2{name}
+    challenger1{name skill_level} challenger2{name skill_level}
     challenger1_score challenger2_score
     challenger1_is_winner challenger2_is_winner
     winner_to_num loser_to_num
@@ -118,7 +167,7 @@ const QUERY = `query($s:String!){
 }`;
 
 const $ = (id) => document.getElementById(id);
-const state = { dir: 'TB', zoom: 1, fromStage: 0, rows: [], tournament: null };
+const state = { dir: 'TB', fromStage: 0, player: null, rows: [], tournament: null };
 
 function setStatus(msg, isError) {
   const el = $('status');
@@ -137,6 +186,9 @@ async function gql(query, variables) {
   if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
   return json.data;
 }
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Mermaid treats these as syntax even inside a quoted label.
 function mmEsc(s) {
@@ -170,27 +222,49 @@ function buildShortNames(rows) {
   return out;
 }
 
-function nodeLabel(r, short, feeders, dropTo) {
+function nodeLabel(r, short, feeders, dropTo, player) {
+  // In a selected player's matches both sides get their full name and rating —
+  // that is the detail you want when following one player, and the shortened
+  // form is only there to keep the general view narrow.
+  const spotlight = player && playerIn(r, player);
+  const decided = !!(r.challenger1_is_winner || r.challenger2_is_winner);
   // An empty slot is waiting on a specific match, so name it rather than
   // printing TBD twice. Feeders that already have a winner have delivered
   // their player, so only undecided ones can correspond to an empty slot.
   const pending = (feeders.get(r.match_number) || [])
     .filter(f => !f.src.challenger1_is_winner && !f.src.challenger2_is_winner);
   let fi = 0;
-  const line = (c, score, won) => {
+  // slot is 1 or 2 — the wrapper is what lets a delegated click tell which of
+  // the two players in a node was clicked.
+  const line = (c, score, won, slot) => {
     if (!c) {
       const f = pending[fi++];
       if (!f) return '<i>TBD</i>';
       return '<i>' + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.match_number)) + '</i>';
     }
-    const nm = mmEsc(short.get(c.name) || c.name);
+    const nm = mmEsc(spotlight
+      ? c.name + (c.skill_level ? ' (' + c.skill_level + ')' : '')
+      : (short.get(c.name) || c.name));
     const sc = score == null ? '' : ' ' + score;
-    return (won ? '<b>' + nm + '</b>' : nm) + sc;
+    // In a spotlighted match only the selected player is coloured — gold won,
+    // red lost — so their run reads at a glance. The opponent stays default
+    // even when they won, so the two can never be confused.
+    let body = nm;
+    if (spotlight) {
+      const mine = c.name === player;
+      if (mine && won) body = '<b>' + nm + '</b>';
+      else if (mine && decided) body = '<em>' + nm + '</em>';
+    } else if (won) {
+      body = '<b>' + nm + '</b>';
+    }
+    // Single-quoted attribute: the label itself is delimited by double quotes,
+    // which is why mmEsc strips them from the text in the first place.
+    return "<span class='pn" + slot + "'>" + body + '</span>' + sc;
   };
   const parts = [
     mmEsc(r.identifier || ('#' + r.match_number)),
-    line(r.challenger1, r.challenger1_score, r.challenger1_is_winner),
-    line(r.challenger2, r.challenger2_score, r.challenger2_is_winner),
+    line(r.challenger1, r.challenger1_score, r.challenger1_is_winner, 1),
+    line(r.challenger2, r.challenger2_score, r.challenger2_is_winner, 2),
   ];
   // Where the loser drops, as a footnote on the match itself rather than a
   // separate node with an edge into it.
@@ -231,25 +305,34 @@ function stageRounds(stage, haveW, haveL) {
   return out;
 }
 
-function buildDiagram(rows, dir, fromStage) {
+const playerIn = (r, name) =>
+  (r.challenger1 && r.challenger1.name === name) ||
+  (r.challenger2 && r.challenger2.name === name);
+
+// Which matches survive the stage cut. Shared with the player search so the
+// dropdown and the diagram can never disagree about what is on screen.
+function keptMatches(rows, fromStage) {
+  const byNum = new Map(rows.map(r => [r.match_number, r]));
+  const keep = new Set(rows.filter(r => !r.is_bye).map(r => r.match_number));
+  if (!(fromStage > 0)) return keep;
+  // Keep whole stages, so picking W4 brings L5/L6 rather than L4 — L4 belongs
+  // to stage 3 and would otherwise dangle without its winners round.
+  for (const n of Array.from(keep)) {
+    const r = byNum.get(n);
+    if (r && r.round != null && stageOf(r.round) < fromStage) keep.delete(n);
+  }
+  // The deep losers rounds outrank the final (L10 vs W7), so a cut past the
+  // winners depth would drop it. Every option says "→ final", so honour that.
+  for (const r of rows) {
+    if (!r.is_bye && r.winner_to_num == null) keep.add(r.match_number);
+  }
+  return keep;
+}
+
+function buildDiagram(rows, dir, fromStage, player) {
   const byNum = new Map(rows.map(r => [r.match_number, r]));
   const short = buildShortNames(rows);
-
-  const keep = new Set(rows.filter(r => !r.is_bye).map(r => r.match_number));
-
-  // Stage cut: keep whole stages, so picking W4 brings L5/L6 rather than L4 —
-  // L4 belongs to stage 3 and would otherwise dangle without its winners round.
-  if (fromStage > 0) {
-    for (const n of Array.from(keep)) {
-      const r = byNum.get(n);
-      if (r && r.round != null && stageOf(r.round) < fromStage) keep.delete(n);
-    }
-    // The deep losers rounds outrank the final (L10 vs W7), so a cut past the
-    // winners depth would drop it. Every option says "→ final", so honour that.
-    for (const r of rows) {
-      if (!r.is_bye && r.winner_to_num == null) keep.add(r.match_number);
-    }
-  }
+  const keep = keptMatches(rows, fromStage);
 
   // Hop over byes so an edge lands on a real match.
   const hop = (n) => {
@@ -376,27 +459,197 @@ function buildDiagram(rows, dir, fromStage) {
       const label = k === 0 ? 'Unranked' : (k > 0 ? 'Winners R' + k : 'Losers R' + Math.abs(k));
       sgIds.push(id);
       lines.push(`${pad}subgraph ${id}["${label}"]`);
-      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number))}"]`);
+      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), player)}"]`);
       lines.push(`${pad}end`);
     }
     if (wrap) lines.push('  end');
   }
 
-  for (const [a, b] of ghosts) {
-    lines.push(`  M${a.match_number} ~~~ M${b.match_number}`);
+  // Links are collected before emission because linkStyle addresses them by
+  // position, so the order has to be fixed before any index is handed out.
+  const links = [];
+  for (const [a, b] of ghosts) links.push({ from: a.match_number, to: b.match_number, ghost: true });
+  for (const e of edges) links.push({ from: e.from.match_number, to: e.to.match_number });
+
+  // A selected player's real progression, which includes the two steps drawn
+  // for nobody else: out of round 1, and the drop across to the losers side.
+  const hiNodes = new Set();
+  const path = [];
+  if (player) {
+    for (const r of rows) {
+      if (r.is_bye || !playerIn(r, player) || !keep.has(r.match_number)) continue;
+      hiNodes.add(r.match_number);
+      const c1 = r.challenger1 && r.challenger1.name === player;
+      const won = (c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner);
+      const decided = r.challenger1_is_winner || r.challenger2_is_winner;
+      if (!decided) continue;
+      const next = hop(won ? r.winner_to_num : r.loser_to_num);
+      if (next != null && keep.has(next)) path.push([r.match_number, next]);
+    }
+  }
+  // A ghost on the path is promoted to a real edge — styling cannot make `~~~`
+  // visible. An edge already drawn is marked in place rather than duplicated.
+  for (const [a, b] of path) {
+    const at = links.findIndex(l => l.from === a && l.to === b);
+    if (at >= 0) { links[at].ghost = false; links[at].hi = true; }
+    else links.push({ from: a, to: b, hi: true });
   }
 
-  for (const e of edges) {
-    const arrow = e.kind === 'W' ? '-->' : '-.->';
-    lines.push(`  M${e.from.match_number} ${arrow} M${e.to.match_number}`);
-  }
+  const hiIdx = [], faintIdx = [];
+  links.forEach((l, i) => {
+    lines.push(`  M${l.from} ${l.ghost ? '~~~' : '-->'} M${l.to}`);
+    if (l.ghost) return;              // never style an invisible link
+    (l.hi ? hiIdx : faintIdx).push(i);
+  });
 
   // One uniform look for every match — status is no longer encoded in colour.
+  const plain = kept.filter(r => !hiNodes.has(r.match_number));
   lines.push('  classDef match fill:#1e293b,stroke:#475569,color:#cbd5e1');
-  if (kept.length) lines.push(`  class ${kept.map(r => 'M' + r.match_number).join(',')} match`);
+  if (plain.length) lines.push(`  class ${plain.map(r => 'M' + r.match_number).join(',')} match`);
+  if (hiNodes.size) {
+    lines.push('  classDef hilite fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#e2e8f0');
+    lines.push(`  class ${[...hiNodes].map(n => 'M' + n).join(',')} hilite`);
+  }
+  // Indices are listed explicitly rather than using `linkStyle default`, which
+  // would also hit the invisible links and make them show up.
+  if (player && hiIdx.length) {
+    if (faintIdx.length) lines.push(`  linkStyle ${faintIdx.join(',')} stroke:#1e293b,stroke-width:1px`);
+    lines.push(`  linkStyle ${hiIdx.join(',')} stroke:#60a5fa,stroke-width:3px`);
+  }
   for (const id of sgIds) lines.push(`  style ${id} fill:none,stroke:#334155,color:#64748b`);
   for (const id of stageIds) lines.push(`  style ${id} fill:none,stroke:none`);
-  return { src: lines.join('\n'), nodes: keep.size };
+
+  // Where the player enters the visible bracket — earliest stage wins, so it
+  // works whichever side that is, and it follows the cut rather than assuming
+  // round 1 is on screen. Match number only breaks ties within a stage.
+  let focus = null;
+  for (const n of hiNodes) {
+    const st = stageOf(byNum.get(n).round);
+    if (!focus || st < focus.st || (st === focus.st && n < focus.n)) focus = { n, st };
+  }
+
+  return { src: lines.join('\n'), nodes: keep.size, hits: hiNodes.size, focus: focus && focus.n };
+}
+
+// ---------------------------------------------------------------------------
+// Player search — same ranking as index.html: prefix matches rank above
+// mid-word ones, and every token has to match somewhere.
+// ---------------------------------------------------------------------------
+const SEARCH_CAP = 12;
+let searchHits = [], searchCursor = -1;
+
+// `out` means "has no match among the rounds currently shown", not
+// "eliminated" — selecting such a player would highlight nothing at all, which
+// is the state worth preventing. It follows the stage cut, so the same player
+// is selectable at one cut and not at another.
+function collectPlayers(rows, keep) {
+  const byName = new Map();
+  for (const r of rows) {
+    for (const c of [r.challenger1, r.challenger2]) {
+      if (!c || !c.name) continue;
+      const k = c.name.toLowerCase();
+      if (!byName.has(k)) {
+        byName.set(k, { name: c.name, played: 0, won: 0, shown: 0, pending: false, lastWon: null, lastKey: -1 });
+      }
+      const e = byName.get(k);
+      if (r.is_bye) continue;
+      if (keep.has(r.match_number)) e.shown++;
+      const decided = r.challenger1_is_winner || r.challenger2_is_winner;
+      if (!decided) { e.pending = true; continue; }
+      e.played++;
+      const c1 = r.challenger1 && r.challenger1.name === c.name;
+      const won = (c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner);
+      if (won) e.won++;
+      const key = stageOf(r.round) * 1000 + r.match_number;
+      if (key > e.lastKey) { e.lastKey = key; e.lastWon = won; }
+    }
+  }
+  for (const e of byName.values()) {
+    e.out = e.shown === 0;
+    // Label only — selectability is `out`, above. Derived rather than read off
+    // the API's `place`, so no extra field is fetched: a player still in the
+    // running always sits in some undecided match, and winning your last
+    // decided match means champion or awaiting, never eliminated.
+    e.eliminated = !e.pending && e.lastWon === false;
+  }
+  return [...byName.values()];
+}
+
+function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function rankPlayers(query) {
+  const players = collectPlayers(state.rows, keptMatches(state.rows, state.fromStage));
+  const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!toks.length) return players.sort((a, b) => a.name.localeCompare(b.name));
+  const scored = [];
+  for (const p of players) {
+    const lname = p.name.toLowerCase();
+    const words = lname.split(/\s+/);
+    let score = 0, ok = true;
+    for (const tk of toks) {
+      if (lname.indexOf(tk) === 0) continue;
+      if (words.some(w => w.indexOf(tk) === 0)) { score += 1; continue; }
+      if (lname.indexOf(tk) !== -1) { score += 3; continue; }
+      ok = false;
+      break;
+    }
+    if (ok) scored.push({ p, score });
+  }
+  scored.sort((a, b) => a.score - b.score || a.p.name.localeCompare(b.p.name));
+  return scored.map(s => s.p);
+}
+
+function highlightName(name, toks) {
+  if (!toks.length) return esc(name);
+  const parts = name.split(new RegExp('(' + toks.map(reEsc).join('|') + ')', 'ig'));
+  return parts.map((p, i) => (i % 2 === 1 ? '<mark>' + esc(p) + '</mark>' : esc(p))).join('');
+}
+
+function renderResults() {
+  const list = $('player-list');
+  if (!state.rows.length) { list.classList.remove('open'); return; }
+  const query = $('player-input').value;
+  const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const all = rankPlayers(query);
+  searchHits = all.slice(0, SEARCH_CAP);
+  searchCursor = searchHits.length ? 0 : -1;
+  if (!searchHits.length) {
+    list.innerHTML = '<div class="pse-empty">No player matches &ldquo;' + esc(query) + '&rdquo;</div>';
+  } else {
+    const firstLive = searchHits.findIndex(p => !p.out);
+    searchCursor = firstLive;
+    list.innerHTML = searchHits.map((p, i) =>
+      '<div class="pse-item' + (i === firstLive ? ' active' : '') + (p.out ? ' out' : '') +
+      '" role="option"' + (p.out ? ' aria-disabled="true"' : ' data-name="' + esc(p.name) + '"') + '>' +
+      '<span class="pse-name">' + highlightName(p.name, toks) + '</span>' +
+      '<span class="pse-meta">' + p.won + '-' + (p.played - p.won) +
+      (p.eliminated ? ' &middot; eliminated' : p.out ? ' &middot; not shown' : '') + '</span></div>').join('') +
+      (all.length > searchHits.length
+        ? '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + all.length + '</div>' : '');
+  }
+  list.classList.add('open');
+}
+
+// Steps over eliminated entries — they are listed for reference but cannot be
+// picked, so landing the cursor on one would be a dead end.
+function moveCursor(delta) {
+  if (!searchHits.some(p => !p.out)) return;
+  const items = $('player-list').querySelectorAll('.pse-item');
+  if (searchCursor >= 0 && items[searchCursor]) items[searchCursor].classList.remove('active');
+  let i = searchCursor;
+  do {
+    i = (i + delta + searchHits.length) % searchHits.length;
+  } while (searchHits[i].out && i !== searchCursor);
+  searchCursor = i;
+  const el = items[searchCursor];
+  if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
+}
+
+function pickPlayer(name) {
+  state.player = name || null;
+  pickPlayerUI(state.player);
+  syncUrl(parseSlug($('slug-input').value));
+  render();
 }
 
 // Options are stages, built from the rounds the bracket actually has, so each
@@ -428,38 +681,50 @@ function populateRounds(rows) {
   sel.classList.toggle('filtered', state.fromStage > 0);
 }
 
+// Mermaid ids its node groups "flowchart-<id>-<n>". Match on a boundary so M1
+// does not also hit M10 or M12.
+function findNodeEl(mid) {
+  const re = new RegExp('(^|[^A-Za-z0-9])' + mid + '([^0-9]|$)');
+  for (const g of $('graph').querySelectorAll('g.node')) {
+    if (re.test(g.id || '')) return g;
+  }
+  return null;
+}
+
+// The page is the only scroll container now, on both axes.
+function centerOn(el) {
+  const er = el.getBoundingClientRect();
+  const x = er.left + window.scrollX + er.width / 2 - window.innerWidth / 2;
+  const y = er.top + window.scrollY + er.height / 2 - window.innerHeight / 2;
+  window.scrollTo({ left: Math.max(0, x), top: Math.max(0, y), behavior: 'smooth' });
+}
+
 async function render() {
   if (!state.rows.length) return;
-  const { src, nodes } = buildDiagram(state.rows, state.dir, state.fromStage);
+  const { src, nodes, hits, focus } = buildDiagram(state.rows, state.dir, state.fromStage, state.player);
 
   const total = state.rows.filter(r => !r.is_bye).length;
   const live = state.rows.filter(r => r.status === 'IN_PROGRESS').length;
   const left = state.rows.filter(r => !r.is_bye && r.status !== 'COMPLETED').length;
-  $('counts').textContent = `${nodes} of ${total} matches · ${left} left · ${live} in progress`;
+  $('counts').textContent = state.player
+    ? `${state.player}: ${hits} match${hits === 1 ? '' : 'es'} shown of ${nodes}`
+    : `${nodes} of ${total} matches · ${left} left · ${live} in progress`;
 
   try {
     const { svg } = await mermaid.render('bracket-' + Date.now(), src);
     $('graph').innerHTML = svg;
     setStatus('');
+    // After a frame, so the SVG has been laid out and the rects are real.
+    if (focus != null) requestAnimationFrame(() => {
+      const el = findNodeEl('M' + focus);
+      if (el) centerOn(el);
+    });
   } catch (err) {
     // Source is no longer shown on the page, so put it where it is still
     // reachable when a render fails.
     console.error('Mermaid render failed\n', err, '\n--- source ---\n', src);
     setStatus('Mermaid failed to render: ' + err.message + ' (source logged to console)', true);
   }
-  applyZoom();
-}
-
-function applyZoom() {
-  $('graph').style.transform = `scale(${state.zoom})`;
-  const svg = $('graph').querySelector('svg');
-  if (svg) {
-    // transform doesn't affect layout, so size the wrapper to keep scrollbars honest
-    const r = svg.getBoundingClientRect();
-    $('graph').style.width = (r.width / state.zoom) + 'px';
-    $('viewport').style.minHeight = Math.min(r.height + 40, window.innerHeight) + 'px';
-  }
-  $('zoom-reset').textContent = Math.round(state.zoom * 100) + '%';
 }
 
 function syncButtons() {
@@ -473,11 +738,40 @@ function parseSlug(raw) {
   return m ? m[1] : s.replace(/^\/+|\/+$/g, '');
 }
 
+// Snap a name from the URL onto the bracket's exact spelling, or drop it —
+// highlighting matches on an exact name, so a near miss would silently
+// highlight nothing and look like a bug.
+function resolvePlayer() {
+  if (!state.player) { pickPlayerUI(null); return; }
+  const want = state.player.toLowerCase();
+  const keep = keptMatches(state.rows, state.fromStage);
+  const hit = collectPlayers(state.rows, keep).find(p => p.name.toLowerCase() === want);
+  // Someone with nothing on screen cannot be chosen from the list, so a link
+  // naming one is refused too, and so is a selection left stranded by moving
+  // the stage cut past all their matches.
+  if (hit && hit.out) {
+    setStatus(esc(hit.name) + ' has no matches in the rounds currently shown.', true);
+    state.player = null;
+  } else {
+    state.player = hit ? hit.name : null;
+  }
+  pickPlayerUI(state.player);
+}
+
+function pickPlayerUI(name) {
+  $('player-input').value = name || '';
+  $('player-input').classList.toggle('picked', !!name);
+  $('player-clear').hidden = !name;
+  $('player-list').classList.remove('open');
+}
+
 function syncUrl(slug) {
   const url = new URL(location);
   url.searchParams.set('digitalpool', slug);
   if (state.fromStage > 0) url.searchParams.set('from', String(state.fromStage));
   else url.searchParams.delete('from');
+  if (state.player) url.searchParams.set('player', state.player);
+  else url.searchParams.delete('player');
   history.replaceState(null, '', url);
 }
 
@@ -497,6 +791,7 @@ async function load(slug) {
     $('back-link').textContent = '← ' + name;
     setStatus('Loaded ' + state.rows.length + ' bracket rows in ' + Math.round(performance.now() - t0) + ' ms');
     populateRounds(state.rows);
+    resolvePlayer();
     syncUrl(slug);
     await render();
   } catch (err) {
@@ -510,12 +805,67 @@ document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click',
 $('round-from').addEventListener('change', (e) => {
   state.fromStage = parseInt(e.target.value, 10) || 0;
   e.target.classList.toggle('filtered', state.fromStage > 0);
+  // Selectability follows the cut, so a narrower one can strand the current
+  // selection with nothing to highlight.
+  resolvePlayer();
   syncUrl(parseSlug($('slug-input').value));
   render();
 });
-$('zoom-in').addEventListener('click', () => { state.zoom = Math.min(3, state.zoom * 1.25); applyZoom(); });
-$('zoom-out').addEventListener('click', () => { state.zoom = Math.max(0.2, state.zoom / 1.25); applyZoom(); });
-$('zoom-reset').addEventListener('click', () => { state.zoom = 1; applyZoom(); });
+$('player-input').addEventListener('input', renderResults);
+$('player-input').addEventListener('focus', renderResults);
+$('player-input').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor(-1); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const hit = searchCursor >= 0 ? searchHits[searchCursor] : null;
+    if (hit && !hit.out) pickPlayer(hit.name);
+  } else if (e.key === 'Escape') {
+    $('player-list').classList.remove('open');
+    $('player-input').blur();
+  }
+});
+$('player-list').addEventListener('mousedown', (e) => {
+  // mousedown, not click — the input's blur would close the list first.
+  const item = e.target.closest('.pse-item');
+  if (!item) return;
+  e.preventDefault();
+  if (!item.classList.contains('out')) pickPlayer(item.dataset.name);
+});
+$('player-clear').addEventListener('click', () => pickPlayer(null));
+
+// One delegated listener, attached once — only #graph's contents are replaced
+// on re-render, never the element itself. Element.closest walks out of the
+// label's foreignObject into the SVG, so both lookups work from one event.
+$('graph').addEventListener('click', (e) => {
+  const span = e.target.closest('.pn1, .pn2');
+  if (!span) return;
+  const node = span.closest('g.node');
+  const m = node && (node.id || '').match(/[^A-Za-z0-9]M(\d+)(?![0-9])/);
+  if (!m) return;
+  const row = state.rows.find(r => r.match_number === +m[1]);
+  if (!row) return;
+  const c = span.classList.contains('pn1') ? row.challenger1 : row.challenger2;
+  if (!c || !c.name) return;
+  if (state.player === c.name) { pickPlayer(null); return; }   // click again to clear
+  // Same rule as the dropdown: only players with something on screen.
+  const p = collectPlayers(state.rows, keptMatches(state.rows, state.fromStage))
+    .find(x => x.name === c.name);
+  if (p && !p.out) pickPlayer(c.name);
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.psearch')) $('player-list').classList.remove('open');
+});
+document.addEventListener('keydown', (e) => {
+  // Same guard as index.html — "/" is a normal character while typing.
+  if (e.target.closest('input, textarea, [contenteditable]')) return;
+  if (e.key !== '/' || !state.rows.length) return;
+  e.preventDefault();
+  const input = $('player-input');
+  input.focus();
+  input.select();
+  renderResults();
+});
 $('load-btn').addEventListener('click', () => load(parseSlug($('slug-input').value)));
 $('slug-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') load(parseSlug($('slug-input').value));
@@ -524,6 +874,7 @@ $('slug-input').addEventListener('keydown', (e) => {
 syncButtons();
 const params = new URLSearchParams(location.search);
 state.fromStage = Math.max(0, parseInt(params.get('from') || '0', 10) || 0);
+state.player = params.get('player') || null;
 const initial = params.get('digitalpool') || '';
 $('slug-input').value = initial;
 load(initial);
