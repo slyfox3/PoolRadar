@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoolRadar &mdash; Bracket Graph</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; font-size: 14px; }
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; flex-wrap: wrap; }
+.header h1 { margin: 0; font-size: 18px; color: #f8fafc; flex-shrink: 0; }
+.header .sub { color: #64748b; font-size: 12px; }
+.url-input { flex: 1; min-width: 180px; max-width: 420px; padding: 7px 12px; border: 1px solid #475569; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 14px; font-family: inherit; }
+
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: #1e293b; border-bottom: 1px solid #334155; flex-wrap: wrap; }
+.toggle-btn { background: #0f172a; border: 1px solid #475569; color: #94a3b8; border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 12px; font-family: inherit; }
+.toggle-btn:hover { border-color: #64748b; color: #e2e8f0; }
+.toggle-btn.active { background: #1d4ed8; border-color: #3b82f6; color: #f8fafc; }
+.tb-group { display: flex; gap: 4px; align-items: center; }
+.select-input { background: #0f172a; border: 1px solid #475569; color: #94a3b8; border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: inherit; cursor: pointer; }
+.select-input:hover { border-color: #64748b; color: #e2e8f0; }
+.select-input.filtered { border-color: #3b82f6; color: #dbeafe; }
+.tb-label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
+.spacer { flex: 1; }
+
+.legend { display: flex; gap: 14px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155; font-size: 11px; color: #64748b; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid; display: inline-block; }
+.lg-win { color: #fbbf24; }
+.lg-drop { color: #64748b; font-size: 10px; }
+.solid { width: 18px; border-top: 2px solid #64748b; display: inline-block; }
+
+#status { padding: 12px 16px; font-size: 13px; color: #94a3b8; }
+#status.error { color: #fca5a5; }
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #334155; border-top-color: #60a5fa; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#viewport { overflow: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
+#graph { transform-origin: 0 0; }
+#graph svg { max-width: none !important; height: auto; }
+/* Mermaid renders labels as HTML in a foreignObject, so the tags inside a
+   node label are stylable from here: <b> the match winner, <i> a slot still
+   waiting on a feeder, <small> the loser's drop destination. classDef sets
+   colour on the label, hence !important. */
+#graph b { color: #fbbf24 !important; font-weight: 400; }
+#graph i { color: #64748b !important; font-style: italic; }
+#graph small { color: #64748b !important; font-size: 10px; }
+
+@media (max-width: 768px) {
+  .header h1 { font-size: 16px; }
+  .url-input { max-width: none; flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Bracket Graph</h1>
+  <input class="url-input" id="slug-input" placeholder="tournament slug or digitalpool.com URL">
+  <button class="toggle-btn" id="load-btn">Load</button>
+  <span class="spacer"></span>
+  <a id="back-link" href="index.html">&larr; PoolRadar</a>
+</div>
+
+<div class="toolbar">
+  <span class="tb-group"><span class="tb-label">From</span>
+    <select class="select-input" id="round-from"><option value="0">All stages</option></select>
+  </span>
+  <span class="tb-group"><span class="tb-label">Flow</span>
+    <button class="toggle-btn" data-dir="TB">&darr;</button>
+    <button class="toggle-btn" data-dir="LR">&rarr;</button>
+  </span>
+  <span class="tb-group"><span class="tb-label">Zoom</span>
+    <button class="toggle-btn" id="zoom-out">&minus;</button>
+    <button class="toggle-btn" id="zoom-reset">100%</button>
+    <button class="toggle-btn" id="zoom-in">+</button>
+  </span>
+  <span class="spacer"></span>
+  <span class="sub" id="counts"></span>
+</div>
+
+<div class="legend">
+  <span><b class="lg-win">Gold</b> = won the match</span>
+  <span><i class="solid"></i> winner advances</span>
+  <span><span class="lg-drop">(L to L4-4)</span> = where this match sends its loser</span>
+</div>
+
+<div id="status"></div>
+<div id="viewport"><div id="graph"></div></div>
+
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+const GQL = 'https://api-cached.digitalpool.com/';
+
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  securityLevel: 'strict',
+  // A full double-elim bracket is ~126 nodes / ~250 edges, well past the defaults.
+  maxTextSize: 500000,
+  maxEdges: 2000,
+  flowchart: { curve: 'basis', nodeSpacing: 22, rankSpacing: 60, padding: 6 },
+});
+
+const QUERY = `query($s:String!){
+  tournaments(where:{slug:{_eq:$s}},limit:1){name status}
+  tournament_brackets(where:{tournament:{slug:{_eq:$s}}},order_by:{match_number:asc}){
+    match_number round identifier status is_bye
+    challenger1{name} challenger2{name}
+    challenger1_score challenger2_score
+    challenger1_is_winner challenger2_is_winner
+    winner_to_num loser_to_num
+  }
+}`;
+
+const $ = (id) => document.getElementById(id);
+const state = { dir: 'TB', zoom: 1, fromStage: 0, rows: [], tournament: null };
+
+function setStatus(msg, isError) {
+  const el = $('status');
+  el.className = isError ? 'error' : '';
+  el.innerHTML = msg;
+}
+
+async function gql(query, variables) {
+  const res = await fetch(GQL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
+  return json.data;
+}
+
+// Mermaid treats these as syntax even inside a quoted label.
+function mmEsc(s) {
+  return String(s)
+    .replace(/#/g, '#35;')
+    .replace(/"/g, '#quot;')
+    .replace(/[\[\]{}()<>|]/g, (c) => '#' + c.charCodeAt(0) + ';');
+}
+
+// First name where unique in the field, else first name + last initial.
+function buildShortNames(rows) {
+  const byFirst = new Map();
+  for (const r of rows) {
+    for (const c of [r.challenger1, r.challenger2]) {
+      if (!c) continue;
+      const first = c.name.trim().split(/\s+/)[0];
+      if (!byFirst.has(first)) byFirst.set(first, new Set());
+      byFirst.get(first).add(c.name);
+    }
+  }
+  const out = new Map();
+  for (const r of rows) {
+    for (const c of [r.challenger1, r.challenger2]) {
+      if (!c || out.has(c.name)) continue;
+      const parts = c.name.trim().split(/\s+/);
+      const first = parts[0], last = parts[parts.length - 1];
+      const shared = byFirst.get(first).size > 1;
+      out.set(c.name, shared && last !== first ? `${first} ${last.charAt(0)}.` : first);
+    }
+  }
+  return out;
+}
+
+function nodeLabel(r, short, feeders, dropTo) {
+  // An empty slot is waiting on a specific match, so name it rather than
+  // printing TBD twice. Feeders that already have a winner have delivered
+  // their player, so only undecided ones can correspond to an empty slot.
+  const pending = (feeders.get(r.match_number) || [])
+    .filter(f => !f.src.challenger1_is_winner && !f.src.challenger2_is_winner);
+  let fi = 0;
+  const line = (c, score, won) => {
+    if (!c) {
+      const f = pending[fi++];
+      if (!f) return '<i>TBD</i>';
+      return '<i>' + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.match_number)) + '</i>';
+    }
+    const nm = mmEsc(short.get(c.name) || c.name);
+    const sc = score == null ? '' : ' ' + score;
+    return (won ? '<b>' + nm + '</b>' : nm) + sc;
+  };
+  const parts = [
+    mmEsc(r.identifier || ('#' + r.match_number)),
+    line(r.challenger1, r.challenger1_score, r.challenger1_is_winner),
+    line(r.challenger2, r.challenger2_score, r.challenger2_is_winner),
+  ];
+  // Where the loser drops, as a footnote on the match itself rather than a
+  // separate node with an edge into it.
+  // Parens go through mmEsc like everything else — they are escaped in every
+  // other label, and a bare "(" is exactly what Mermaid's parser trips on.
+  if (dropTo) parts.push('<small>' + mmEsc('(L to ' + dropTo + ')') + '</small>');
+  return parts.join('<br/>');
+}
+
+// A stage is the pair named by a winners match's two outgoing edges: W3-1 goes
+// to W4-1 or drops to L4-4, so W4 and L4 belong together. That gives
+// W2/L1, W3/L2, W4/L4, W5/L6, W6/L8, W7/L10 — Wk with L(2k-4), and W2/L1 as
+// the exception since there is no L0. W1 stands alone; nothing has dropped yet.
+//
+// The minor losers rounds (L3, L5, L7, L9) take no drop-downs, so no winners
+// round names them. They stay on their own, ordered on the half step between
+// the pairs that bracket them: L3 sits at 3.5, between W3/L2 and W4/L4.
+//
+// The returned number doubles as the group key — rounds sharing a stage share
+// a value, and every stage has a distinct one.
+function stageOf(round) {
+  if (round == null) return 0;
+  if (round > 0) return round;
+  const n = Math.abs(round);
+  if (n === 1) return 2;
+  if (n % 2 === 0) return n / 2 + 2;
+  return (n - 1) / 2 + 2.5;
+}
+
+// The rounds a stage contains, e.g. 4 -> ['W4','L4']. Derived from
+// stageOf so the dropdown can never disagree with the grouping.
+function stageRounds(stage, haveW, haveL) {
+  const out = [];
+  if (haveW.has(stage)) out.push('W' + stage);
+  for (const n of [...haveL].sort((a, b) => a - b)) {
+    if (stageOf(-n) === stage) out.push('L' + n);
+  }
+  return out;
+}
+
+function buildDiagram(rows, dir, fromStage) {
+  const byNum = new Map(rows.map(r => [r.match_number, r]));
+  const short = buildShortNames(rows);
+
+  const keep = new Set(rows.filter(r => !r.is_bye).map(r => r.match_number));
+
+  // Stage cut: keep whole stages, so picking W4 brings L5/L6 rather than L4 —
+  // L4 belongs to stage 3 and would otherwise dangle without its winners round.
+  if (fromStage > 0) {
+    for (const n of Array.from(keep)) {
+      const r = byNum.get(n);
+      if (r && r.round != null && stageOf(r.round) < fromStage) keep.delete(n);
+    }
+    // The deep losers rounds outrank the final (L10 vs W7), so a cut past the
+    // winners depth would drop it. Every option says "→ final", so honour that.
+    for (const r of rows) {
+      if (!r.is_bye && r.winner_to_num == null) keep.add(r.match_number);
+    }
+  }
+
+  // Hop over byes so an edge lands on a real match.
+  const hop = (n) => {
+    for (let i = 0; i < 10 && n; i++) {
+      const d = byNum.get(n);
+      if (!d) return null;
+      if (!d.is_bye) return d.match_number;
+      n = d.winner_to_num;
+    }
+    return null;
+  };
+
+  // Which matches feed each match, for naming empty slots. Built over all rows
+  // regardless of the stage cut, so a kept match still names an off-graph feeder.
+  const feeders = new Map();
+  for (const r of rows) {
+    if (r.is_bye) continue;
+    for (const [dest, kind] of [[r.winner_to_num, 'W'], [r.loser_to_num, 'L']]) {
+      const d = hop(dest);
+      if (!d) continue;
+      if (!feeders.has(d)) feeders.set(d, []);
+      feeders.get(d).push({ src: r, kind });
+    }
+  }
+
+  // Where each winners match sends its loser, from round 2 on. Rendered as a
+  // footnote inside the match box, so no drop edge and no stub node is needed.
+  // Not limited to kept matches — the text is useful even when the stage cut
+  // puts the destination off-graph.
+  const dropTo = new Map();
+  for (const r of rows) {
+    if (r.is_bye || !(r.round >= 2)) continue;
+    const d = hop(r.loser_to_num);
+    const dr = d != null ? byNum.get(d) : null;
+    if (dr) dropTo.set(r.match_number, dr.identifier || ('#' + dr.match_number));
+  }
+
+  // Only winner progression is drawn now. Drops live in the labels above, and
+  // round 1 draws nothing at all — it fans out across the whole of W2 and L1,
+  // which is noise. It still needs a rank though: dagre ranks nodes, not
+  // clusters, so leaving those edgeless stacks them into a column.
+  const edges = [];
+  for (const r of rows) {
+    if (!keep.has(r.match_number) || r.round === 1) continue;
+    for (const [dest, kind] of [[r.winner_to_num, 'W'], [r.loser_to_num, 'L']]) {
+      if (kind === 'L' && r.round > 0) continue; // shown as a label footnote
+      const d = hop(dest);
+      if (!d || !keep.has(d)) continue;
+      edges.push({ from: r, to: byNum.get(d), kind });
+    }
+  }
+
+  // So give it one invisible link per match, matched one-to-one rather than to
+  // both real destinations: the first half of W1 pins L1, the second half pins
+  // W2 — following the losers-left order above so the links do not cross.
+  // Every round-1 node lands on the same rank as a row, both destination
+  // rounds sit on the rank below, and there is no many-to-many for dagre to
+  // untangle. Pairing is positional, not by actual progression — nothing is
+  // drawn, so it only has to hold the layout.
+  const asc = (a, b) => a.match_number - b.match_number;
+  const r1 = [], r2 = [], rl1 = [];
+  for (const r of rows) {
+    if (r.is_bye || !keep.has(r.match_number)) continue;
+    if (r.round === 1) r1.push(r);
+    else if (r.round === 2) r2.push(r);
+    else if (r.round === -1) rl1.push(r);
+  }
+  r1.sort(asc); r2.sort(asc); rl1.sort(asc);
+  const ghosts = [];
+  if (r1.length && r1.length === r2.length + rl1.length) {
+    rl1.forEach((m, i) => ghosts.push([r1[i], m]));
+    r2.forEach((m, j) => ghosts.push([r1[rl1.length + j], m]));
+  } else {
+    // Byes or a non-standard bracket break the halves; fall back to each
+    // match's own destinations so no round-1 node is left unranked.
+    for (const r of r1) {
+      for (const dest of [r.winner_to_num, r.loser_to_num]) {
+        const d = hop(dest);
+        if (d && keep.has(d)) ghosts.push([r, byNum.get(d)]);
+      }
+    }
+  }
+
+  const lines = [`flowchart ${dir}`];
+  const kept = rows.filter(r => keep.has(r.match_number));
+
+
+  const sgIds = [], stageIds = [];
+  const byRound = new Map();
+  for (const r of kept) {
+    const k = r.round == null ? 0 : r.round;
+    if (!byRound.has(k)) byRound.set(k, []);
+    byRound.get(k).push(r);
+  }
+  const allRounds = [...byRound.keys()];
+  // Round subgraphs nest inside a stage wrapper; within a stage the winners
+  // round leads, then its two losers rounds in order.
+  const byStage = new Map();
+  for (const k of allRounds) {
+    const st = stageOf(k);
+    if (!byStage.has(st)) byStage.set(st, []);
+    byStage.get(st).push(k);
+  }
+  // Losers round leads, winners round follows, so the losers side sits left.
+  for (const list of byStage.values()) {
+    list.sort((a, b) => (a > 0 ? 1 : 0) - (b > 0 ? 1 : 0) || Math.abs(a) - Math.abs(b));
+  }
+
+  for (const st of [...byStage.keys()].sort((a, b) => a - b)) {
+    const inStage = byStage.get(st);
+    // Only a genuine pair gets the extra layer. A minor losers round is alone
+    // in its stage, so wrapping it would add nesting that groups nothing.
+    // Blank title + no stroke/fill: the wrapper exists to constrain layout,
+    // not to draw a labelled box. Halved ids keep 3.5 out of the identifier.
+    const wrap = inStage.length > 1;
+    if (wrap) {
+      const stId = 'ST' + Math.round(st * 2);
+      stageIds.push(stId);
+      lines.push(`  subgraph ${stId}[" "]`);
+    }
+    const pad = wrap ? '    ' : '  ';
+    for (const k of inStage) {
+      const id = k === 0 ? 'Rx' : 'R' + (k > 0 ? 'W' : 'L') + Math.abs(k);
+      const label = k === 0 ? 'Unranked' : (k > 0 ? 'Winners R' + k : 'Losers R' + Math.abs(k));
+      sgIds.push(id);
+      lines.push(`${pad}subgraph ${id}["${label}"]`);
+      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number))}"]`);
+      lines.push(`${pad}end`);
+    }
+    if (wrap) lines.push('  end');
+  }
+
+  for (const [a, b] of ghosts) {
+    lines.push(`  M${a.match_number} ~~~ M${b.match_number}`);
+  }
+
+  for (const e of edges) {
+    const arrow = e.kind === 'W' ? '-->' : '-.->';
+    lines.push(`  M${e.from.match_number} ${arrow} M${e.to.match_number}`);
+  }
+
+  // One uniform look for every match — status is no longer encoded in colour.
+  lines.push('  classDef match fill:#1e293b,stroke:#475569,color:#cbd5e1');
+  if (kept.length) lines.push(`  class ${kept.map(r => 'M' + r.match_number).join(',')} match`);
+  for (const id of sgIds) lines.push(`  style ${id} fill:none,stroke:#334155,color:#64748b`);
+  for (const id of stageIds) lines.push(`  style ${id} fill:none,stroke:none`);
+  return { src: lines.join('\n'), nodes: keep.size };
+}
+
+// Options are stages, built from the rounds the bracket actually has, so each
+// entry names exactly what it keeps: "W4 / L5-L6 → final".
+function populateRounds(rows) {
+  const w = new Set(), l = new Set();
+  for (const r of rows) {
+    if (r.is_bye || r.round == null) continue;
+    (r.round > 0 ? w : l).add(Math.abs(r.round));
+  }
+  // Cut points are the winners-anchored stages; a minor losers round sits on a
+  // half step and makes no sense as a "from here to the end" boundary.
+  const maxStage = Math.max(0, ...w);
+  const sel = $('round-from');
+  sel.innerHTML = '<option value="0">All stages</option>';
+  for (let s = 2; s <= maxStage; s++) {
+    const parts = stageRounds(s, w, l);
+    if (!parts.length) continue;
+    const wPart = parts.filter(p => p[0] === 'W');
+    const lPart = parts.filter(p => p[0] === 'L');
+    const label = [wPart.join(''), lPart.join('-')].filter(Boolean).join(' / ');
+    const o = document.createElement('option');
+    o.value = String(s);
+    o.textContent = label + ' → final';
+    sel.appendChild(o);
+  }
+  if (state.fromStage > maxStage) state.fromStage = 0;
+  sel.value = String(state.fromStage);
+  sel.classList.toggle('filtered', state.fromStage > 0);
+}
+
+async function render() {
+  if (!state.rows.length) return;
+  const { src, nodes } = buildDiagram(state.rows, state.dir, state.fromStage);
+
+  const total = state.rows.filter(r => !r.is_bye).length;
+  const live = state.rows.filter(r => r.status === 'IN_PROGRESS').length;
+  const left = state.rows.filter(r => !r.is_bye && r.status !== 'COMPLETED').length;
+  $('counts').textContent = `${nodes} of ${total} matches · ${left} left · ${live} in progress`;
+
+  try {
+    const { svg } = await mermaid.render('bracket-' + Date.now(), src);
+    $('graph').innerHTML = svg;
+    setStatus('');
+  } catch (err) {
+    // Source is no longer shown on the page, so put it where it is still
+    // reachable when a render fails.
+    console.error('Mermaid render failed\n', err, '\n--- source ---\n', src);
+    setStatus('Mermaid failed to render: ' + err.message + ' (source logged to console)', true);
+  }
+  applyZoom();
+}
+
+function applyZoom() {
+  $('graph').style.transform = `scale(${state.zoom})`;
+  const svg = $('graph').querySelector('svg');
+  if (svg) {
+    // transform doesn't affect layout, so size the wrapper to keep scrollbars honest
+    const r = svg.getBoundingClientRect();
+    $('graph').style.width = (r.width / state.zoom) + 'px';
+    $('viewport').style.minHeight = Math.min(r.height + 40, window.innerHeight) + 'px';
+  }
+  $('zoom-reset').textContent = Math.round(state.zoom * 100) + '%';
+}
+
+function syncButtons() {
+  document.querySelectorAll('[data-dir]').forEach(b =>
+    b.classList.toggle('active', b.dataset.dir === state.dir));
+}
+
+function parseSlug(raw) {
+  const s = (raw || '').trim();
+  const m = s.match(/digitalpool\.com\/tournaments\/([^/?#]+)/);
+  return m ? m[1] : s.replace(/^\/+|\/+$/g, '');
+}
+
+function syncUrl(slug) {
+  const url = new URL(location);
+  url.searchParams.set('digitalpool', slug);
+  if (state.fromStage > 0) url.searchParams.set('from', String(state.fromStage));
+  else url.searchParams.delete('from');
+  history.replaceState(null, '', url);
+}
+
+async function load(slug) {
+  if (!slug) { setStatus('Enter a tournament slug above, or add <code>?digitalpool=&lt;slug&gt;</code> to the URL.'); return; }
+  setStatus('<span class="spinner"></span>Loading ' + slug + '…');
+  $('graph').innerHTML = '';
+  try {
+    const t0 = performance.now();
+    const data = await gql(QUERY, { s: slug });
+    state.rows = data.tournament_brackets || [];
+    state.tournament = (data.tournaments || [])[0] || null;
+    if (!state.rows.length) { setStatus('No bracket found for "' + slug + '".', true); return; }
+    const name = state.tournament ? state.tournament.name : slug;
+    document.title = name + ' — Bracket Graph';
+    $('back-link').href = 'index.html?digitalpool=' + encodeURIComponent(slug);
+    $('back-link').textContent = '← ' + name;
+    setStatus('Loaded ' + state.rows.length + ' bracket rows in ' + Math.round(performance.now() - t0) + ' ms');
+    populateRounds(state.rows);
+    syncUrl(slug);
+    await render();
+  } catch (err) {
+    setStatus('Failed to load: ' + err.message, true);
+  }
+}
+
+document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => {
+  state.dir = b.dataset.dir; syncButtons(); render();
+}));
+$('round-from').addEventListener('change', (e) => {
+  state.fromStage = parseInt(e.target.value, 10) || 0;
+  e.target.classList.toggle('filtered', state.fromStage > 0);
+  syncUrl(parseSlug($('slug-input').value));
+  render();
+});
+$('zoom-in').addEventListener('click', () => { state.zoom = Math.min(3, state.zoom * 1.25); applyZoom(); });
+$('zoom-out').addEventListener('click', () => { state.zoom = Math.max(0.2, state.zoom / 1.25); applyZoom(); });
+$('zoom-reset').addEventListener('click', () => { state.zoom = 1; applyZoom(); });
+$('load-btn').addEventListener('click', () => load(parseSlug($('slug-input').value)));
+$('slug-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') load(parseSlug($('slug-input').value));
+});
+
+syncButtons();
+const params = new URLSearchParams(location.search);
+state.fromStage = Math.max(0, parseInt(params.get('from') || '0', 10) || 0);
+const initial = params.get('digitalpool') || '';
+$('slug-input').value = initial;
+load(initial);
+</script>
+</body>
+</html>

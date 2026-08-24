@@ -1915,7 +1915,7 @@ button { font-family: inherit; font-size: inherit; }
     var html = '<button class="back-to-list" onclick="backToList()">&laquo; Back to tournament list</button>';
     html += '<div class="match-detail">';
     html += '<div class="match-header">';
-    html += '<div class="match-title">' + esc(t.name) + ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a></div>';
+    html += '<div class="match-title">' + esc(t.name) + ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a></div>';
     html += '<div class="match-meta">' + esc(dateStr) + '</div>';
     if (venueStr) {
       var venueFavBtn = '';
