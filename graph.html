@@ -40,18 +40,19 @@ a:hover { text-decoration: underline; }
   padding: 2px 4px; pointer-events: none; }
 .psearch input:focus ~ .pse-kbd, .psearch input.picked ~ .pse-kbd { display: none; }
 .psearch input.picked { border-color: #60a5fa; color: #dbeafe; }
-.pse-list { position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 60; min-width: 240px; max-height: 300px;
+.pse-list { position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 60; min-width: 290px; max-height: 300px;
   overflow-y: auto; background: #1e293b; border: 1px solid #475569; border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none; }
 .pse-list.open { display: block; }
 .pse-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; color: #e2e8f0; font-size: 13px; }
 .pse-item.active, .pse-item:hover { background: #334155; }
-.pse-item.out { cursor: default; }
-.pse-item.out:hover { background: none; }
-.pse-item.out .pse-name, .pse-item.out .pse-name mark { color: #f87171; }
-.pse-item.out .pse-meta { color: #7f1d1d; }
+.pse-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
-.pse-meta { margin-left: auto; padding-left: 8px; color: #64748b; font-size: 11px; white-space: nowrap; }
+/* Monospace so the runs line up down the list and are scannable as a column */
+.pse-meta { margin-left: auto; padding-left: 10px; flex-shrink: 0; white-space: nowrap;
+  font: 11px/1 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 1px; }
+.pse-meta .fw { color: #4ade80; }
+.pse-meta .fl { color: #f87171; }
 .pse-empty { padding: 12px 10px; color: #64748b; font-size: 12px; }
 
 .legend { display: flex; gap: 14px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155; font-size: 11px; color: #64748b; flex-wrap: wrap; }
@@ -547,39 +548,29 @@ function buildDiagram(rows, dir, fromStage, player) {
 const SEARCH_CAP = 12;
 let searchHits = [], searchCursor = -1;
 
-// `out` means "has no match among the rounds currently shown", not
-// "eliminated" — selecting such a player would highlight nothing at all, which
-// is the state worth preventing. It follows the stage cut, so the same player
-// is selectable at one cut and not at another.
-function collectPlayers(rows, keep) {
+// Every player is listed and every one is selectable — the stage cut moves to
+// them rather than the other way round, so there is nothing to grey out.
+function collectPlayers(rows) {
   const byName = new Map();
   for (const r of rows) {
     for (const c of [r.challenger1, r.challenger2]) {
       if (!c || !c.name) continue;
       const k = c.name.toLowerCase();
-      if (!byName.has(k)) {
-        byName.set(k, { name: c.name, played: 0, won: 0, shown: 0, pending: false, lastWon: null, lastKey: -1 });
-      }
-      const e = byName.get(k);
+      if (!byName.has(k)) byName.set(k, { name: c.name, results: [] });
       if (r.is_bye) continue;
-      if (keep.has(r.match_number)) e.shown++;
-      const decided = r.challenger1_is_winner || r.challenger2_is_winner;
-      if (!decided) { e.pending = true; continue; }
-      e.played++;
+      if (!(r.challenger1_is_winner || r.challenger2_is_winner)) continue;
       const c1 = r.challenger1 && r.challenger1.name === c.name;
       const won = (c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner);
-      if (won) e.won++;
-      const key = stageOf(r.round) * 1000 + r.match_number;
-      if (key > e.lastKey) { e.lastKey = key; e.lastWon = won; }
+      // Stage first, then match number: match numbers alone are not
+      // chronological across the two sides (W2 is 33-48 but L1 is 49-64).
+      byName.get(k).results.push({ key: stageOf(r.round) * 1000 + r.match_number, won });
     }
   }
   for (const e of byName.values()) {
-    e.out = e.shown === 0;
-    // Label only — selectability is `out`, above. Derived rather than read off
-    // the API's `place`, so no extra field is fetched: a player still in the
-    // running always sits in some undecided match, and winning your last
-    // decided match means champion or awaiting, never eliminated.
-    e.eliminated = !e.pending && e.lastWon === false;
+    e.results.sort((a, b) => a.key - b.key);
+    e.form = e.results.map(x => (x.won ? 'W' : 'L'));
+    e.won = e.form.filter(x => x === 'W').length;
+    e.played = e.form.length;
   }
   return [...byName.values()];
 }
@@ -587,7 +578,7 @@ function collectPlayers(rows, keep) {
 function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 function rankPlayers(query) {
-  const players = collectPlayers(state.rows, keptMatches(state.rows, state.fromStage));
+  const players = collectPlayers(state.rows);
   const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   if (!toks.length) return players.sort((a, b) => a.name.localeCompare(b.name));
   const scored = [];
@@ -625,37 +616,59 @@ function renderResults() {
   if (!searchHits.length) {
     list.innerHTML = '<div class="pse-empty">No player matches &ldquo;' + esc(query) + '&rdquo;</div>';
   } else {
-    const firstLive = searchHits.findIndex(p => !p.out);
-    searchCursor = firstLive;
+    searchCursor = 0;
     list.innerHTML = searchHits.map((p, i) =>
-      '<div class="pse-item' + (i === firstLive ? ' active' : '') + (p.out ? ' out' : '') +
-      '" role="option"' + (p.out ? ' aria-disabled="true"' : ' data-name="' + esc(p.name) + '"') + '>' +
+      '<div class="pse-item' + (i === 0 ? ' active' : '') +
+      '" role="option" data-name="' + esc(p.name) + '">' +
       '<span class="pse-name">' + highlightName(p.name, toks) + '</span>' +
-      '<span class="pse-meta">' + p.won + '-' + (p.played - p.won) +
-      (p.eliminated ? ' &middot; eliminated' : p.out ? ' &middot; not shown' : '') + '</span></div>').join('') +
+      '<span class="pse-meta">' + p.form.map(ch =>
+        '<span class="f' + ch.toLowerCase() + '">' + ch + '</span>').join('') +
+      '</span></div>').join('') +
       (all.length > searchHits.length
         ? '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + all.length + '</div>' : '');
   }
   list.classList.add('open');
 }
 
-// Steps over eliminated entries — they are listed for reference but cannot be
-// picked, so landing the cursor on one would be a dead end.
 function moveCursor(delta) {
-  if (!searchHits.some(p => !p.out)) return;
+  if (!searchHits.length) return;
   const items = $('player-list').querySelectorAll('.pse-item');
   if (searchCursor >= 0 && items[searchCursor]) items[searchCursor].classList.remove('active');
-  let i = searchCursor;
-  do {
-    i = (i + delta + searchHits.length) % searchHits.length;
-  } while (searchHits[i].out && i !== searchCursor);
-  searchCursor = i;
+  searchCursor = (searchCursor + delta + searchHits.length) % searchHits.length;
   const el = items[searchCursor];
   if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
 }
 
+// If the current cut hides every one of this player's matches, widen it until
+// it doesn't. The stage holding their last loss is the target: that is the
+// match that ended their run, and the one you want to land on. Players still
+// in the running have no loss to aim at, so their last match is used instead.
+function ensureVisible(name) {
+  const keep = keptMatches(state.rows, state.fromStage);
+  const mine = state.rows.filter(r => !r.is_bye && playerIn(r, name));
+  if (!mine.length || mine.some(r => keep.has(r.match_number))) return;
+
+  const lost = mine.filter(r => {
+    if (!(r.challenger1_is_winner || r.challenger2_is_winner)) return false;
+    const c1 = r.challenger1 && r.challenger1.name === name;
+    return !((c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner));
+  });
+  const key = (r) => stageOf(r.round) * 1000 + r.match_number;
+  const target = (lost.length ? lost : mine).reduce((a, b) => (key(b) > key(a) ? b : a));
+
+  // Options are whole winners-anchored stages, so round down: a match at stage
+  // 3.5 is kept by the stage-3 cut, since the cut keeps everything at or past it.
+  const want = Math.floor(stageOf(target.round));
+  const sel = $('round-from');
+  const pick = want >= 2 && sel.querySelector('option[value="' + want + '"]') ? want : 0;
+  state.fromStage = pick;
+  sel.value = String(pick);
+  sel.classList.toggle('filtered', pick > 0);
+}
+
 function pickPlayer(name) {
   state.player = name || null;
+  if (state.player) ensureVisible(state.player);
   pickPlayerUI(state.player);
   syncUrl(parseSlug($('slug-input').value));
   render();
@@ -753,17 +766,11 @@ function parseSlug(raw) {
 function resolvePlayer() {
   if (!state.player) { pickPlayerUI(null); return; }
   const want = state.player.toLowerCase();
-  const keep = keptMatches(state.rows, state.fromStage);
-  const hit = collectPlayers(state.rows, keep).find(p => p.name.toLowerCase() === want);
-  // Someone with nothing on screen cannot be chosen from the list, so a link
-  // naming one is refused too, and so is a selection left stranded by moving
-  // the stage cut past all their matches.
-  if (hit && hit.out) {
-    setStatus(esc(hit.name) + ' has no matches in the rounds currently shown.', true);
-    state.player = null;
-  } else {
-    state.player = hit ? hit.name : null;
-  }
+  const hit = collectPlayers(state.rows).find(p => p.name.toLowerCase() === want);
+  state.player = hit ? hit.name : null;
+  // A link may name a player the `from` in the same link hides; move the cut
+  // rather than drop the selection.
+  if (state.player) ensureVisible(state.player);
   pickPlayerUI(state.player);
 }
 
@@ -814,9 +821,8 @@ document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click',
 $('round-from').addEventListener('change', (e) => {
   state.fromStage = parseInt(e.target.value, 10) || 0;
   e.target.classList.toggle('filtered', state.fromStage > 0);
-  // Selectability follows the cut, so a narrower one can strand the current
-  // selection with nothing to highlight.
-  resolvePlayer();
+  // Deliberately no ensureVisible here — choosing a cut by hand should stick,
+  // even one that hides the selected player.
   syncUrl(parseSlug($('slug-input').value));
   render();
 });
@@ -828,7 +834,7 @@ $('player-input').addEventListener('keydown', (e) => {
   else if (e.key === 'Enter') {
     e.preventDefault();
     const hit = searchCursor >= 0 ? searchHits[searchCursor] : null;
-    if (hit && !hit.out) pickPlayer(hit.name);
+    if (hit) pickPlayer(hit.name);
   } else if (e.key === 'Escape') {
     $('player-list').classList.remove('open');
     $('player-input').blur();
@@ -839,7 +845,7 @@ $('player-list').addEventListener('mousedown', (e) => {
   const item = e.target.closest('.pse-item');
   if (!item) return;
   e.preventDefault();
-  if (!item.classList.contains('out')) pickPlayer(item.dataset.name);
+  pickPlayer(item.dataset.name);
 });
 $('player-clear').addEventListener('click', () => pickPlayer(null));
 
@@ -856,11 +862,7 @@ $('graph').addEventListener('click', (e) => {
   if (!row) return;
   const c = span.classList.contains('pn1') ? row.challenger1 : row.challenger2;
   if (!c || !c.name) return;
-  if (state.player === c.name) { pickPlayer(null); return; }   // click again to clear
-  // Same rule as the dropdown: only players with something on screen.
-  const p = collectPlayers(state.rows, keptMatches(state.rows, state.fromStage))
-    .find(x => x.name === c.name);
-  if (p && !p.out) pickPlayer(c.name);
+  pickPlayer(state.player === c.name ? null : c.name);   // click again to clear
 });
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.psearch')) $('player-list').classList.remove('open');
