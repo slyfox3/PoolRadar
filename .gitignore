@@ -4,3 +4,6 @@ __pycache__/
 
 # Local OG-preview generator (only preview.png is tracked)
 previews/gen/
+
+# WNT live-scores session cookie for the local dev proxy — never commit
+.wnt-session

@@ -24,7 +24,8 @@
 // If a tournament slug is in the URL, hide the feed section immediately via CSS
 // to prevent the tournament list table header from flashing before JS takes over.
 // Uses a class on <html> so the init code can remove it later when navigating back.
-if (new URLSearchParams(window.location.search).has('digitalpool')) {
+var _qs = new URLSearchParams(window.location.search);
+if (_qs.has('digitalpool') || _qs.has('wnt')) {
   document.documentElement.classList.add('slug-loading');
 }
 </script>
@@ -284,6 +285,10 @@ button { font-family: inherit; font-size: inherit; }
 .pse-meta { margin-left: auto; padding-left: 8px; color: #64748b; font-size: 12px; white-space: nowrap; }
 .pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
 .player-list-item.highlight { animation: card-blink 1s ease-in-out 3; border-radius: 4px; }
+/* Country flag — emoji, so no assets. Nudged down to sit on the text baseline. */
+.pf { margin-right: 4px; font-size: 11px; line-height: 1; vertical-align: 1px; }
+/* WNT-only: players called to a table but not yet under way. */
+.mr-called { color: #fbbf24; }
 </style>
 </head>
 <body>
@@ -401,6 +406,11 @@ button { font-family: inherit; font-size: inherit; }
 
   var GQL = 'https://api-cached.digitalpool.com/';
   var YT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxMM4X-AGKCIOUTaahuXUwt-Qqgs3kYFTWhO5qfNnNHSnvaGRDN_YN9M11QwdjnB3h/exec';
+  // Deployed wnt-proxy Worker. Empty until deployed; wnt-dev-proxy.py serves
+  // the same routes off our own origin when running locally.
+  var WNT_PROXY_REMOTE = 'https://wnt-proxy.slyfox3.workers.dev';
+  var WNT_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? '/wnt' : (WNT_PROXY_REMOTE ? WNT_PROXY_REMOTE + '/wnt' : '');
 
   // =====================================================
   // LocalStorage helpers
@@ -952,6 +962,188 @@ button { font-family: inherit; font-size: inherit; }
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: query, variables: variables || {} }),
     }).then(function(r) { return r.json(); });
+  }
+
+  // =====================================================
+  // WNT Live Scores — second data source
+  // =====================================================
+  // wntlivescores.com puts everything behind a login, so reads go through a
+  // proxy holding the session. /wnt/event/<slug> hands back the site's own
+  // group-matches JSON for every stage, which we remap onto exactly the shape
+  // fetchMatches() produces for DigitalPool — so every renderer downstream,
+  // including bracket-algo.js, works unchanged.
+
+  // ISO-3166-1 alpha-2 -> regional indicator pair. Avoids shipping flag assets;
+  // WNT uses 'unknown' for unaffiliated players, which fails the length check.
+  function wntFlag(code) {
+    if (!code || code.length !== 2 || !/^[a-z]{2}$/i.test(code)) return '';
+    var cc = code.toUpperCase();
+    return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
+  }
+
+  function playerFlagHtml(p) {
+    if (!p || !p.country) return '';
+    var flag = wntFlag(p.country);
+    if (!flag) return '';
+    return '<span class="pf" title="' + esc(p.countryName || p.country) + '">' + flag + '</span>';
+  }
+
+  // WNT timestamps look local but are UTC — their own main.js parses them with
+  // {zone: 'UTC'} before shifting to the event timezone.
+  function wntTime(s) { return s ? s.replace(' ', 'T') + 'Z' : null; }
+
+  function wntPlayer(p) {
+    if (!p) return null;
+    // nameReversed marks players written surname-first; the site swaps which
+    // field holds which rather than reordering the output.
+    var first = p.nameReversed ? p.surname : p.name;
+    var last = p.nameReversed ? p.name : p.surname;
+    return {
+      id: p.id,
+      name: ((first || '') + (last ? ' ' + last : '')).trim(),
+      playerId: null,
+      rating: null,
+      place: null,
+      country: p.country && p.country.code ? p.country.code : null,
+      countryName: p.country && p.country.name ? p.country.name : null,
+    };
+  }
+
+  // 0 not started, 1 players called to the table, 2 under way, 3 done.
+  // Nothing downstream knows about "called", so it reads as not-started and
+  // carries a flag the renderer uses to show the table it was called to.
+  var WNT_STATUS = { 0: 'NOT_STARTED', 1: 'NOT_STARTED', 2: 'IN_PROGRESS', 3: 'COMPLETED' };
+
+  // Losing a match whose loserDest is 0 ends the run; rankIni/rankEnd give the
+  // finishing band, e.g. 193-256. Sign is not meaningful, only magnitude.
+  function wntPlaceBand(sd) {
+    var a = Math.abs(sd.rankIni || 0), b = Math.abs(sd.rankEnd || 0);
+    if (!a && !b) return null;
+    var lo = Math.min(a, b), hi = Math.max(a, b);
+    return lo === hi ? String(lo) : lo + '-' + hi;
+  }
+
+  // Match numbers restart at 1 in every stage, so stage 2+ is offset out of the
+  // way. Stage 1 keeps its natural numbers since brackets never reach 1000.
+  function wntNum(stage, n) { return stage === 1 ? n : stage * 1000 + n; }
+
+  function fetchWntMatches(slug) {
+    if (!WNT_PROXY) {
+      return Promise.reject(new Error('No WNT proxy configured. Run wnt-dev-proxy.py, or set WNT_PROXY_REMOTE.'));
+    }
+    return fetch(WNT_PROXY + '/event/' + encodeURIComponent(slug))
+      .then(function(r) {
+        return r.json().then(function(data) {
+          if (!r.ok) throw new Error(data.message || data.error || ('HTTP ' + r.status));
+          return data;
+        });
+      })
+      .then(function(data) { return wntBuildResult(slug, data); });
+  }
+
+  function wntBuildResult(slug, data) {
+    var matches = [];
+    var bByNum = {};
+    var rows = [];
+    for (var si = 0; si < (data.stages || []).length; si++) {
+      var stage = data.stages[si];
+      for (var gi = 0; gi < stage.groups.length; gi++) {
+        var group = stage.groups[gi];
+        for (var mi = 0; mi < group.matches.length; mi++) {
+          rows.push({ stage: stage.stage, m: group.matches[mi] });
+        }
+      }
+    }
+
+    var anyLive = false, anyDone = false, anyPending = false, earliest = null;
+
+    for (var i = 0; i < rows.length; i++) {
+      var stageNo = rows[i].stage, m = rows[i].m, sd = m.schemaData || {};
+      var num = wntNum(stageNo, m.matchNumberInSchema);
+      var p1 = wntPlayer(m.players[0]);
+      var p2 = wntPlayer(m.players[1]);
+      var status = WNT_STATUS[m.status] || 'NOT_STARTED';
+      var isForfeit = !!m.walkOver;
+      var scores = m.scores || [null, null];
+      // Scores read 0-0 before play; only trust them once there is a result.
+      var hasResult = m.status >= 2 || scores[0] || scores[1];
+      var s1 = hasResult ? scores[0] : null;
+      var s2 = hasResult ? scores[1] : null;
+      // Losers exit the draw when loserDest is 0, which is also how a final is
+      // marked; followTo() expects null rather than 0 for "nowhere".
+      var winnerTo = sd.winnerDest ? wntNum(stageNo, sd.winnerDest) : null;
+      var loserTo = sd.loserDest ? wntNum(stageNo, sd.loserDest) : null;
+      var scheduled = m.dateScheduledTBA ? null : wntTime(m.dateScheduled);
+      var started = wntTime(m.dateStart);
+
+      if (status === 'IN_PROGRESS') anyLive = true;
+      else if (status === 'COMPLETED') anyDone = true;
+      else if (p1 && p2) anyPending = true;
+      if (started) {
+        var sms = new Date(started).getTime();
+        if (!isNaN(sms) && (earliest === null || sms < earliest)) earliest = sms;
+      }
+
+      bByNum[num] = {
+        num: num, status: status, is_bye: false,
+        identifier: null, round: m.roundNumber || null,
+        p1: p1, p2: p2, s1: s1, s2: s2,
+        p1Won: m.winner === 1, p2Won: m.winner === 2,
+        winnerTo: winnerTo, loserTo: loserTo,
+        scheduledTime: scheduled, startTime: started,
+      };
+
+      // Same rule fetchMatches() uses: a half-filled row is bracket structure,
+      // not a match. pendingHalfFilled() picks those up from bByNum.
+      if (!p1 || !p2) continue;
+
+      // A losing side with nowhere to go is eliminated; record where it landed
+      // so the by-player view can sort and label finished runs.
+      if (status === 'COMPLETED' && !loserTo && m.winner) {
+        var band = wntPlaceBand(sd);
+        if (band) {
+          if (m.winner === 1) p2.place = band;
+          else p1.place = band;
+        }
+      }
+
+      matches.push({
+        num: num, p1: p1, p2: p2, s1: s1, s2: s2,
+        p1Won: m.winner === 1, p2Won: m.winner === 2,
+        status: status,
+        videoUrl: null,
+        tableName: m.tableName || m.table_preName || null,
+        startTime: started,
+        scheduledTime: scheduled,
+        updatedAt: wntTime(m.dateEnd),
+        round: m.roundNumber || null,
+        identifier: null,
+        isForfeit: isForfeit,
+        // WNT-only extras the DigitalPool path never sets.
+        calledToTable: m.status === 1,
+        raceTo: m.length || null,
+        stage: stageNo,
+      });
+    }
+
+    var status = anyLive || (anyDone && (anyPending || !anyDone)) ? 'IN_PROGRESS'
+      : (anyDone && !anyPending ? 'COMPLETED' : 'NOT_STARTED');
+    if (anyDone && anyPending) status = 'IN_PROGRESS';
+
+    var tournament = {
+      name: data.name || slug,
+      date: earliest !== null ? new Date(earliest).toISOString() : null,
+      status: status,
+      venue: data.venue ? { id: null, name: data.venue, city: data.city, region: null } : null,
+      organizer: null,
+      director: null,
+      slug: slug,
+      source: 'wnt',
+      dates: data.dates || null,
+      prize: data.prize || null,
+    };
+
+    return { matches: matches, tournament: tournament, bracketByNum: bByNum };
   }
 
   // =====================================================
@@ -1595,6 +1787,7 @@ button { font-family: inherit; font-size: inherit; }
   // Match Detail
   // =====================================================
   var currentSlug = null;
+  var currentSource = 'digitalpool'; // 'digitalpool' | 'wnt'
   var currentPlayerList = null;
   var currentMatches = null;
   var currentTournament = null;
@@ -1608,7 +1801,10 @@ button { font-family: inherit; font-size: inherit; }
   var bracketByNum = {};
   var navHistory = [];
   var NAV_HISTORY_MAX = 20;
-  var cache = {}; // slug → { type: 'matches'|'players', data: ..., time: ... }
+  var cache = {}; // source:slug → { type: 'matches'|'players', data: ..., time: ... }
+  // Namespaced by source: the two sites slugify events differently but nothing
+  // stops them from colliding on a name.
+  function cacheKey(slug, source) { return (source || 'digitalpool') + ':' + slug; }
 
   function fetchPlayerList(slug) {
     return gql('query($s:String!){tournament_players(where:{tournament:{slug:{_eq:$s}}},order_by:{name:asc}){id name skill_level player_id player{id name name_slug fargo_id}}}', { s: slug })
@@ -1716,8 +1912,14 @@ button { font-family: inherit; font-size: inherit; }
     updateSearchFab();
   }
 
-  function loadTournament(slug) {
+  // Both sources resolve to the same {matches, tournament, bracketByNum}.
+  function fetchForSource(slug, source) {
+    return source === 'wnt' ? fetchWntMatches(slug) : fetchMatches(slug);
+  }
+
+  function loadTournament(slug, source) {
     currentSlug = slug;
+    currentSource = source || 'digitalpool';
     currentPlayerList = null;
     updateUrlBar(slug);
     urlInput.value = '';
@@ -1731,11 +1933,12 @@ button { font-family: inherit; font-size: inherit; }
       rows[i].className = rows[i].dataset.slug === slug ? 'active' : '';
     }
 
-    if (cache[slug] && cache[slug].type === 'matches') {
-      currentMatches = cache[slug].matches;
-      currentTournament = cache[slug].tournament;
-      currentPlayerList = cache[slug].players || null;
-      bracketByNum = cache[slug].bracketByNum || {};
+    var ck = cacheKey(slug, currentSource);
+    if (cache[ck] && cache[ck].type === 'matches') {
+      currentMatches = cache[ck].matches;
+      currentTournament = cache[ck].tournament;
+      currentPlayerList = cache[ck].players || null;
+      bracketByNum = cache[ck].bracketByNum || {};
 
       applyVideoMatches();
       renderDetail();
@@ -1746,10 +1949,10 @@ button { font-family: inherit; font-size: inherit; }
       deferLoadFeed();
       if (currentTournament.status === 'IN_PROGRESS') {
         startDetailTimer();
-        if (!currentPlayerList) {
+        if (!currentPlayerList && currentSource === 'digitalpool') {
           fetchPlayerList(slug).then(function(players) {
             currentPlayerList = players;
-            cache[slug].players = players;
+            cache[ck].players = players;
             renderDetail();
           });
         }
@@ -1760,11 +1963,15 @@ button { font-family: inherit; font-size: inherit; }
     var fetchT0 = performance.now();
     showLoadingToast();
 
-    fetchMatches(slug).then(function(result) {
+    fetchForSource(slug, currentSource).then(function(result) {
       if (currentSlug !== slug) return; // stale response from rapid clicking
       var fetchMs = Math.round(performance.now() - fetchT0);
       if (result.matches.length === 0) {
         dismissLoadingToast();
+        if (currentSource === 'wnt') {
+          showStatus('No matches published yet for this WNT event.', 'info');
+          return;
+        }
         loadPlayerList(slug);
         return;
       }
@@ -1773,7 +1980,7 @@ button { font-family: inherit; font-size: inherit; }
       bracketByNum = result.bracketByNum || {};
 
       applyVideoMatches();
-      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
+      cache[ck] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
       updateLoadingToast('Loaded ' + result.matches.length + ' matches in ' + fetchMs + ' ms');
       renderDetail();
 
@@ -1785,13 +1992,16 @@ button { font-family: inherit; font-size: inherit; }
       if (currentTournament.status === 'IN_PROGRESS') {
         startDetailTimer();
       }
-      // Fetch registered players for all events
-      fetchPlayerList(slug).then(function(players) {
-        if (currentSlug !== slug) return;
-        currentPlayerList = players;
-        cache[slug].players = players;
-        renderDetail();
-      });
+      // Fetch registered players for all events. WNT publishes no separate
+      // entry list — the draw is the only roster it exposes.
+      if (currentSource === 'digitalpool') {
+        fetchPlayerList(slug).then(function(players) {
+          if (currentSlug !== slug) return;
+          currentPlayerList = players;
+          cache[ck].players = players;
+          renderDetail();
+        });
+      }
     }).catch(function(err) {
       dismissLoadingToast();
       showStatus('Failed to load matches: ' + esc(err.message), 'error');
@@ -1915,11 +2125,18 @@ button { font-family: inherit; font-size: inherit; }
     var html = '<button class="back-to-list" onclick="backToList()">&laquo; Back to tournament list</button>';
     html += '<div class="match-detail">';
     html += '<div class="match-header">';
-    html += '<div class="match-title">' + esc(t.name) + ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a></div>';
-    html += '<div class="match-meta">' + esc(dateStr) + '</div>';
+    var links;
+    if (t.source === 'wnt') {
+      links = ' <a class="btn btn-link" href="https://www.wntlivescores.com/events/' + encodeURIComponent(t.slug) + '/matches-list/1" target="_blank" rel="noopener">WNT &rarr;</a>';
+    } else {
+      links = ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a>';
+    }
+    html += '<div class="match-title">' + esc(t.name) + links + '</div>';
+    html += '<div class="match-meta">' + esc(t.source === 'wnt' && t.dates ? t.dates : dateStr) + '</div>';
     if (venueStr) {
       var venueFavBtn = '';
-      if (t.venue) {
+      // WNT venues carry no id, so there is nothing to favorite against.
+      if (t.venue && t.venue.id) {
         if (isVenueFav) {
           venueFavBtn = '<button class="remove-fav-btn" onclick="removeVenueFromDetail()" title="Remove favorite">&#9733;</button> ';
         } else {
@@ -2075,8 +2292,8 @@ button { font-family: inherit; font-size: inherit; }
         continue;
       }
       if (m.status === 'IN_PROGRESS') inflightCount++;
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime, m.calledToTable);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime, m.calledToTable);
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -2125,7 +2342,7 @@ button { font-family: inherit; font-size: inherit; }
       html += '<div class="player-group" id="pg-' + esc(pd.player.name).replace(/\s/g, '-').toLowerCase() + '">';
       html += '<div class="player-group-header">';
       html += playerFavBtn(pd.player);
-      html += '<span class="player-group-name' + (isFav ? ' is-fav' : '') + '">' + esc(pd.player.name) + '</span>';
+      html += '<span class="player-group-name' + (isFav ? ' is-fav' : '') + '">' + playerFlagHtml(pd.player) + esc(pd.player.name) + '</span>';
       if (pd.player.rating) html += '<span class="player-group-stats">(' + pd.player.rating + ')</span>';
       if (pd.player.place) html += '<span class="player-group-stats">Place: ' + esc(pd.player.place) + '</span>';
       html += '</div>';
@@ -2139,7 +2356,7 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="match-num">#' + pm.num + '</span>';
         html += '<span class="match-vs-label">vs</span>';
         html += playerFavBtn(pm.opp);
-        html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
+        html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + playerFlagHtml(pm.opp) + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
         if (pm.isSplit) {
           html += '<span></span><span style="grid-column:span 3">Split</span>';
         } else if (pm.isForfeit && pm.status === 'COMPLETED' && (pm.won !== undefined)) {
@@ -2164,7 +2381,12 @@ button { font-family: inherit; font-size: inherit; }
           html += '<span style="grid-column:span 3;text-align:center;font-size:11px;font-weight:300;color:#64748b">' + (pm.won ? 'walkover' : 'forfeit') + '</span>';
         } else {
           var schedInfo = matchTimeInfo(pm);
-          if (schedInfo) {
+          if (pm.calledToTable) {
+            // WNT signals "players called, not yet racking" — worth surfacing,
+            // since it means this match is about to start on a known table.
+            var calledTbl = pm.tableName ? 'T' + pm.tableName.replace(/^Table\s*/i, '') : '';
+            html += '<span class="mr-sched mr-called" title="Players called to the table">' + esc(calledTbl) + ' ⏳</span>';
+          } else if (schedInfo) {
             html += '<span class="mr-sched" title="' + esc(schedInfo.title) + '">' + esc(schedInfo.label) + '</span>';
           } else {
             html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
@@ -2225,7 +2447,7 @@ button { font-family: inherit; font-size: inherit; }
   function blockerPlayerLink(p) {
     if (!p) return 'TBD';
     var pgId = 'pg-' + esc(p.name).replace(/\s/g, '-').toLowerCase();
-    return '<span class="match-opponent-link" data-player="' + pgId + '" style="cursor:pointer">' + esc(p.name) + (p.rating ? ' (' + p.rating + ')' : '') + '</span>';
+    return '<span class="match-opponent-link" data-player="' + pgId + '" style="cursor:pointer">' + playerFlagHtml(p) + esc(p.name) + (p.rating ? ' (' + p.rating + ')' : '') + '</span>';
   }
 
   function blockerPlayerLabel(bl) {
@@ -2269,13 +2491,13 @@ button { font-family: inherit; font-size: inherit; }
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl, isForfeit, scheduledTime, startTime) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl, isForfeit, scheduledTime, startTime, calledToTable) {
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl, isForfeit: isForfeit, scheduledTime: scheduledTime, startTime: startTime });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl, isForfeit: isForfeit, scheduledTime: scheduledTime, startTime: startTime, calledToTable: calledToTable });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -2368,7 +2590,7 @@ button { font-family: inherit; font-size: inherit; }
     var pgId = 'pg-' + esc(p.name).replace(/\s/g, '-').toLowerCase();
     return '<span class="' + cls + ' match-opponent-link' + (isFav ? ' is-fav' : '') +
       (isWinner ? ' fm-winner' : '') + (isLoser ? ' fm-loser' : '') +
-      '" data-player="' + pgId + '">' + esc(p.name) +
+      '" data-player="' + pgId + '">' + playerFlagHtml(p) + esc(p.name) +
       (p.rating ? ' <span class="fm-rating">(' + p.rating + ')</span>' : '') + '</span>';
   }
 
@@ -2421,7 +2643,10 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="mr-s2">' + m.s2 + '</span>';
       } else {
         var fmSched = matchTimeInfo(m);
-        if (fmSched) {
+        if (m.calledToTable) {
+          var fmTbl = m.tableName ? 'T' + m.tableName.replace(/^Table\s*/i, '') : '';
+          html += '<span class="mr-sched mr-called" title="Players called to the table">' + esc(fmTbl) + ' ⏳</span>';
+        } else if (fmSched) {
           html += '<span class="mr-sched" title="' + esc(fmSched.title) + '">' + esc(fmSched.label) + '</span>';
         } else {
           html += '<span class="fm-status"></span>';
@@ -2453,6 +2678,7 @@ button { font-family: inherit; font-size: inherit; }
     document.getElementById('detail-section').innerHTML = '';
     clearDetailTimer();
     currentSlug = null;
+    currentSource = 'digitalpool';
     currentMatches = null;
     currentTournament = null;
     currentPlayerList = null;
@@ -2462,6 +2688,7 @@ button { font-family: inherit; font-size: inherit; }
     updateSearchFab();
     var url = new URL(window.location);
     url.searchParams.delete('digitalpool');
+    url.searchParams.delete('wnt');
     history.replaceState(null, '', url);
   };
 
@@ -2863,14 +3090,15 @@ button { font-family: inherit; font-size: inherit; }
     if (!currentSlug) return;
     var slug = currentSlug;
     lastRefreshTime = Date.now();
-    fetchMatches(slug).then(function(result) {
+    var source = currentSource;
+    fetchForSource(slug, source).then(function(result) {
       if (currentSlug !== slug) return;
       currentMatches = result.matches;
       currentTournament = result.tournament;
       bracketByNum = result.bracketByNum || {};
 
       applyVideoMatches();
-      cache[slug] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum, players: currentPlayerList };
+      cache[cacheKey(slug, source)] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum, players: currentPlayerList };
       renderDetail();
       if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
       ensureVideosForMatches(currentMatches, currentTournament);
@@ -2885,13 +3113,14 @@ button { font-family: inherit; font-size: inherit; }
     if (e.key === 'Enter') {
       var url = urlInput.value.trim();
       if (!url) return;
+      var wntMatch = url.match(/wntlivescores\.com\/events\/([^\/\?#]+)/);
       var slugMatch = url.match(/\/tournaments\/([^\/\?#]+)/);
-      if (slugMatch) {
-        var slug;
-        try { slug = decodeURIComponent(slugMatch[1]); } catch(ex) { slug = slugMatch[1]; }
-        loadSmartTournament(slug);
+      if (wntMatch) {
+        loadTournament(safeDecode(wntMatch[1]), 'wnt');
+      } else if (slugMatch) {
+        loadSmartTournament(safeDecode(slugMatch[1]));
       } else {
-        showStatus('Could not parse tournament URL. Expected: https://digitalpool.com/tournaments/your-tournament', 'error');
+        showStatus('Could not parse tournament URL. Expected digitalpool.com/tournaments/… or wntlivescores.com/events/…', 'error');
       }
     }
   });
@@ -2942,9 +3171,15 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   // URL params
   // =====================================================
+  function safeDecode(s) {
+    try { return decodeURIComponent(s); } catch(ex) { return s; }
+  }
+
   function updateUrlBar(slug) {
     var url = new URL(window.location);
-    url.searchParams.set('digitalpool', slug);
+    var param = currentSource === 'wnt' ? 'wnt' : 'digitalpool';
+    url.searchParams.delete(param === 'wnt' ? 'digitalpool' : 'wnt');
+    url.searchParams.set(param, slug);
     history.replaceState(null, '', url);
   }
 
@@ -2955,6 +3190,11 @@ button { font-family: inherit; font-size: inherit; }
 
   function checkUrlParams() {
     var params = new URLSearchParams(window.location.search);
+    var wntSlug = params.get('wnt');
+    if (wntSlug) {
+      loadTournament(wntSlug, 'wnt');
+      return;
+    }
     var dpSlug = params.get('digitalpool');
     if (dpSlug) {
       loadSmartTournament(dpSlug);

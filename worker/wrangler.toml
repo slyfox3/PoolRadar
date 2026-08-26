@@ -1,0 +1,8 @@
+name = "wnt-proxy"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# Secrets are NOT set here — they would end up in git. Use:
+#   wrangler secret put WNT_EMAIL
+#   wrangler secret put WNT_PASSWORD
+# and optionally WNT_SESSION to override with a raw wnt.live.sid cookie.
