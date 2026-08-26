@@ -19,11 +19,13 @@ const BASE = 'https://www.wntlivescores.com';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
-const ALLOWED_ORIGINS = [
-  'https://slyfox3.github.io',
-  'http://localhost:8777',
-  'http://127.0.0.1:8777',
-];
+// PoolRadar and TournamentPerf are both served from the same Pages origin, so
+// one entry covers both.
+const ALLOWED_ORIGINS = ['https://slyfox3.github.io'];
+
+function originAllowed(origin) {
+  return ALLOWED_ORIGINS.includes(origin);
+}
 
 // Upstream polls itself every 33s, so 20s is fresh without adding load.
 const EVENT_TTL = 20;
@@ -190,7 +192,7 @@ async function loadEvent(slug, env) {
 
 function corsHeaders(origin) {
   const h = { 'Content-Type': 'application/json' };
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+  if (origin && originAllowed(origin)) {
     h['Access-Control-Allow-Origin'] = origin;
     h['Vary'] = 'Origin';
   }
@@ -220,7 +222,7 @@ export default {
     // Browsers always send Origin cross-site, so this keeps other sites from
     // spending our account. It cannot stop a direct client that omits the
     // header — the edge cache and the throwaway account are what limit that.
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && !originAllowed(origin)) {
       return new Response(JSON.stringify({ error: 'origin not allowed' }), {
         status: 403, headers: { 'Content-Type': 'application/json' },
       });
