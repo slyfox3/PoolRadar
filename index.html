@@ -1870,6 +1870,7 @@ button { font-family: inherit; font-size: inherit; }
   // other; null/false means "show everyone".
   var countryFilter = null; // { code, name }
   var liveOnly = false;
+  var pendingCountryParam = null; // ?country= awaiting a loaded field to resolve against
   // Players shown alongside the filtered set, added one at a time by following
   // an opponent link out of the filter. Keyed by player name, as playerOrder is.
   var pinnedPlayers = Object.create(null);
@@ -2000,6 +2001,10 @@ button { font-family: inherit; font-size: inherit; }
     currentSource = source || 'digitalpool';
     currentPlayerList = null;
     clearCardFilters();
+    // Claim the URL's country for this load only, so an event that turns out
+    // to have no matches cannot leak it onto whatever the user opens next.
+    var wantCountry = pendingCountryParam;
+    pendingCountryParam = null;
     updateUrlBar(slug);
     urlInput.value = '';
     clearDetailTimer();
@@ -2020,6 +2025,7 @@ button { font-family: inherit; font-size: inherit; }
       bracketByNum = cache[ck].bracketByNum || {};
 
       applyVideoMatches();
+      applyCountryFromUrl(wantCountry);
       renderDetail();
 
       ensureVideosForMatches(currentMatches, currentTournament);
@@ -2061,6 +2067,7 @@ button { font-family: inherit; font-size: inherit; }
       applyVideoMatches();
       cache[ck] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
       updateLoadingToast('Loaded ' + result.matches.length + ' matches in ' + fetchMs + ' ms');
+      applyCountryFromUrl(wantCountry);
       renderDetail();
 
       ensureVideosForMatches(currentMatches, currentTournament);
@@ -2866,13 +2873,14 @@ button { font-family: inherit; font-size: inherit; }
   window.toggleGroupBy = function(v) { groupByPlayer = v; renderDetail(); };
   window.toggleBlockers = function() { showBlockers = !showBlockers; renderDetail(); };
   window.toggleLiveOnly = function() { liveOnly = !liveOnly; renderDetail(); };
-  window.clearCountryFilter = function() { countryFilter = null; renderDetail(); };
+  window.clearCountryFilter = function() { countryFilter = null; updateCountryUrl(); renderDetail(); };
   // Declared, not assigned, so the event-switch and close paths can call it
   // regardless of where they sit in this file.
   function clearCardFilters(rerender) {
     countryFilter = null;
     liveOnly = false;
     clearPinnedPlayers();
+    updateCountryUrl();
     if (rerender) renderDetail();
   }
   window.clearCardFilters = clearCardFilters;
@@ -3249,6 +3257,7 @@ button { font-family: inherit; font-size: inherit; }
     closeSearch();
     countryFilter = { code: code, name: name };
     groupByPlayer = true;
+    updateCountryUrl();
     renderDetail();
     var grid = document.querySelector('.match-toggles');
     if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3567,6 +3576,28 @@ button { font-family: inherit; font-size: inherit; }
     history.replaceState(null, '', url);
   }
 
+  // The country filter is shareable: ?country=tw rides alongside ?wnt=<slug>.
+  // replaceState, not pushState, to match how the slug is written — this app
+  // has no popstate handling, and its own back pill covers card navigation.
+  function updateCountryUrl() {
+    var url = new URL(window.location);
+    if (countryFilter) url.searchParams.set('country', countryFilter.code);
+    else url.searchParams.delete('country');
+    history.replaceState(null, '', url);
+  }
+
+  // Resolved once the field is loaded, since countries come from the matches.
+  // Takes an ISO code or any name the search box accepts, so ?country=taiwan
+  // and ?country=chinese%20taipei both land on tw.
+  function applyCountryFromUrl(want) {
+    if (!want) return;
+    var hits = rankCountries(String(want), collectSearchablePlayers());
+    if (!hits.length) return;
+    countryFilter = { code: hits[0].code, name: hits[0].name };
+    groupByPlayer = true;
+    updateCountryUrl();
+  }
+
   function loadSmartTournament(slug) {
     // Try loading matches — if none exist, loadTournament falls back to player list
     loadTournament(slug);
@@ -3574,6 +3605,8 @@ button { font-family: inherit; font-size: inherit; }
 
   function checkUrlParams() {
     var params = new URLSearchParams(window.location.search);
+    // Consumed by whichever load follows, once its matches are in.
+    pendingCountryParam = params.get('country');
     var wntSlug = params.get('wnt');
     if (wntSlug) {
       loadTournament(wntSlug, 'wnt');
