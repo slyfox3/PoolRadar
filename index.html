@@ -192,12 +192,26 @@ button { font-family: inherit; font-size: inherit; }
 .blocker-section { margin-top: 8px; border-top: 1px solid #334155; padding: 6px 8px; font-size: 12px; color: #64748b; }
 .blocker-entry { margin: 2px 0; }
 .blocker-child { margin: 2px 0 2px 22px; color: #64748b; }
-.blocker-switch { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; cursor: pointer; font-size: 12px; color: #94a3b8; user-select: none; }
-.blocker-switch .switch-track { width: 30px; height: 15px; border-radius: 8px; background: #475569; position: relative; transition: background 0.25s ease; flex-shrink: 0; }
-.blocker-switch.active .switch-track { background: #22c55e; }
-.blocker-switch .switch-knob { width: 11px; height: 11px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; transition: left 0.25s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-.blocker-switch.active .switch-knob { left: 17px; }
-.blocker-switch.active .switch-label { color: #fff; }
+/* Generic switch used by the Blockers and Now playing toggles */
+.toggle-switch { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; cursor: pointer; font-size: 12px; color: #94a3b8; user-select: none; }
+.toggle-switch .switch-track { width: 30px; height: 15px; border-radius: 8px; background: #475569; position: relative; transition: background 0.25s ease; flex-shrink: 0; }
+.toggle-switch.active .switch-track { background: #22c55e; }
+.toggle-switch .switch-knob { width: 11px; height: 11px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; transition: left 0.25s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.toggle-switch.active .switch-knob { left: 17px; }
+.toggle-switch.active .switch-label { color: #fff; }
+.toggle-switch .switch-count { color: #64748b; }
+.toggle-switch.is-empty { opacity: 0.5; }
+/* Filter chips — the active country, and any players added on top of it */
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: 2px 4px 2px 9px; border-radius: 12px; background: #1e293b; border: 1px solid #334155; font-size: 12px; color: #e2e8f0; }
+.filter-chip .cc-count { color: #64748b; }
+.filter-chip .cc-clear { background: none; border: none; color: #64748b; font-size: 15px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.filter-chip .cc-clear:hover { color: #e2e8f0; }
+/* Cards shown despite the filter, because an opponent link led to them */
+.player-group.is-pinned { border-style: dashed; border-color: #475569; }
+.pin-tag { margin-left: auto; background: none; border: 1px solid #334155; border-radius: 10px; color: #64748b; font-size: 10px; line-height: 1.6; padding: 0 6px; cursor: pointer; white-space: nowrap; }
+.pin-tag:hover { color: #e2e8f0; border-color: #64748b; }
+.filter-empty { text-align: center; padding: 20px; color: #64748b; }
+.filter-empty button { background: none; border: none; color: #60a5fa; font-size: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 .registered-players-section { margin-bottom: 12px; border: 1px solid #334155; border-radius: 6px; overflow: hidden; }
 .registered-players-header { padding: 8px 12px; background: #1e293b; cursor: pointer; font-size: 13px; color: #94a3b8; user-select: none; }
 .registered-players-header:hover { background: #334155; }
@@ -284,9 +298,21 @@ button { font-family: inherit; font-size: inherit; }
 .pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
 .pse-meta { margin-left: auto; padding-left: 8px; color: #64748b; font-size: 12px; white-space: nowrap; }
 .pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
+.pse-section { padding: 12px 12px 4px; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+/* Country rows pick a whole country; player rows jump to one card. */
+.pse-item.pse-country .pse-name { font-weight: 600; }
+.pse-item.pse-country .pse-flag { font-size: 23.4px; line-height: 1; }
+.pse-item.pse-country .pse-chevron { color: #475569; font-size: 13px; padding-left: 6px; }
 .player-list-item.highlight { animation: card-blink 1s ease-in-out 3; border-radius: 4px; }
 /* Country flag — emoji, so no assets. Nudged down to sit on the text baseline. */
-.pf { margin-right: 4px; font-size: 11px; line-height: 1; vertical-align: 1px; }
+.pf { margin-right: 4px; font-size: 14.3px; line-height: 1; vertical-align: -0.06em; }
+/* Taiwan is drawn from an inlined SVG: Windows renders no flag emoji at all,
+   and iOS hides this one in some regions. A white silhouette of the blossom
+   sits behind the emblem, stroked so it reaches just past the blue outline —
+   without it the dark blue trace vanishes against the dark page. Cropped to
+   the artwork and sized 30% over the emoji footprint. */
+.flag-img { display: inline-block; background-position: center; background-size: contain; background-repeat: no-repeat; width: 1.36em; height: 0.91em; vertical-align: -0.08em; }
+.flag-tw { width: 0.9em; height: 0.9em; vertical-align: -0.05em; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8.7 -21 531.4 531.9'%3E%3Cg transform='matrix(1.0350939,0,0,1.0479042,-208.77414,-69.356587)'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23fff' stroke='%23fff' stroke-width='40' stroke-linejoin='round' /%3E%3Cg clip-rule='evenodd' fill-rule='evenodd'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23ffffff' /%3E%3Cpath d='m 451.725,190.979 c -32.534,0 -58.923,26.402 -58.923,58.91 0,32.562 26.389,58.952 58.923,58.952 32.563,0 58.952,-26.39 58.952,-58.952 0,-32.508 -26.389,-58.91 -58.952,-58.91 z m -0.014,87.339 c -15.682,0 -28.4,-12.707 -28.4,-28.43 0,-15.668 12.719,-28.415 28.4,-28.415 15.71,0 28.442,12.746 28.442,28.415 10e-4,15.723 -12.732,28.43 -28.442,28.43 z' fill='%23003283' /%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z m -67.949,85.864 c 5.637,12.953 8.75,27.215 8.75,42.234 0,58.621 -47.5,106.108 -106.106,106.108 -26.403,0 -50.587,-9.66 -69.149,-25.617 -18.575,15.957 -42.732,25.617 -69.148,25.617 -58.621,0 -106.107,-47.487 -106.107,-106.108 0,-14.371 2.88,-28.069 8.048,-40.594 -29.931,-18.784 -49.857,-52.035 -49.857,-89.972 0,-58.607 47.486,-106.107 106.094,-106.107 2.205,0 4.354,0.042 6.504,0.221 11.629,-45.985 53.273,-80.007 102.854,-80.007 49.566,0 91.21,34.022 102.84,80.007 2.149,-0.179 4.342,-0.221 6.505,-0.221 58.607,0 106.106,47.5 106.106,106.107 0,36.821 -18.823,69.301 -47.334,88.332 z' fill='%23003283' /%3E%3Cpath d='m 651.797,277.752 c 0,-53.702 -43.488,-97.191 -97.19,-97.191 -3.06,0 -6.159,0.179 -9.177,0.427 -9.688,-43.448 -48.479,-75.873 -94.82,-75.873 -46.356,0 -85.134,32.425 -94.808,75.873 -3.004,-0.248 -6.063,-0.427 -9.122,-0.427 -53.702,0 -97.192,43.489 -97.192,97.191 0,35.912 19.499,67.273 48.533,84.101 -5.153,11.85 -8.019,24.846 -8.019,38.583 0,53.701 43.545,97.191 97.205,97.191 24.97,0 47.748,-9.439 64.973,-24.9 17.212,15.461 39.989,24.9 64.96,24.9 53.659,0 97.15,-43.49 97.15,-97.191 0,-14.248 -3.06,-27.808 -8.614,-40.044 27.699,-17.102 46.121,-47.707 46.121,-82.64 z m -62.615,76.521 c 8.792,13.435 13.917,29.462 13.917,46.687 0,47.128 -38.198,85.325 -85.312,85.325 -26.61,0 -50.312,-12.14 -65.965,-31.169 -15.655,19.029 -39.384,31.169 -65.952,31.169 -47.155,0 -85.354,-38.197 -85.354,-85.325 0,-16.716 4.823,-32.342 13.132,-45.516 -30.537,-12.968 -51.979,-43.284 -51.979,-78.547 0,-47.155 38.198,-85.354 85.354,-85.354 6.711,0 13.285,0.812 19.595,2.288 4.438,-42.939 40.734,-76.439 84.858,-76.439 43.917,0 80.089,33.197 84.788,75.873 5.513,-1.116 11.189,-1.722 17.005,-1.722 47.113,0 85.313,38.198 85.313,85.354 10e-4,34.272 -20.201,63.817 -49.4,77.376 z' fill='%23e41f20' /%3E%3Cg fill='%23ffffff'%3E%3Cpath d='m 444.684,217.464 h 14.814 l -7.056,-22.558 z' /%3E%3Cpath d='m 429.402,225.346 12.829,-7.4 -17.418,-16.068 z' /%3E%3Cpath d='m 420.1,239.815 7.414,-12.87 -23.082,-5.169 z' /%3E%3Cpath d='m 419.288,256.958 v -14.814 l -22.572,7.055 z' /%3E%3Cpath d='m 427.169,272.239 -7.414,-12.829 -16.012,17.404 z' /%3E%3Cpath d='m 441.611,281.542 -12.816,-7.401 -5.209,23.082 z' /%3E%3Cpath d='m 458.767,282.369 h -14.813 l 7.069,22.558 z' /%3E%3Cpath d='m 474.078,274.485 -12.858,7.401 17.433,16.026 z' /%3E%3Cpath d='m 483.337,260.017 -7.386,12.829 23.109,5.168 z' /%3E%3Cpath d='m 484.164,242.874 v 14.814 l 22.599,-7.055 z' /%3E%3Cpath d='m 476.323,227.592 7.4,12.83 16.027,-17.405 z' /%3E%3Cpath d='m 461.854,218.291 12.829,7.399 5.167,-23.082 z' /%3E%3C/g%3E%3C/g%3E%3Cpath d='m 409.544,366.854 c 0,-20.754 -16.784,-37.552 -37.551,-37.552 -20.753,0 -37.55,16.798 -37.55,37.552 0,20.752 16.797,37.551 37.55,37.551 1.131,0 2.205,-0.042 3.28,-0.125 -0.083,-0.991 -0.124,-1.984 -0.124,-2.976 0,-1.116 0.041,-2.246 0.124,-3.321 -1.075,0.139 -2.149,0.179 -3.28,0.179 -17.266,0 -31.293,-13.999 -31.293,-31.308 0,-17.268 14.027,-31.309 31.293,-31.309 17.321,0 31.309,14.041 31.309,31.309 0,13.903 -9.04,25.658 -21.565,29.75 -0.221,1.518 -0.345,3.102 -0.345,4.7 0,0.646 0.041,1.294 0.054,1.888 16.179,-4.175 28.098,-18.851 28.098,-36.338 z' fill='%230083ce' /%3E%3Cpath d='m 572.301,366.854 c 0,20.752 -16.784,37.551 -37.551,37.551 -19.636,0 -35.73,-15.035 -37.413,-34.244 2.232,0.221 4.383,0.689 6.45,1.379 2.287,15.075 15.295,26.622 30.963,26.622 17.322,0 31.309,-13.999 31.309,-31.308 0,-17.268 -13.986,-31.309 -31.309,-31.309 -16.618,0 -30.22,13.008 -31.213,29.364 -2.024,-0.509 -4.092,-0.854 -6.2,-1.033 1.503,-19.332 17.694,-34.574 37.413,-34.574 20.767,10e-4 37.551,16.799 37.551,37.552 z' fill='%23e61446' /%3E%3Cpath d='m 525.326,403.192 c -0.992,16.439 -14.595,29.42 -31.268,29.42 -17.268,0 -31.281,-14.015 -31.281,-31.308 0,-13.918 9.04,-25.673 21.554,-29.765 0.219,-1.544 0.343,-3.088 0.343,-4.686 0,-0.648 0,-1.295 -0.04,-1.944 -16.179,4.23 -28.127,18.907 -28.127,36.395 0,20.739 16.826,37.563 37.552,37.563 19.732,0 35.911,-15.24 37.469,-34.588 -2.152,-0.178 -4.219,-0.522 -6.202,-1.087 z m -31.268,-33.196 c 15.724,0 28.731,11.548 30.964,26.608 2.066,0.689 4.217,1.172 6.464,1.379 -1.682,-19.195 -17.791,-34.229 -37.428,-34.229 -1.075,0 -2.149,0.04 -3.226,0.123 0.084,0.992 0.084,1.985 0.084,2.978 0,1.115 -0.042,2.231 -0.124,3.307 1.075,-0.125 2.191,-0.166 3.266,-0.166 z' fill='%23009c45' /%3E%3Cpath d='m 450.14,404.28 c -1.529,19.348 -17.72,34.588 -37.44,34.588 -20.766,0 -37.55,-16.824 -37.55,-37.563 0,-17.487 11.919,-32.164 28.097,-36.395 0.042,0.649 0.056,1.296 0.056,1.944 0,1.598 -0.124,3.142 -0.344,4.686 -12.526,4.092 -21.566,15.847 -21.566,29.765 0,17.293 14.015,31.308 31.308,31.308 16.619,0 30.247,-12.98 31.24,-29.378 1.997,0.522 4.065,0.866 6.199,1.045 z m -40.719,-34.119 c 0.083,-1.075 0.124,-2.191 0.124,-3.307 0,-0.992 0,-1.985 -0.096,-2.978 1.074,-0.083 2.149,-0.123 3.251,-0.123 19.637,0 35.732,15.034 37.414,34.229 -2.232,-0.207 -4.396,-0.689 -6.463,-1.379 -2.26,-15.061 -15.242,-26.608 -30.951,-26.608 -1.102,10e-4 -2.204,0.042 -3.279,0.166 z' fill='%23f7b000' /%3E%3Cpath d='m 453.393,398.162 c -15.723,0 -28.704,-11.547 -30.963,-26.622 -2.068,-0.689 -4.217,-1.158 -6.464,-1.379 1.681,19.209 17.791,34.244 37.427,34.244 1.075,0 2.164,-0.042 3.252,-0.125 -0.096,-0.991 -0.139,-1.984 -0.139,-2.976 0,-1.116 0.069,-2.246 0.152,-3.321 -1.075,0.139 -2.15,0.179 -3.265,0.179 z m 0,-68.859 c -19.747,0 -35.925,15.242 -37.427,34.574 2.108,0.18 4.175,0.524 6.188,1.033 1.006,-16.356 14.606,-29.364 31.239,-29.364 17.281,0 31.28,14.041 31.28,31.309 0,13.903 -9.025,25.658 -21.538,29.75 -0.234,1.518 -0.358,3.102 -0.358,4.7 0,0.646 0,1.294 0.042,1.888 16.191,-4.176 28.139,-18.852 28.139,-36.338 0,-20.754 -16.839,-37.552 -37.565,-37.552 z' fill='%23000006' /%3E%3C/g%3E%3C/svg%3E"); }
 /* WNT-only: players called to a table but not yet under way. */
 .mr-called { color: #fbbf24; }
 </style>
@@ -981,11 +1007,53 @@ button { font-family: inherit; font-size: inherit; }
     return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
   }
 
+  // WNT reports some countries under the name their federation competes as
+  // rather than the country's own. Show the country's own name everywhere.
+  var COUNTRY_NAME_OVERRIDE = { tw: 'Taiwan' };
+
+  // Extra strings that should find a country in search, beyond its shown name.
+  // Covers the overridden names above plus the everyday names for countries
+  // WNT lists formally ("Viet Nam", "United States").
+  var COUNTRY_SEARCH_ALIASES = {
+    tw: ['chinese taipei', 'taipei', 'formosa'],
+    us: ['usa', 'america', 'united states of america'],
+    gb: ['uk', 'britain', 'great britain'],
+    nl: ['holland'],
+    vn: ['vietnam'],
+    kr: ['south korea'],
+    ae: ['uae'],
+    cz: ['czechia', 'czech republic'],
+    ru: ['russia'],
+  };
+
+  function countryDisplayName(code, rawName) {
+    return (code && COUNTRY_NAME_OVERRIDE[code.toLowerCase()]) || rawName || code || '';
+  }
+
+  // Codes drawn from an inlined SVG rather than the regional-indicator emoji.
+  // Windows ships no flag glyphs at all, and iOS suppresses this one in some
+  // regions, so the emoji cannot be relied on here. The art lives in CSS.
+  var FLAG_IMG = { tw: true };
+
+  // cls picks the size context: .pf inline in text, .pse-flag in the search
+  // overlay. The SVG is sized in em, so it tracks whichever it is given.
+  function countryFlagHtml(code, name, cls) {
+    if (!code) return '';
+    var cc = String(code).toLowerCase();
+    var label = esc(name || code);
+    cls = cls || 'pf';
+    if (FLAG_IMG[cc]) {
+      return '<span class="' + cls + ' flag-img flag-' + cc + '" role="img" aria-label="' +
+        label + '" title="' + label + '"></span>';
+    }
+    var flag = wntFlag(cc);
+    if (!flag) return '';
+    return '<span class="' + cls + '" title="' + label + '">' + flag + '</span>';
+  }
+
   function playerFlagHtml(p) {
     if (!p || !p.country) return '';
-    var flag = wntFlag(p.country);
-    if (!flag) return '';
-    return '<span class="pf" title="' + esc(p.countryName || p.country) + '">' + flag + '</span>';
+    return countryFlagHtml(p.country, p.countryName || p.country, 'pf');
   }
 
   // WNT timestamps look local but are UTC — their own main.js parses them with
@@ -1005,7 +1073,10 @@ button { font-family: inherit; font-size: inherit; }
       rating: null,
       place: null,
       country: p.country && p.country.code ? p.country.code : null,
-      countryName: p.country && p.country.name ? p.country.name : null,
+      // Overridden at the source so every renderer downstream shows one name.
+      countryName: p.country && p.country.code
+        ? countryDisplayName(p.country.code, p.country.name)
+        : (p.country && p.country.name) || null,
     };
   }
 
@@ -1795,6 +1866,13 @@ button { font-family: inherit; font-size: inherit; }
   var detailInterval = null;
   var groupByPlayer = true;
   var showBlockers = true;
+  // Player-card filters. Both narrow the grouped view and compose with each
+  // other; null/false means "show everyone".
+  var countryFilter = null; // { code, name }
+  var liveOnly = false;
+  // Players shown alongside the filtered set, added one at a time by following
+  // an opponent link out of the filter. Keyed by player name, as playerOrder is.
+  var pinnedPlayers = Object.create(null);
   var playerListSort = 'name';
   var registeredPlayersExpanded = false;
   var unassociatedVideosExpanded = true;
@@ -1921,6 +1999,7 @@ button { font-family: inherit; font-size: inherit; }
     currentSlug = slug;
     currentSource = source || 'digitalpool';
     currentPlayerList = null;
+    clearCardFilters();
     updateUrlBar(slug);
     urlInput.value = '';
     clearDetailTimer();
@@ -2171,7 +2250,25 @@ button { font-family: inherit; font-size: inherit; }
     html += '<button class="toggle-btn' + (!groupByPlayer ? ' active' : '') + '" onclick="toggleGroupBy(false)">By Match #</button>';
     html += '</div>';
     if (groupByPlayer) {
-      html += '<span class="blocker-switch' + (showBlockers ? ' active' : '') + '" onclick="toggleBlockers()"><span class="switch-track"><span class="switch-knob"></span></span><span class="switch-label">Blockers</span></span>';
+      html += '<span class="toggle-switch' + (showBlockers ? ' active' : '') + '" onclick="toggleBlockers()"><span class="switch-track"><span class="switch-knob"></span></span><span class="switch-label">Blockers</span></span>';
+    }
+    // Card filters — meaningless without cards to filter.
+    if (groupByPlayer && currentMatches && currentMatches.length) {
+      var liveCount = livePlayerCount();
+      html += '<span class="toggle-switch' + (liveOnly ? ' active' : '') + (liveCount ? '' : ' is-empty') +
+        '" onclick="toggleLiveOnly()" title="Only players in a match under way">' +
+        '<span class="switch-track"><span class="switch-knob"></span></span>' +
+        '<span class="switch-label">Now playing</span>' +
+        '<span class="switch-count">' + liveCount + '</span></span>';
+      if (countryFilter) {
+        html += '<span class="filter-chip">' + countryFlagHtml(countryFilter.code, countryFilter.name, 'pf') + esc(countryFilter.name) +
+          ' <span class="cc-count">' + countryPlayerCount(countryFilter.code) + '</span>' +
+          '<button class="cc-clear" onclick="clearCountryFilter()" aria-label="Clear country filter" title="Clear country filter">&times;</button></span>';
+      }
+      if ((countryFilter || liveOnly) && pinnedPlayerCount() > 0) {
+        html += '<span class="filter-chip">+' + pinnedPlayerCount() + ' added' +
+          '<button class="cc-clear" onclick="clearPinnedPlayers()" aria-label="Remove added players" title="Remove added players">&times;</button></span>';
+      }
     }
     html += '</div>';
 
@@ -2278,6 +2375,46 @@ button { font-family: inherit; font-size: inherit; }
     };
   }
 
+  // Distinct players across currentMatches, keyed the same way the card grid
+  // keys them (by name), so these counts match what the filters will show.
+  function eachCurrentPlayer(fn) {
+    if (!currentMatches) return;
+    var seen = Object.create(null);
+    for (var i = 0; i < currentMatches.length; i++) {
+      var m = currentMatches[i];
+      var sides = [m.p1, m.p2];
+      for (var s = 0; s < 2; s++) {
+        var p = sides[s];
+        if (!p || !p.name || seen[p.name]) continue;
+        seen[p.name] = true;
+        fn(p);
+      }
+    }
+  }
+
+  function countryPlayerCount(code) {
+    var n = 0;
+    eachCurrentPlayer(function(p) { if (p.country === code) n++; });
+    return n;
+  }
+
+  // A player is "now playing" if any of their matches is under way. Players
+  // merely called to a table have not started, so they do not count.
+  function livePlayerCount() {
+    if (!currentMatches) return 0;
+    var live = Object.create(null), n = 0;
+    for (var i = 0; i < currentMatches.length; i++) {
+      var m = currentMatches[i];
+      if (m.status !== 'IN_PROGRESS' || m.isBye) continue;
+      var sides = [m.p1, m.p2];
+      for (var s = 0; s < 2; s++) {
+        var p = sides[s];
+        if (p && p.name && !live[p.name]) { live[p.name] = true; n++; }
+      }
+    }
+    return n;
+  }
+
   function renderGroupedByPlayer(matches) {
     // Build per-player match lists
     var playerMap = {};
@@ -2300,6 +2437,31 @@ button { font-family: inherit; font-size: inherit; }
 
     var bMap = buildBlockerMap(bracketByNum);
     var tStatus = currentTournament && currentTournament.status;
+
+    // Card filters. inflightCount above stays unfiltered on purpose — it gates
+    // inferred video links, which is a property of the event, not the view.
+    var totalPlayers = playerOrder.length;
+    if (countryFilter || liveOnly) {
+      playerOrder = playerOrder.filter(function(n) {
+        if (pinnedPlayers[n]) return true; // added by following an opponent link
+        if (countryFilter && playerMap[n].player.country !== countryFilter.code) return false;
+        if (liveOnly) {
+          var ms = playerMap[n].matches, live = false;
+          for (var i = 0; i < ms.length; i++) {
+            if (ms[i].status === 'IN_PROGRESS') { live = true; break; }
+          }
+          if (!live) return false;
+        }
+        return true;
+      });
+    }
+    if (playerOrder.length === 0 && totalPlayers > 0) {
+      var what = [];
+      if (countryFilter) what.push('from ' + esc(countryFilter.name));
+      if (liveOnly) what.push('in a match right now');
+      return '<div class="filter-empty">No players ' + what.join(' ') +
+        '.<br><button onclick="clearCardFilters(true)">Show all ' + totalPlayers + ' players</button></div>';
+    }
 
     // Estimate card height for masonry-style sorting
     var LINE = 18, SECTION_PAD = 33, HEADER = 44, MATCH_ROW = 20;
@@ -2341,12 +2503,18 @@ button { font-family: inherit; font-size: inherit; }
       var name = playerOrder[pi];
       var pd = playerMap[name];
       var isFav = isPlayerFav(pd.player);
-      html += '<div class="player-group" id="pg-' + esc(pd.player.name).replace(/\s/g, '-').toLowerCase() + '">';
+      // A pinned card sits outside the active filter, so say so on the card.
+      var isPinned = (countryFilter || liveOnly) && !!pinnedPlayers[name];
+      html += '<div class="player-group' + (isPinned ? ' is-pinned' : '') + '" id="pg-' + esc(pd.player.name).replace(/\s/g, '-').toLowerCase() + '">';
       html += '<div class="player-group-header">';
       html += playerFavBtn(pd.player);
       html += '<span class="player-group-name' + (isFav ? ' is-fav' : '') + '">' + playerFlagHtml(pd.player) + esc(pd.player.name) + '</span>';
       if (pd.player.rating) html += '<span class="player-group-stats">(' + pd.player.rating + ')</span>';
       if (pd.player.place) html += '<span class="player-group-stats">Place: ' + esc(pd.player.place) + '</span>';
+      if (isPinned) {
+        html += '<button class="pin-tag" data-action="unpin" data-name="' + esc(pd.player.name) +
+          '" title="Remove from this filtered view">added &times;</button>';
+      }
       html += '</div>';
 
       html += '<div class="match-rows">';
@@ -2685,6 +2853,7 @@ button { font-family: inherit; font-size: inherit; }
     currentTournament = null;
     currentPlayerList = null;
     bracketByNum = {};
+    clearCardFilters();
     navHistory = [];
     updateNavPill();
     updateSearchFab();
@@ -2696,6 +2865,42 @@ button { font-family: inherit; font-size: inherit; }
 
   window.toggleGroupBy = function(v) { groupByPlayer = v; renderDetail(); };
   window.toggleBlockers = function() { showBlockers = !showBlockers; renderDetail(); };
+  window.toggleLiveOnly = function() { liveOnly = !liveOnly; renderDetail(); };
+  window.clearCountryFilter = function() { countryFilter = null; renderDetail(); };
+  // Declared, not assigned, so the event-switch and close paths can call it
+  // regardless of where they sit in this file.
+  function clearCardFilters(rerender) {
+    countryFilter = null;
+    liveOnly = false;
+    clearPinnedPlayers();
+    if (rerender) renderDetail();
+  }
+  window.clearCardFilters = clearCardFilters;
+
+  // Navigating to a card the filter is hiding would silently do nothing, so
+  // add that one player alongside the filtered set. Returns whether the caller
+  // needs to re-render. Only players who really have a card qualify: TBD links
+  // point at anchor ids that never exist.
+  function pinFilteredCard(anchorId) {
+    if (!countryFilter && !liveOnly) return false;
+    if (document.getElementById(anchorId)) return false;
+    var target = null;
+    eachCurrentPlayer(function(p) {
+      if (target === null && playerAnchorId(p.name) === anchorId) target = p.name;
+    });
+    if (target === null) return false;
+    pinnedPlayers[target] = true;
+    return true;
+  }
+
+  function pinnedPlayerCount() {
+    return Object.keys(pinnedPlayers).length;
+  }
+
+  function clearPinnedPlayers() {
+    pinnedPlayers = Object.create(null);
+  }
+  window.clearPinnedPlayers = function() { clearPinnedPlayers(); renderDetail(); };
   window.setPlayerListSort = function(v) { playerListSort = v; if (currentPlayerList) renderPlayerList(currentPlayerList); };
   window.setPlayerListSortDetail = function(v) { playerListSort = v; renderDetail(); };
   window.toggleRegisteredPlayers = function() {
@@ -2745,6 +2950,9 @@ button { font-family: inherit; font-size: inherit; }
   function navBack() {
     while (navHistory.length > 0) {
       var entry = navHistory.pop();
+      // Same trap as the opponent links: a card the filter is hiding must be
+      // added back, not skipped over.
+      if (pinFilteredCard(entry.id)) renderDetail();
       if (scrollToCard(entry.id)) break;
     }
     updateNavPill();
@@ -2771,28 +2979,35 @@ button { font-family: inherit; font-size: inherit; }
   // Every player we can jump to: everyone with a match, plus the registered list
   function collectSearchablePlayers() {
     var byName = Object.create(null), out = [];
-    function add(name, rating, place) {
+    function add(name, rating, place, country, countryName) {
       if (!name) return;
       var key = name.toLowerCase();
       if (byName[key]) {
         if (rating && !byName[key].rating) byName[key].rating = rating;
         if (place && !byName[key].place) byName[key].place = place;
+        if (country && !byName[key].country) {
+          byName[key].country = country;
+          byName[key].countryName = countryName || null;
+        }
         return;
       }
-      byName[key] = { name: name, rating: rating || null, place: place || null };
+      byName[key] = {
+        name: name, rating: rating || null, place: place || null,
+        country: country || null, countryName: countryName || null,
+      };
       out.push(byName[key]);
     }
     if (currentMatches) {
       for (var i = 0; i < currentMatches.length; i++) {
         var m = currentMatches[i];
-        if (m.p1) add(m.p1.name, m.p1.rating, m.p1.place);
-        if (m.p2) add(m.p2.name, m.p2.rating, m.p2.place);
+        if (m.p1) add(m.p1.name, m.p1.rating, m.p1.place, m.p1.country, m.p1.countryName);
+        if (m.p2) add(m.p2.name, m.p2.rating, m.p2.place, m.p2.country, m.p2.countryName);
       }
     }
     if (currentPlayerList) {
       for (var j = 0; j < currentPlayerList.length; j++) {
         var p = currentPlayerList[j];
-        add(p.name, p.skill_level, null);
+        add(p.name, p.skill_level, null, null, null);
       }
     }
     return out;
@@ -2810,9 +3025,70 @@ button { font-family: inherit; font-size: inherit; }
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  // Countries represented in the loaded event, biggest delegation first.
+  // Codes with no flag (WNT's 'unknown') are not countries anyone can filter by.
+  function collectCountries(players) {
+    var byCode = Object.create(null), out = [];
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i];
+      if (!p.country || !wntFlag(p.country)) continue;
+      var c = byCode[p.country];
+      if (!c) {
+        c = byCode[p.country] = {
+          code: p.country,
+          name: countryDisplayName(p.country, p.countryName),
+          players: [],
+        };
+        out.push(c);
+      }
+      c.players.push(p);
+    }
+    out.sort(function(a, b) {
+      return b.players.length - a.players.length || a.name.localeCompare(b.name);
+    });
+    return out;
+  }
+
+  // A country is a hit on a prefix of its name, of any word in its name, or of
+  // any alias. Queries under 3 characters must match a code or alias exactly,
+  // so typing "ko" looking for a player does not pull in a whole delegation.
+  function countryMatchScore(c, q) {
+    if (!q) return -1;
+    var name = c.name.toLowerCase();
+    var cands = [name];
+    var words = name.split(/\s+/);
+    for (var w = 0; w < words.length; w++) {
+      if (words[w].length >= 3) cands.push(words[w]);
+    }
+    var aliases = COUNTRY_SEARCH_ALIASES[c.code] || [];
+    for (var a = 0; a < aliases.length; a++) cands.push(aliases[a]);
+    if (q === c.code) return 1;
+    var best = -1;
+    for (var i = 0; i < cands.length; i++) {
+      if (q === cands[i]) return 0;
+      if (q.length >= 3 && cands[i].indexOf(q) === 0) best = 1;
+    }
+    return best;
+  }
+
+  function rankCountries(query, players) {
+    var q = query.toLowerCase().trim();
+    if (!q) return [];
+    var hits = [];
+    var all = collectCountries(players);
+    for (var i = 0; i < all.length; i++) {
+      var score = countryMatchScore(all[i], q);
+      if (score >= 0) hits.push({ c: all[i], score: score });
+    }
+    hits.sort(function(a, b) {
+      return a.score - b.score || b.c.players.length - a.c.players.length;
+    });
+    return hits.map(function(h) { return h.c; });
+  }
+
   // Prefix matches rank above mid-word ones; every token must match somewhere
-  function rankPlayers(query) {
-    var players = collectSearchablePlayers();
+  function rankPlayers(query, players) {
+    players = players || collectSearchablePlayers();
     var toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     if (!toks.length) {
       return players.slice().sort(function(a, b) { return a.name.localeCompare(b.name); });
@@ -2850,33 +3126,98 @@ button { font-family: inherit; font-size: inherit; }
     return out;
   }
 
+  // Results are a flat list of entries so one cursor walks countries and
+  // players alike: country entries filter the grid, player entries jump.
+  function buildSearchEntries(query) {
+    var players = collectSearchablePlayers();
+    var entries = [];
+    var countries = rankCountries(query, players);
+    for (var i = 0; i < countries.length; i++) {
+      entries.push({ kind: 'country', country: countries[i] });
+    }
+    var named = rankPlayers(query, players);
+    var listed = Object.create(null);
+    for (var j = 0; j < named.length; j++) {
+      listed[named[j].name] = true;
+      entries.push({ kind: 'player', player: named[j] });
+    }
+    // Only one country matched, so its roster is unambiguous — list the rest of
+    // it under the name hits rather than making the user click through first.
+    if (countries.length === 1) {
+      var roster = countries[0].players.slice().sort(function(a, b) {
+        return a.name.localeCompare(b.name);
+      });
+      var added = 0;
+      for (var k = 0; k < roster.length; k++) {
+        if (listed[roster[k].name]) continue;
+        if (!added) entries.push({ kind: 'section', label: 'Players from ' + countries[0].name });
+        added++;
+        entries.push({ kind: 'player', player: roster[k] });
+      }
+    }
+    return entries;
+  }
+
   function renderSearchResults() {
     var query = searchInputEl.value;
     var toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    var all = rankPlayers(query);
-    searchHits = all.slice(0, SEARCH_RESULT_CAP);
+    var all = buildSearchEntries(query);
+    // Sections are labels, not targets, so they never enter the hit list.
+    var selectable = all.filter(function(e) { return e.kind !== 'section'; });
+    var capped = selectable.length > SEARCH_RESULT_CAP;
+    if (capped) {
+      var kept = 0;
+      all = all.filter(function(e) {
+        if (e.kind === 'section') return true;
+        return ++kept <= SEARCH_RESULT_CAP;
+      });
+    }
+    searchHits = all.filter(function(e) { return e.kind !== 'section'; });
     searchCursor = searchHits.length ? 0 : -1;
     if (!searchHits.length) {
-      searchResultsEl.innerHTML = '<div class="pse-empty">No player matches &ldquo;' + esc(query) + '&rdquo;</div>';
+      searchResultsEl.innerHTML = '<div class="pse-empty">No player or country matches &ldquo;' + esc(query) + '&rdquo;</div>';
       return;
     }
-    var html = '';
-    for (var i = 0; i < searchHits.length; i++) {
-      var p = searchHits[i];
+    var html = '', hitIdx = -1;
+    for (var i = 0; i < all.length; i++) {
+      var e = all[i];
+      if (e.kind === 'section') {
+        html += '<div class="pse-section">' + esc(e.label) + '</div>';
+        continue;
+      }
+      hitIdx++;
+      var active = hitIdx === 0 ? ' active' : '';
+      if (e.kind === 'country') {
+        var c = e.country;
+        html += '<div class="pse-item pse-country' + active + '" role="option" data-country="' + esc(c.code) + '">';
+        html += countryFlagHtml(c.code, c.name, 'pse-flag');
+        html += '<span class="pse-name">' + highlightName(c.name, toks) + '</span>';
+        html += '<span class="pse-meta">' + c.players.length + ' player' + (c.players.length === 1 ? '' : 's') + '</span>';
+        html += '<span class="pse-chevron">&#9656;</span>';
+        html += '</div>';
+        continue;
+      }
+      var p = e.player;
       var isFav = isPlayerFav({ id: null, name: p.name });
       var meta = [];
       if (p.rating) meta.push('(' + p.rating + ')');
       if (p.place) meta.push('Place: ' + p.place);
-      html += '<div class="pse-item' + (i === 0 ? ' active' : '') + (isFav ? ' is-fav' : '') + '" role="option" data-name="' + esc(p.name) + '">';
-      html += '<span class="pse-name">' + highlightName(p.name, toks) + '</span>';
+      html += '<div class="pse-item' + active + (isFav ? ' is-fav' : '') + '" role="option" data-name="' + esc(p.name) + '">';
+      html += '<span class="pse-name">' + playerFlagHtml(p) + highlightName(p.name, toks) + '</span>';
       if (meta.length) html += '<span class="pse-meta">' + esc(meta.join(' · ')) + '</span>';
       html += '</div>';
     }
-    if (all.length > searchHits.length) {
-      html += '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + all.length + ' &mdash; keep typing to narrow</div>';
+    if (capped) {
+      html += '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + selectable.length + ' &mdash; keep typing to narrow</div>';
     }
     searchResultsEl.innerHTML = html;
     searchResultsEl.scrollTop = 0;
+  }
+
+  function activateSearchEntry(e) {
+    if (!e) return;
+    if (e.kind === 'country') filterByCountry(e.country.code, e.country.name);
+    else jumpToPlayer(e.player.name);
   }
 
   function moveSearchCursor(delta) {
@@ -2903,10 +3244,24 @@ button { font-family: inherit; font-size: inherit; }
     searchInputEl.blur();
   }
 
+  // Narrow the card grid to one country. Cards only exist in the grouped view.
+  function filterByCountry(code, name) {
+    closeSearch();
+    countryFilter = { code: code, name: name };
+    groupByPlayer = true;
+    renderDetail();
+    var grid = document.querySelector('.match-toggles');
+    if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   function jumpToPlayer(name) {
     closeSearch();
+    // Picking one player means "show me them", so drop any active filter —
+    // otherwise the card we want to highlight may not be on screen at all.
+    var wasFiltered = countryFilter || liveOnly;
+    clearCardFilters();
     // Player cards only exist in the grouped view — switch to it first
-    if (currentMatches && currentMatches.length > 0 && !groupByPlayer) {
+    if (currentMatches && currentMatches.length > 0 && (!groupByPlayer || wasFiltered)) {
       groupByPlayer = true;
       renderDetail();
     }
@@ -2933,7 +3288,19 @@ button { font-family: inherit; font-size: inherit; }
 
   searchResultsEl.addEventListener('click', function(e) {
     var item = e.target.closest('.pse-item');
-    if (item) jumpToPlayer(item.dataset.name);
+    if (!item) return;
+    if (item.dataset.country) {
+      var hit = null;
+      for (var i = 0; i < searchHits.length; i++) {
+        if (searchHits[i].kind === 'country' && searchHits[i].country.code === item.dataset.country) {
+          hit = searchHits[i];
+          break;
+        }
+      }
+      if (hit) activateSearchEntry(hit);
+    } else {
+      jumpToPlayer(item.dataset.name);
+    }
   });
 
   searchInputEl.addEventListener('keydown', function(e) {
@@ -2941,7 +3308,7 @@ button { font-family: inherit; font-size: inherit; }
     else if (e.key === 'ArrowUp') { e.preventDefault(); moveSearchCursor(-1); }
     else if (e.key === 'Enter') {
       e.preventDefault();
-      if (searchCursor >= 0 && searchHits[searchCursor]) jumpToPlayer(searchHits[searchCursor].name);
+      if (searchCursor >= 0) activateSearchEntry(searchHits[searchCursor]);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       closeSearch();
@@ -2976,16 +3343,26 @@ button { font-family: inherit; font-size: inherit; }
     var oppLink = e.target.closest('.match-opponent-link');
     if (oppLink) {
       var targetId = oppLink.dataset.player;
-      if (!groupByPlayer) {
-        groupByPlayer = true;
-        renderDetail();
-      }
-      // Push source player onto nav history
+      // Read the source card up front: re-rendering below detaches oppLink,
+      // and a detached node's closest() would lose the nav-history entry.
       var sourceGroup = oppLink.closest('.player-group');
+      var sourceName = '', sourceId = '';
       if (sourceGroup) {
         var sourceNameEl = sourceGroup.querySelector('.player-group-name');
-        var sourceName = sourceNameEl ? sourceNameEl.textContent : '';
-        var sourceId = sourceGroup.id;
+        sourceName = sourceNameEl ? sourceNameEl.textContent : '';
+        sourceId = sourceGroup.id;
+      }
+      var needsRender = false;
+      if (!groupByPlayer) {
+        groupByPlayer = true;
+        needsRender = true;
+      }
+      // The opponent may be filtered out of the grid. Keep the filter and add
+      // just them, so following a chain of opponents accumulates cards rather
+      // than throwing the filter away.
+      if (pinFilteredCard(targetId)) needsRender = true;
+      if (needsRender) renderDetail();
+      if (sourceGroup) {
         if (sourceName && (navHistory.length === 0 || navHistory[navHistory.length - 1].id !== sourceId)) {
           navHistory.push({ id: sourceId, name: sourceName });
           if (navHistory.length > NAV_HISTORY_MAX) navHistory.shift();
@@ -3008,6 +3385,11 @@ button { font-family: inherit; font-size: inherit; }
       removeFavPlayerByName(name);
       reRenderCurrentView();
       loadFeed();
+    } else if (action === 'unpin') {
+      if (pinnedPlayers[name]) {
+        delete pinnedPlayers[name];
+        renderDetail();
+      }
     }
   });
 
