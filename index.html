@@ -1926,6 +1926,7 @@ button { font-family: inherit; font-size: inherit; }
   }
 
   function renderPlayerList(players) {
+    updateDocTitle();
     var section = document.getElementById('detail-section');
     var t = currentTournament;
     var d = t.date ? new Date(t.date) : null;
@@ -2186,6 +2187,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function renderDetail() {
     if (!currentMatches || !currentTournament) return;
+    updateDocTitle();
     var section = document.getElementById('detail-section');
     var t = currentTournament;
     var d = t.date ? new Date(t.date) : null;
@@ -2861,6 +2863,7 @@ button { font-family: inherit; font-size: inherit; }
     currentPlayerList = null;
     bracketByNum = {};
     clearCardFilters();
+    updateDocTitle();
     navHistory = [];
     updateNavPill();
     updateSearchFab();
@@ -3566,6 +3569,16 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   function safeDecode(s) {
     try { return decodeURIComponent(s); } catch(ex) { return s; }
+  }
+
+  // Tab title carries the event once one is open, so a window parked on a
+  // tournament is identifiable among a row of tabs. Captured rather than
+  // hard-coded so the two stay in step if the <title> is ever reworded.
+  var BASE_TITLE = document.title;
+
+  function updateDocTitle() {
+    var name = currentTournament && currentTournament.name;
+    document.title = name ? BASE_TITLE + ' | ' + name : BASE_TITLE;
   }
 
   function updateUrlBar(slug) {
