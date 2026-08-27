@@ -218,7 +218,10 @@ button { font-family: inherit; font-size: inherit; }
 .registered-players-body { padding: 8px 12px; }
 
 /* Flat match grid (by match#) */
-.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto auto auto 16px 8px 16px auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
+/* The two score columns grow past 16px when a scheduled time spans them, so a
+   long label ("Aug 9 10:00am") widens the block instead of spilling over the
+   neighbours. Growth lands outside the digits, which stay tight to the dash. */
+.flat-matches { display: inline-grid; grid-template-columns: 28px auto auto auto auto minmax(16px, auto) 8px minmax(16px, auto) auto auto auto; column-gap: 0; align-items: stretch; font-size: 13px; }
 .flat-match .fm-round { color: #64748b; font-size: 11px; padding-right: 6px; white-space: nowrap; font-family: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace; }
 .flat-match > * { display: flex; align-items: center; }
 .flat-match { display: contents; }
@@ -229,7 +232,15 @@ button { font-family: inherit; font-size: inherit; }
 .flat-match .fm-winner { font-weight: 700; color: #f8fafc; }
 .flat-match .fm-add { }
 .flat-match .fm-rating { color: #64748b; font-size: 11px; }
-.flat-match .fm-status { text-align: center; font-size: 11px; white-space: nowrap; }
+.flat-match .fm-status { text-align: center; font-size: 11px; white-space: nowrap; padding-right: 4px; }
+/* Cells here are flex containers, so text-align is inert on them — the score
+   parts have to be packed with justify-content to stay tight to the dash. */
+.flat-match .mr-s1 { justify-content: flex-end; }
+.flat-match .mr-sep { justify-content: center; }
+.flat-match .mr-s2 { justify-content: flex-start; }
+/* A scheduled time takes the score columns only, never the table column, so it
+   lines up with the scores above it and leaves T5/T3 aligned in their own column. */
+.flat-match .mr-sched { grid-column: span 3; justify-content: center; }
 .flat-match .fm-p1 { padding-right: 4px; }
 .flat-match .fm-p2 { padding-left: 4px; }
 .flat-match .fm-tbd { color: #475569; font-style: italic; font-size: 11px; white-space: nowrap; }
@@ -2805,10 +2816,10 @@ button { font-family: inherit; font-size: inherit; }
       html += m.p1 ? fmPlayerCell('fm-p1', m.p1, p1Fav, completed && p1Win, completed && p2Win)
                    : fmTbdCell('fm-p1', m.num, fmBMap, fmShort);
       if (m.isSplit) {
-        html += '<span class="fm-status"></span><span style="grid-column:span 3">Split</span>';
+        html += '<span class="fm-status"></span><span style="grid-column:span 3;justify-content:center">Split</span>';
       } else if (m.isForfeit && m.status === 'COMPLETED') {
         html += '<span class="fm-status"></span>';
-        html += '<span style="grid-column:span 3;text-align:center;font-size:11px;font-weight:300;color:#64748b">forfeit</span>';
+        html += '<span style="grid-column:span 3;justify-content:center;font-size:11px;font-weight:300;color:#64748b">forfeit</span>';
       } else if (m.status === 'IN_PROGRESS') {
         var tbl = m.tableName ? 'T' + m.tableName.replace(/^Table\s*/i, '') : '';
         html += '<span class="fm-status mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
@@ -2823,9 +2834,13 @@ button { font-family: inherit; font-size: inherit; }
       } else {
         var fmSched = matchTimeInfo(m);
         if (m.calledToTable) {
+          // Table in the same column an in-progress row uses, hourglass in the
+          // same column its scheduled time would have used.
           var fmTbl = m.tableName ? 'T' + m.tableName.replace(/^Table\s*/i, '') : '';
-          html += '<span class="mr-sched mr-called" title="Players called to the table">' + esc(fmTbl) + ' ⏳</span>';
+          html += '<span class="fm-status mr-called" title="Players called to the table">' + esc(fmTbl) + '</span>';
+          html += '<span class="mr-sched mr-called" title="Players called to the table">⏳</span>';
         } else if (fmSched) {
+          html += '<span class="fm-status"></span>';
           html += '<span class="mr-sched" title="' + esc(fmSched.title) + '">' + esc(fmSched.label) + '</span>';
         } else {
           html += '<span class="fm-status"></span>';
