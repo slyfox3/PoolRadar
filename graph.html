@@ -27,6 +27,8 @@ a:hover { text-decoration: underline; }
 .select-input.filtered { border-color: #3b82f6; color: #dbeafe; }
 .tb-label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
 .spacer { flex: 1; }
+/* .tb-group sets display, which would otherwise beat the UA rule for [hidden] */
+[hidden] { display: none !important; }
 
 .psearch { position: relative; display: flex; align-items: center; gap: 4px; }
 .psearch input { width: 190px; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; border-radius: 6px;
@@ -54,6 +56,12 @@ a:hover { text-decoration: underline; }
 .pse-meta .fw { color: #4ade80; }
 .pse-meta .fl { color: #f87171; }
 .pse-empty { padding: 12px 10px; color: #64748b; font-size: 12px; }
+/* Country rows lead the list and stand apart from the names under them. */
+.pse-section { padding: 9px 10px 3px; color: #475569; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.pse-item.pse-country .pse-name { font-weight: 600; }
+.pse-item.pse-country .pse-flag { font-size: 17px; line-height: 1; margin-right: 0; }
+.pse-item.pse-country .pse-meta { font-family: inherit; letter-spacing: 0; color: #64748b; }
+.pse-chevron { color: #475569; font-size: 11px; padding-left: 6px; }
 
 .legend { display: flex; gap: 14px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155; font-size: 11px; color: #64748b; flex-wrap: wrap; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -85,6 +93,17 @@ a:hover { text-decoration: underline; }
 /* relative, so it tracks themeVariables.fontSize instead of fighting it */
 #graph small { color: #64748b !important; font-size: 0.85em; }
 #graph em { color: #f87171 !important; font-style: normal; }
+/* Nationality on a spotlighted name. Windows ships no regional-indicator
+   glyphs at all and iOS suppresses this one in some regions, so tw comes from
+   the same inlined art index.html uses rather than the emoji. Sized in em, so
+   it tracks themeVariables.fontSize like the rest of the label. */
+/* Unscoped: the same art serves the search dropdown and the diagram. Only the
+   size differs — in a label it is em-relative so it tracks themeVariables. */
+.pf { margin-right: 4px; font-size: 14.3px; line-height: 1; vertical-align: -0.06em; }
+#graph .pf { margin-right: 3px; font-size: 1.15em; }
+.flag-img { display: inline-block; background-position: center; background-size: contain;
+  background-repeat: no-repeat; width: 1.36em; height: 0.91em; vertical-align: -0.08em; }
+.flag-tw { width: 0.9em; height: 0.9em; vertical-align: -0.05em; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8.7 -21 531.4 531.9'%3E%3Cg transform='matrix(1.0350939,0,0,1.0479042,-208.77414,-69.356587)'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23fff' stroke='%23fff' stroke-width='40' stroke-linejoin='round' /%3E%3Cg clip-rule='evenodd' fill-rule='evenodd'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23ffffff' /%3E%3Cpath d='m 451.725,190.979 c -32.534,0 -58.923,26.402 -58.923,58.91 0,32.562 26.389,58.952 58.923,58.952 32.563,0 58.952,-26.39 58.952,-58.952 0,-32.508 -26.389,-58.91 -58.952,-58.91 z m -0.014,87.339 c -15.682,0 -28.4,-12.707 -28.4,-28.43 0,-15.668 12.719,-28.415 28.4,-28.415 15.71,0 28.442,12.746 28.442,28.415 10e-4,15.723 -12.732,28.43 -28.442,28.43 z' fill='%23003283' /%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z m -67.949,85.864 c 5.637,12.953 8.75,27.215 8.75,42.234 0,58.621 -47.5,106.108 -106.106,106.108 -26.403,0 -50.587,-9.66 -69.149,-25.617 -18.575,15.957 -42.732,25.617 -69.148,25.617 -58.621,0 -106.107,-47.487 -106.107,-106.108 0,-14.371 2.88,-28.069 8.048,-40.594 -29.931,-18.784 -49.857,-52.035 -49.857,-89.972 0,-58.607 47.486,-106.107 106.094,-106.107 2.205,0 4.354,0.042 6.504,0.221 11.629,-45.985 53.273,-80.007 102.854,-80.007 49.566,0 91.21,34.022 102.84,80.007 2.149,-0.179 4.342,-0.221 6.505,-0.221 58.607,0 106.106,47.5 106.106,106.107 0,36.821 -18.823,69.301 -47.334,88.332 z' fill='%23003283' /%3E%3Cpath d='m 651.797,277.752 c 0,-53.702 -43.488,-97.191 -97.19,-97.191 -3.06,0 -6.159,0.179 -9.177,0.427 -9.688,-43.448 -48.479,-75.873 -94.82,-75.873 -46.356,0 -85.134,32.425 -94.808,75.873 -3.004,-0.248 -6.063,-0.427 -9.122,-0.427 -53.702,0 -97.192,43.489 -97.192,97.191 0,35.912 19.499,67.273 48.533,84.101 -5.153,11.85 -8.019,24.846 -8.019,38.583 0,53.701 43.545,97.191 97.205,97.191 24.97,0 47.748,-9.439 64.973,-24.9 17.212,15.461 39.989,24.9 64.96,24.9 53.659,0 97.15,-43.49 97.15,-97.191 0,-14.248 -3.06,-27.808 -8.614,-40.044 27.699,-17.102 46.121,-47.707 46.121,-82.64 z m -62.615,76.521 c 8.792,13.435 13.917,29.462 13.917,46.687 0,47.128 -38.198,85.325 -85.312,85.325 -26.61,0 -50.312,-12.14 -65.965,-31.169 -15.655,19.029 -39.384,31.169 -65.952,31.169 -47.155,0 -85.354,-38.197 -85.354,-85.325 0,-16.716 4.823,-32.342 13.132,-45.516 -30.537,-12.968 -51.979,-43.284 -51.979,-78.547 0,-47.155 38.198,-85.354 85.354,-85.354 6.711,0 13.285,0.812 19.595,2.288 4.438,-42.939 40.734,-76.439 84.858,-76.439 43.917,0 80.089,33.197 84.788,75.873 5.513,-1.116 11.189,-1.722 17.005,-1.722 47.113,0 85.313,38.198 85.313,85.354 10e-4,34.272 -20.201,63.817 -49.4,77.376 z' fill='%23e41f20' /%3E%3Cg fill='%23ffffff'%3E%3Cpath d='m 444.684,217.464 h 14.814 l -7.056,-22.558 z' /%3E%3Cpath d='m 429.402,225.346 12.829,-7.4 -17.418,-16.068 z' /%3E%3Cpath d='m 420.1,239.815 7.414,-12.87 -23.082,-5.169 z' /%3E%3Cpath d='m 419.288,256.958 v -14.814 l -22.572,7.055 z' /%3E%3Cpath d='m 427.169,272.239 -7.414,-12.829 -16.012,17.404 z' /%3E%3Cpath d='m 441.611,281.542 -12.816,-7.401 -5.209,23.082 z' /%3E%3Cpath d='m 458.767,282.369 h -14.813 l 7.069,22.558 z' /%3E%3Cpath d='m 474.078,274.485 -12.858,7.401 17.433,16.026 z' /%3E%3Cpath d='m 483.337,260.017 -7.386,12.829 23.109,5.168 z' /%3E%3Cpath d='m 484.164,242.874 v 14.814 l 22.599,-7.055 z' /%3E%3Cpath d='m 476.323,227.592 7.4,12.83 16.027,-17.405 z' /%3E%3Cpath d='m 461.854,218.291 12.829,7.399 5.167,-23.082 z' /%3E%3C/g%3E%3C/g%3E%3Cpath d='m 409.544,366.854 c 0,-20.754 -16.784,-37.552 -37.551,-37.552 -20.753,0 -37.55,16.798 -37.55,37.552 0,20.752 16.797,37.551 37.55,37.551 1.131,0 2.205,-0.042 3.28,-0.125 -0.083,-0.991 -0.124,-1.984 -0.124,-2.976 0,-1.116 0.041,-2.246 0.124,-3.321 -1.075,0.139 -2.149,0.179 -3.28,0.179 -17.266,0 -31.293,-13.999 -31.293,-31.308 0,-17.268 14.027,-31.309 31.293,-31.309 17.321,0 31.309,14.041 31.309,31.309 0,13.903 -9.04,25.658 -21.565,29.75 -0.221,1.518 -0.345,3.102 -0.345,4.7 0,0.646 0.041,1.294 0.054,1.888 16.179,-4.175 28.098,-18.851 28.098,-36.338 z' fill='%230083ce' /%3E%3Cpath d='m 572.301,366.854 c 0,20.752 -16.784,37.551 -37.551,37.551 -19.636,0 -35.73,-15.035 -37.413,-34.244 2.232,0.221 4.383,0.689 6.45,1.379 2.287,15.075 15.295,26.622 30.963,26.622 17.322,0 31.309,-13.999 31.309,-31.308 0,-17.268 -13.986,-31.309 -31.309,-31.309 -16.618,0 -30.22,13.008 -31.213,29.364 -2.024,-0.509 -4.092,-0.854 -6.2,-1.033 1.503,-19.332 17.694,-34.574 37.413,-34.574 20.767,10e-4 37.551,16.799 37.551,37.552 z' fill='%23e61446' /%3E%3Cpath d='m 525.326,403.192 c -0.992,16.439 -14.595,29.42 -31.268,29.42 -17.268,0 -31.281,-14.015 -31.281,-31.308 0,-13.918 9.04,-25.673 21.554,-29.765 0.219,-1.544 0.343,-3.088 0.343,-4.686 0,-0.648 0,-1.295 -0.04,-1.944 -16.179,4.23 -28.127,18.907 -28.127,36.395 0,20.739 16.826,37.563 37.552,37.563 19.732,0 35.911,-15.24 37.469,-34.588 -2.152,-0.178 -4.219,-0.522 -6.202,-1.087 z m -31.268,-33.196 c 15.724,0 28.731,11.548 30.964,26.608 2.066,0.689 4.217,1.172 6.464,1.379 -1.682,-19.195 -17.791,-34.229 -37.428,-34.229 -1.075,0 -2.149,0.04 -3.226,0.123 0.084,0.992 0.084,1.985 0.084,2.978 0,1.115 -0.042,2.231 -0.124,3.307 1.075,-0.125 2.191,-0.166 3.266,-0.166 z' fill='%23009c45' /%3E%3Cpath d='m 450.14,404.28 c -1.529,19.348 -17.72,34.588 -37.44,34.588 -20.766,0 -37.55,-16.824 -37.55,-37.563 0,-17.487 11.919,-32.164 28.097,-36.395 0.042,0.649 0.056,1.296 0.056,1.944 0,1.598 -0.124,3.142 -0.344,4.686 -12.526,4.092 -21.566,15.847 -21.566,29.765 0,17.293 14.015,31.308 31.308,31.308 16.619,0 30.247,-12.98 31.24,-29.378 1.997,0.522 4.065,0.866 6.199,1.045 z m -40.719,-34.119 c 0.083,-1.075 0.124,-2.191 0.124,-3.307 0,-0.992 0,-1.985 -0.096,-2.978 1.074,-0.083 2.149,-0.123 3.251,-0.123 19.637,0 35.732,15.034 37.414,34.229 -2.232,-0.207 -4.396,-0.689 -6.463,-1.379 -2.26,-15.061 -15.242,-26.608 -30.951,-26.608 -1.102,10e-4 -2.204,0.042 -3.279,0.166 z' fill='%23f7b000' /%3E%3Cpath d='m 453.393,398.162 c -15.723,0 -28.704,-11.547 -30.963,-26.622 -2.068,-0.689 -4.217,-1.158 -6.464,-1.379 1.681,19.209 17.791,34.244 37.427,34.244 1.075,0 2.164,-0.042 3.252,-0.125 -0.096,-0.991 -0.139,-1.984 -0.139,-2.976 0,-1.116 0.069,-2.246 0.152,-3.321 -1.075,0.139 -2.15,0.179 -3.265,0.179 z m 0,-68.859 c -19.747,0 -35.925,15.242 -37.427,34.574 2.108,0.18 4.175,0.524 6.188,1.033 1.006,-16.356 14.606,-29.364 31.239,-29.364 17.281,0 31.28,14.041 31.28,31.309 0,13.903 -9.025,25.658 -21.538,29.75 -0.234,1.518 -0.358,3.102 -0.358,4.7 0,0.646 0,1.294 0.042,1.888 16.191,-4.176 28.139,-18.852 28.139,-36.338 0,-20.754 -16.839,-37.552 -37.565,-37.552 z' fill='%23000006' /%3E%3C/g%3E%3C/svg%3E"); }
 #graph .pn1, #graph .pn2 { cursor: pointer; }
 #graph .pn1:hover, #graph .pn2:hover { text-decoration: underline; }
 
@@ -98,22 +117,26 @@ a:hover { text-decoration: underline; }
 
 <div class="header">
   <h1>Bracket Graph</h1>
-  <input class="url-input" id="slug-input" placeholder="tournament slug or digitalpool.com URL">
+  <input class="url-input" id="slug-input" placeholder="digitalpool.com or wntlivescores.com URL">
   <button class="toggle-btn" id="load-btn">Load</button>
   <span class="spacer"></span>
   <a id="back-link" href="index.html">&larr; PoolRadar</a>
 </div>
 
 <div class="toolbar">
-  <span class="tb-group"><span class="tb-label">From</span>
+  <span class="tb-group" id="stage-group" hidden><span class="tb-label">Stage</span>
+    <select class="select-input" id="stage-sel"></select>
+  </span>
+  <span class="tb-group" id="from-group"><span class="tb-label">From</span>
     <select class="select-input" id="round-from"><option value="0">All stages</option></select>
   </span>
-  <span class="tb-group"><span class="tb-label">Player</span>
-    <span class="psearch" title="Highlight a player (/)">
+  <span class="tb-group"><span class="tb-label">Find</span>
+    <span class="psearch" title="Highlight a player or a country (/)">
       <svg class="pse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
-      <input type="text" id="player-input" placeholder="Highlight a player…" autocomplete="off"
-             autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Highlight a player (press / to focus)">
+      <input type="text" id="player-input" placeholder="Player or country…" autocomplete="off"
+             autocorrect="off" autocapitalize="off" spellcheck="false"
+             aria-label="Highlight a player or a country (press / to focus)">
       <kbd class="pse-kbd">/</kbd>
       <div class="pse-list" id="player-list" role="listbox"></div>
     </span>
@@ -133,6 +156,7 @@ a:hover { text-decoration: underline; }
   <span><i class="solid"></i> winner advances</span>
   <span><span class="lg-drop">(L to L4-4)</span> = where this match sends its loser</span>
   <span>click a name to highlight that player &middot; click again to clear</span>
+  <span>search a country to light up its whole delegation</span>
 </div>
 
 <div id="status"></div>
@@ -142,6 +166,13 @@ a:hover { text-decoration: underline; }
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
 const GQL = 'https://api-cached.digitalpool.com/';
+
+// The same proxy index.html reads: wntlivescores.com is login-only, so every
+// read goes through a Worker holding the session. Served locally by
+// wnt-dev-proxy.py, which also serves this page.
+const WNT_PROXY_REMOTE = 'https://wnt-proxy.slyfox3.workers.dev';
+const WNT_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? '/wnt' : WNT_PROXY_REMOTE + '/wnt';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -173,7 +204,13 @@ const QUERY = `query($s:String!){
 }`;
 
 const $ = (id) => document.getElementById(id);
-const state = { dir: 'TB', fromStage: 0, player: null, rows: [], tournament: null };
+const state = {
+  dir: 'TB', fromStage: 0, player: null, rows: [], tournament: null,
+  source: 'digitalpool', slug: '',
+  // WNT only. One event JSON holds every stage and one stage is drawn at a
+  // time, so the fetch is kept and switching stages is just a re-render.
+  wntData: null, stage: 0,
+};
 
 function setStatus(msg, isError) {
   const el = $('status');
@@ -195,6 +232,206 @@ async function gql(query, variables) {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ---------------------------------------------------------------------------
+// WNT Live Scores — second source
+//
+// wntlivescores.com describes a bracket with the same facts DigitalPool does,
+// under other names: roundSide 1/2 for the two halves rather than the sign on
+// the round, winnerDest/loserDest rather than winner_to_num/loser_to_num. So it
+// is remapped onto the DigitalPool row shape and everything below — layout, the
+// stage cut, player search, the edge rerouting — runs on it unchanged.
+//
+// The one structural difference is that a WNT event is split into stages, each
+// its own bracket numbered from 1. The US Open's stage 1 is a 416-match double
+// elimination whose 64 survivors seed stage 2, a 63-match single elimination.
+// Those are two diagrams, picked between with the Stage control.
+// ---------------------------------------------------------------------------
+
+// 0 not started, 1 players called to the table, 2 under way, 3 done.
+const WNT_STATUS = { 0: 'NOT_STARTED', 1: 'NOT_STARTED', 2: 'IN_PROGRESS', 3: 'COMPLETED' };
+
+// alpha-2 -> regional indicator pair, as index.html does it. WNT writes
+// 'unknown' for the unaffiliated, which fails the shape test and drops out.
+function wntFlag(code) {
+  if (!code || !/^[a-z]{2}$/i.test(code)) return '';
+  const cc = code.toUpperCase();
+  return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
+}
+
+// WNT reports some countries under the name their federation competes as
+// rather than the country's own, exactly as index.html corrects it.
+const COUNTRY_NAME_OVERRIDE = { tw: 'Taiwan' };
+
+// Codes drawn from inlined art rather than the regional-indicator emoji, and
+// why — see the CSS above.
+const FLAG_IMG = { tw: true };
+
+// Attributes here are single-quoted, because the Mermaid label around them is
+// delimited by double quotes. This string does not go through mmEsc, so the
+// country name is reduced to plain text: an apostrophe would end the attribute
+// and a '#' is Mermaid syntax even inside a quoted label.
+function flagHtml(c) {
+  if (!c || !c.country) return '';
+  const cc = c.country;
+  const label = String(c.countryName || cc).replace(/[^A-Za-z0-9 .-]/g, '').trim() || cc;
+  if (FLAG_IMG[cc]) {
+    return "<span class='pf flag-img flag-" + cc + "' role='img' aria-label='" + label + "'></span>";
+  }
+  const flag = wntFlag(cc);
+  return flag ? "<span class='pf' role='img' aria-label='" + label + "'>" + flag + '</span>' : '';
+}
+
+function wntPlayer(p) {
+  if (!p) return null;
+  // nameReversed marks players written surname-first; the site swaps which
+  // field holds which rather than reordering the output.
+  const first = p.nameReversed ? p.surname : p.name;
+  const last = p.nameReversed ? p.name : p.surname;
+  const name = ((first || '') + (last ? ' ' + last : '')).trim();
+  if (!name) return null;                     // an empty slot, same as no player
+  const co = p.country || {};
+  const cc = co.code ? String(co.code).toLowerCase() : null;
+  return {
+    name, skill_level: null, country: cc,
+    countryName: cc ? (COUNTRY_NAME_OVERRIDE[cc] || co.name || cc) : (co.name || null),
+  };
+}
+
+// Stages that actually have matches, in order. `reached` is the one that
+// matters for picking a default: WNT publishes a later stage's whole schedule
+// days before the event gets to it — the US Open's 63-match stage 2 existed
+// three days before a ball was struck — so a stage only counts as reached once
+// it holds a match with two players in it.
+function wntStages(data) {
+  return (((data || {}).stages) || []).map((s) => {
+    const matches = (s.groups || []).reduce((a, g) => a.concat(g.matches || []), []);
+    return {
+      stage: s.stage,
+      count: matches.length,
+      reached: matches.some((m) => m.players && m.players[0] && m.players[1]),
+    };
+  }).filter((s) => s.count > 0);
+}
+
+// One stage, as DigitalPool-shaped rows.
+function wntRows(data, stageNo) {
+  const stage = (((data || {}).stages) || []).find((s) => s.stage === stageNo);
+  if (!stage) return [];
+  // Groups are flattened into one bracket, which assumes matchNumberInSchema is
+  // unique across them. No published WNT event has ever put more than one group
+  // in a stage, so there is nothing yet to key the numbers against.
+  const raw = [];
+  for (const g of stage.groups || []) for (const m of g.matches || []) raw.push(m);
+  const here = new Set(raw.map((m) => m.matchNumberInSchema));
+  // roundSide is the winners/losers half only where there are two of them. A
+  // group stage reuses the field for its phases instead — Premier League Pool
+  // runs three, of 15, 9 and 5 rounds — and folding side 3 into side 1 would
+  // put matches from two phases that never met into one round.
+  const sides = [...new Set(raw.map((m) => m.roundSide || 1))].sort((a, b) => a - b);
+  const bracket = sides.every((s) => s === 1 || s === 2);
+  // No losers half at all means a straight knockout, which changes how the
+  // rounds are named and stops round 1 being treated as fan-out noise.
+  const twoSided = bracket && sides.includes(2);
+  // Phases get one round key each, in order, so nothing collides and the
+  // diagram reads phase by phase. They name themselves, since "Winners R17"
+  // would be a fiction — a group stage has no winners side and no seventeenth
+  // round, only phase 2's second.
+  const phase = new Map();
+  if (!bracket) {
+    [...new Set(raw.map((m) => (m.roundSide || 1) + ':' + (m.roundNumber || 1)))]
+      .map((k) => k.split(':').map(Number))
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+      .forEach(([s, r], i) => phase.set(s + ':' + r, { round: i + 1, label: 'Phase ' + s + ' · R' + r }));
+  }
+  // A destination this stage does not contain is the way out of it: stage 1's
+  // winners qualify into stage 2, which is a diagram of its own. loserDest 0
+  // means eliminated, and is also how WNT marks a final. A group stage carries
+  // no schemaData at all, so every destination comes back null.
+  const dest = (n) => (n && here.has(n) ? n : null);
+
+  return raw.map((m) => {
+    const sd = m.schemaData || {};
+    const rnd = m.roundNumber || 1;
+    const ph = bracket ? null : phase.get((m.roundSide || 1) + ':' + rnd);
+    const losers = bracket && m.roundSide === 2;
+    const scores = m.scores || [];
+    // Scores read 0-0 before play; only trust them once there is a result.
+    const played = m.status >= 2 || scores[0] || scores[1];
+    return {
+      match_number: m.matchNumberInSchema,
+      round: ph ? ph.round : (losers ? -rnd : rnd),
+      round_label: ph ? ph.label : null,
+      // DigitalPool ships an identifier like "W3-1"; WNT ships the parts.
+      // A knockout has one side, so there its own match number reads better
+      // and is what wntlivescores.com itself prints against the match.
+      identifier: twoSided
+        ? (losers ? 'L' : 'W') + rnd + '-' + (sd.positionInRound || '?')
+        : '#' + m.matchNumberInSchema,
+      status: WNT_STATUS[m.status] || 'NOT_STARTED',
+      is_bye: false,
+      challenger1: wntPlayer(m.players && m.players[0]),
+      challenger2: wntPlayer(m.players && m.players[1]),
+      challenger1_score: played ? scores[0] : null,
+      challenger2_score: played ? scores[1] : null,
+      challenger1_is_winner: m.winner === 1,
+      challenger2_is_winner: m.winner === 2,
+      winner_to_num: dest(sd.winnerDest),
+      loser_to_num: dest(sd.loserDest),
+      // Which of the destination's two slots this match fills, so an empty slot
+      // names the feeder that is really going to fill it. DigitalPool does not
+      // say, and there the slots are filled in the order the feeders came in.
+      winner_to_pos: sd.winnerDestPositionInMatch || null,
+      loser_to_pos: sd.loserDestPositionInMatch || null,
+    };
+  });
+}
+
+function fetchWnt(slug) {
+  return fetch(WNT_PROXY + '/event/' + encodeURIComponent(slug))
+    .then((r) => r.json().then((d) => {
+      if (!r.ok) throw new Error(d.message || d.error || ('HTTP ' + r.status));
+      return d;
+    }));
+}
+
+// A knockout round is better named by how many are left in it than by its
+// number — "Quarterfinals", not "Winners R4".
+function knockoutName(n) {
+  if (n === 1) return 'Final';
+  if (n === 2) return 'Semifinals';
+  if (n === 4) return 'Quarterfinals';
+  return 'Last ' + n * 2;
+}
+
+function roundName(round, size, singleElim) {
+  if (round === 0) return 'Unranked';
+  if (singleElim && round > 0 && size > 0) return knockoutName(size);
+  return round > 0 ? 'Winners R' + round : 'Losers R' + Math.abs(round);
+}
+
+// How wide each round is, over the whole bracket rather than the kept slice, so
+// a round keeps its name when the stage cut is above it. Byes count: a bye is a
+// slot in the round, and leaving them out turns a round of 16 that happens to
+// be half byes into a "Quarterfinals".
+function roundCounts(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    if (r.round == null) continue;
+    out.set(r.round, (out.get(r.round) || 0) + 1);
+  }
+  return out;
+}
+
+// A round that names itself — a group-stage phase — overrides the derived name.
+function roundLabels(rows) {
+  const out = new Map();
+  for (const r of rows) {
+    if (r.round == null || !r.round_label || out.has(r.round)) continue;
+    out.set(r.round, r.round_label);
+  }
+  return out;
+}
 
 // Mermaid treats these as syntax even inside a quoted label.
 function mmEsc(s) {
@@ -228,26 +465,41 @@ function buildShortNames(rows) {
   return out;
 }
 
-function nodeLabel(r, short, feeders, dropTo, player) {
+function nodeLabel(r, short, feeders, dropTo, sel) {
   // In a selected player's matches both sides get their full name and rating —
   // that is the detail you want when following one player, and the shortened
   // form is only there to keep the general view narrow.
-  const spotlight = player && playerIn(r, player);
+  const spotlight = sel && selIn(sel, r);
   const decided = !!(r.challenger1_is_winner || r.challenger2_is_winner);
   // An empty slot is waiting on a specific match, so name it rather than
   // printing TBD twice. Feeders that already have a winner have delivered
   // their player, so only undecided ones can correspond to an empty slot.
   const pending = (feeders.get(r.match_number) || [])
     .filter(f => !f.src.challenger1_is_winner && !f.src.challenger2_is_winner);
+  // WNT says which of the two slots a feeder is going to fill; DigitalPool does
+  // not, so there they are consumed in the order they were collected. Taken
+  // entries are nulled rather than spliced, so a positional take cannot shift
+  // the index a later sequential one is about to read.
   let fi = 0;
+  const takeFeeder = (slot) => {
+    let at = pending.findIndex(f => f && f.pos === slot);
+    if (at < 0) { while (fi < pending.length && !pending[fi]) fi++; at = fi; }
+    const f = pending[at] || null;
+    if (f) pending[at] = null;
+    return f;
+  };
   // slot is 1 or 2 — the wrapper is what lets a delegated click tell which of
   // the two players in a node was clicked.
   const line = (c, score, won, slot) => {
     if (!c) {
-      const f = pending[fi++];
+      const f = takeFeeder(slot);
       if (!f) return '<i>TBD</i>';
       return '<i>' + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.match_number)) + '</i>';
     }
+    // WNT carries no rating but does carry a nationality; it shows in the same
+    // spotlight-only slot, so the general view stays as narrow as it was. The
+    // flag is markup and so is built outside mmEsc, which would escape it.
+    const flag = spotlight ? flagHtml(c) : '';
     const nm = mmEsc(spotlight
       ? c.name + (c.skill_level ? ' (' + c.skill_level + ')' : '')
       : (short.get(c.name) || c.name));
@@ -257,7 +509,7 @@ function nodeLabel(r, short, feeders, dropTo, player) {
     // even when they won, so the two can never be confused.
     let body = nm;
     if (spotlight) {
-      const mine = c.name === player;
+      const mine = selHas(sel, c);
       if (mine && won) body = '<b>' + nm + '</b>';
       else if (mine && decided) body = '<em>' + nm + '</em>';
     } else if (won) {
@@ -265,7 +517,7 @@ function nodeLabel(r, short, feeders, dropTo, player) {
     }
     // Single-quoted attribute: the label itself is delimited by double quotes,
     // which is why mmEsc strips them from the text in the first place.
-    return "<span class='pn" + slot + "'>" + body + '</span>' + sc;
+    return "<span class='pn" + slot + "'>" + flag + body + '</span>' + sc;
   };
   const parts = [
     mmEsc(r.identifier || ('#' + r.match_number)),
@@ -315,6 +567,26 @@ const playerIn = (r, name) =>
   (r.challenger1 && r.challenger1.name === name) ||
   (r.challenger2 && r.challenger2.name === name);
 
+// What is selected, as a test on one side of a match. A player is one name; a
+// country is everyone carrying its code, so both sides of a match can answer
+// yes — two of a delegation drawn against each other.
+// The country test insists on both sides being present: a DigitalPool
+// challenger has no country at all, and absent must never equal absent.
+const selHas = (sel, c) => !!sel && !!c && (sel.kind === 'player'
+  ? c.name === sel.name
+  : !!c.country && c.country === sel.code);
+const selIn = (sel, r) => selHas(sel, r.challenger1) || selHas(sel, r.challenger2);
+
+// The selection as buildDiagram wants it. A player and a country are two
+// answers to the same question, so only one is ever set.
+function currentSel() {
+  if (state.player) return { kind: 'player', name: state.player, label: state.player };
+  if (!state.country) return null;
+  const c = collectCountries(collectPlayers(state.rows))
+    .find(x => x.code === state.country);
+  return { kind: 'country', code: state.country, label: c ? c.name : state.country.toUpperCase() };
+}
+
 // Which matches survive the stage cut. Shared with the player search so the
 // dropdown and the diagram can never disagree about what is on screen.
 function keptMatches(rows, fromStage) {
@@ -335,10 +607,15 @@ function keptMatches(rows, fromStage) {
   return keep;
 }
 
-function buildDiagram(rows, dir, fromStage, player) {
+function buildDiagram(rows, dir, fromStage, sel) {
   const byNum = new Map(rows.map(r => [r.match_number, r]));
   const short = buildShortNames(rows);
   const keep = keptMatches(rows, fromStage);
+  // No losers side anywhere means a straight knockout — WNT's stage 2. Two
+  // things below are double-elimination habits that are wrong for one.
+  const singleElim = !rows.some(r => r.round < 0);
+  const rCount = roundCounts(rows);
+  const rLabel = roundLabels(rows);
 
   // Hop over byes so an edge lands on a real match.
   const hop = (n) => {
@@ -356,11 +633,14 @@ function buildDiagram(rows, dir, fromStage, player) {
   const feeders = new Map();
   for (const r of rows) {
     if (r.is_bye) continue;
-    for (const [dest, kind] of [[r.winner_to_num, 'W'], [r.loser_to_num, 'L']]) {
+    for (const [dest, kind, pos] of [[r.winner_to_num, 'W', r.winner_to_pos],
+                                     [r.loser_to_num, 'L', r.loser_to_pos]]) {
       const d = hop(dest);
       if (!d) continue;
       if (!feeders.has(d)) feeders.set(d, []);
-      feeders.get(d).push({ src: r, kind });
+      // pos is dropped when the edge hopped a bye — the slot it named belonged
+      // to the bye, not to the match the edge now lands on.
+      feeders.get(d).push({ src: r, kind, pos: d === dest ? (pos || null) : null });
     }
   }
 
@@ -380,9 +660,11 @@ function buildDiagram(rows, dir, fromStage, player) {
   // round 1 draws nothing at all — it fans out across the whole of W2 and L1,
   // which is noise. It still needs a rank though: dagre ranks nodes, not
   // clusters, so leaving those edgeless stacks them into a column.
+  // A knockout round 1 is exempt: it feeds two-into-one into round 2, which is
+  // the clearest part of the diagram rather than noise, and needs no ghosts.
   const edges = [];
   for (const r of rows) {
-    if (!keep.has(r.match_number) || r.round === 1) continue;
+    if (!keep.has(r.match_number) || (!singleElim && r.round === 1)) continue;
     for (const [dest, kind] of [[r.winner_to_num, 'W'], [r.loser_to_num, 'L']]) {
       if (kind === 'L' && r.round > 0) continue; // shown as a label footnote
       const d = hop(dest);
@@ -401,25 +683,27 @@ function buildDiagram(rows, dir, fromStage, player) {
   // untangle. Pairing is positional, not by actual progression — nothing is
   // drawn, so it only has to hold the layout.
   const asc = (a, b) => a.match_number - b.match_number;
-  const r1 = [], r2 = [], rl1 = [];
-  for (const r of rows) {
-    if (r.is_bye || !keep.has(r.match_number)) continue;
-    if (r.round === 1) r1.push(r);
-    else if (r.round === 2) r2.push(r);
-    else if (r.round === -1) rl1.push(r);
-  }
-  r1.sort(asc); r2.sort(asc); rl1.sort(asc);
   const ghosts = [];
-  if (r1.length && r1.length === r2.length + rl1.length) {
-    r2.forEach((m, i) => ghosts.push([r1[i], m]));
-    rl1.forEach((m, j) => ghosts.push([r1[r2.length + j], m]));
-  } else {
-    // Byes or a non-standard bracket break the halves; fall back to each
-    // match's own destinations so no round-1 node is left unranked.
-    for (const r of r1) {
-      for (const dest of [r.winner_to_num, r.loser_to_num]) {
-        const d = hop(dest);
-        if (d && keep.has(d)) ghosts.push([r, byNum.get(d)]);
+  if (!singleElim) {
+    const r1 = [], r2 = [], rl1 = [];
+    for (const r of rows) {
+      if (r.is_bye || !keep.has(r.match_number)) continue;
+      if (r.round === 1) r1.push(r);
+      else if (r.round === 2) r2.push(r);
+      else if (r.round === -1) rl1.push(r);
+    }
+    r1.sort(asc); r2.sort(asc); rl1.sort(asc);
+    if (r1.length && r1.length === r2.length + rl1.length) {
+      r2.forEach((m, i) => ghosts.push([r1[i], m]));
+      rl1.forEach((m, j) => ghosts.push([r1[r2.length + j], m]));
+    } else {
+      // Byes or a non-standard bracket break the halves; fall back to each
+      // match's own destinations so no round-1 node is left unranked.
+      for (const r of r1) {
+        for (const dest of [r.winner_to_num, r.loser_to_num]) {
+          const d = hop(dest);
+          if (d && keep.has(d)) ghosts.push([r, byNum.get(d)]);
+        }
       }
     }
   }
@@ -466,10 +750,10 @@ function buildDiagram(rows, dir, fromStage, player) {
     const pad = wrap ? '    ' : '  ';
     for (const k of inStage) {
       const id = k === 0 ? 'Rx' : 'R' + (k > 0 ? 'W' : 'L') + Math.abs(k);
-      const label = k === 0 ? 'Unranked' : (k > 0 ? 'Winners R' + k : 'Losers R' + Math.abs(k));
+      const label = rLabel.get(k) || roundName(k, rCount.get(k) || 0, singleElim);
       sgIds.push(id);
       lines.push(`${pad}subgraph ${id}["${label}"]`);
-      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), player)}"]`);
+      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), sel)}"]`);
       lines.push(`${pad}end`);
     }
     if (wrap) lines.push('  end');
@@ -485,11 +769,15 @@ function buildDiagram(rows, dir, fromStage, player) {
   // for nobody else: out of round 1, and the drop across to the losers side.
   const hiNodes = new Set();
   const path = [];
-  if (player) {
+  if (sel) {
     for (const r of rows) {
-      if (r.is_bye || !playerIn(r, player) || !keep.has(r.match_number)) continue;
+      if (r.is_bye || !selIn(sel, r) || !keep.has(r.match_number)) continue;
       hiNodes.add(r.match_number);
-      const c1 = r.challenger1 && r.challenger1.name === player;
+      // A delegation is a dozen separate runs, not one chain, so there is no
+      // path to draw through it — and the rerouting below is built on a node
+      // carrying at most one highlighted edge per face. The lit boxes carry it.
+      if (sel.kind !== 'player') continue;
+      const c1 = r.challenger1 && r.challenger1.name === sel.name;
       const won = (c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner);
       const decided = r.challenger1_is_winner || r.challenger2_is_winner;
       if (!decided) continue;
@@ -525,8 +813,10 @@ function buildDiagram(rows, dir, fromStage, player) {
     lines.push(`  class ${[...hiNodes].map(n => 'M' + n).join(',')} hilite`);
   }
   // Indices are listed explicitly rather than using `linkStyle default`, which
-  // would also hit the invisible links and make them show up.
-  if (player && hiIdx.length) {
+  // would also hit the invisible links and make them show up. Only a player has
+  // a path, so a country selection leaves every edge exactly as it was — with
+  // nothing drawn bold there is nothing for dimming the rest to set off.
+  if (hiIdx.length) {
     if (faintIdx.length) lines.push(`  linkStyle ${faintIdx.join(',')} stroke:#1e293b,stroke-width:1px`);
     lines.push(`  linkStyle ${hiIdx.join(',')} stroke:#60a5fa,stroke-width:3px`);
   }
@@ -546,11 +836,26 @@ function buildDiagram(rows, dir, fromStage, player) {
 }
 
 // ---------------------------------------------------------------------------
-// Player search — same ranking as index.html: prefix matches rank above
-// mid-word ones, and every token has to match somewhere.
+// Search — the same list index.html shows: countries first, then names, each
+// with its flag. Ranking matches too: prefix matches rank above mid-word ones,
+// and every token has to match somewhere.
 // ---------------------------------------------------------------------------
 const SEARCH_CAP = 12;
 let searchHits = [], searchCursor = -1;
+
+// Extra strings that should find a country, beyond its shown name. Covers the
+// names WNT overrides plus the everyday forms of ones it lists formally.
+const COUNTRY_SEARCH_ALIASES = {
+  tw: ['chinese taipei', 'taipei', 'formosa'],
+  us: ['usa', 'america', 'united states of america'],
+  gb: ['uk', 'britain', 'great britain'],
+  nl: ['holland'],
+  vn: ['vietnam'],
+  kr: ['south korea'],
+  ae: ['uae'],
+  cz: ['czechia', 'czech republic'],
+  ru: ['russia'],
+};
 
 // Every player is listed and every one is selectable — the stage cut moves to
 // them rather than the other way round, so there is nothing to grey out.
@@ -560,7 +865,14 @@ function collectPlayers(rows) {
     for (const c of [r.challenger1, r.challenger2]) {
       if (!c || !c.name) continue;
       const k = c.name.toLowerCase();
-      if (!byName.has(k)) byName.set(k, { name: c.name, results: [] });
+      if (!byName.has(k)) {
+        // country is absent on the DigitalPool side, which simply means no
+        // flags and no country rows there.
+        byName.set(k, {
+          name: c.name, country: c.country || null,
+          countryName: c.countryName || null, results: [],
+        });
+      }
       if (r.is_bye) continue;
       if (!(r.challenger1_is_winner || r.challenger2_is_winner)) continue;
       const c1 = r.challenger1 && r.challenger1.name === c.name;
@@ -581,10 +893,59 @@ function collectPlayers(rows) {
 
 function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-function rankPlayers(query) {
-  const players = collectPlayers(state.rows);
+// Countries represented in the loaded stage, biggest delegation first. A code
+// with no flag — WNT's 'unknown' — is not a country anyone can pick.
+function collectCountries(players) {
+  const byCode = new Map();
+  for (const p of players) {
+    if (!p.country || !wntFlag(p.country)) continue;
+    if (!byCode.has(p.country)) {
+      byCode.set(p.country, {
+        code: p.country,
+        name: COUNTRY_NAME_OVERRIDE[p.country] || p.countryName || p.country,
+        players: [],
+      });
+    }
+    byCode.get(p.country).players.push(p);
+  }
+  return [...byCode.values()].sort((a, b) =>
+    b.players.length - a.players.length || a.name.localeCompare(b.name));
+}
+
+// A country is a hit on a prefix of its name, of any word in its name, or of
+// any alias. Queries under 3 characters must match a code or alias exactly, so
+// typing "ko" looking for a player does not pull in a whole delegation.
+function countryMatchScore(c, q) {
+  if (!q) return -1;
+  const name = c.name.toLowerCase();
+  const cands = [name].concat(
+    name.split(/\s+/).filter(w => w.length >= 3),
+    COUNTRY_SEARCH_ALIASES[c.code] || []);
+  if (q === c.code) return 1;
+  let best = -1;
+  for (const cand of cands) {
+    if (q === cand) return 0;
+    if (q.length >= 3 && cand.indexOf(q) === 0) best = 1;
+  }
+  return best;
+}
+
+function rankCountries(query, players) {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+  const hits = [];
+  for (const c of collectCountries(players)) {
+    const score = countryMatchScore(c, q);
+    if (score >= 0) hits.push({ c, score });
+  }
+  hits.sort((a, b) => a.score - b.score || b.c.players.length - a.c.players.length);
+  return hits.map(h => h.c);
+}
+
+function rankPlayers(query, players) {
+  players = players || collectPlayers(state.rows);
   const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  if (!toks.length) return players.sort((a, b) => a.name.localeCompare(b.name));
+  if (!toks.length) return players.slice().sort((a, b) => a.name.localeCompare(b.name));
   const scored = [];
   for (const p of players) {
     const lname = p.name.toLowerCase();
@@ -609,28 +970,91 @@ function highlightName(name, toks) {
   return parts.map((p, i) => (i % 2 === 1 ? '<mark>' + esc(p) + '</mark>' : esc(p))).join('');
 }
 
+// A flag for the dropdown. Ordinary HTML here — unlike the diagram labels, this
+// is not going through Mermaid, so esc() is the right escape.
+function searchFlagHtml(code, name, cls) {
+  if (!code) return '';
+  const cc = String(code).toLowerCase();
+  const label = esc(name || cc);
+  if (FLAG_IMG[cc]) {
+    return '<span class="' + cls + ' flag-img flag-' + cc + '" role="img" aria-label="' +
+      label + '" title="' + label + '"></span>';
+  }
+  const flag = wntFlag(cc);
+  return flag ? '<span class="' + cls + '" title="' + label + '">' + flag + '</span>' : '';
+}
+
+// One flat list so a single cursor walks countries and names alike. Countries
+// lead, because a two-letter query that hits one is almost always meant as one.
+function buildSearchEntries(query) {
+  const players = collectPlayers(state.rows);
+  const countries = rankCountries(query, players);
+  const entries = countries.map(c => ({ kind: 'country', country: c }));
+  const named = rankPlayers(query, players);
+  const listed = new Set(named.map(p => p.name));
+  for (const p of named) entries.push({ kind: 'player', player: p });
+  // Only one country matched, so its roster is unambiguous — list the rest of
+  // it under the name hits rather than making you click through first.
+  if (countries.length === 1) {
+    const roster = countries[0].players.slice().sort((a, b) => a.name.localeCompare(b.name));
+    let added = 0;
+    for (const p of roster) {
+      if (listed.has(p.name)) continue;
+      if (!added) entries.push({ kind: 'section', label: 'Players from ' + countries[0].name });
+      added++;
+      entries.push({ kind: 'player', player: p });
+    }
+  }
+  return entries;
+}
+
 function renderResults() {
   const list = $('player-list');
   if (!state.rows.length) { list.classList.remove('open'); return; }
   const query = $('player-input').value;
   const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  const all = rankPlayers(query);
-  searchHits = all.slice(0, SEARCH_CAP);
+  let all = buildSearchEntries(query);
+  // Section headings are labels, not targets, so they never enter the hit list
+  // and never count against the cap.
+  const selectable = all.filter(e => e.kind !== 'section');
+  const capped = selectable.length > SEARCH_CAP;
+  if (capped) {
+    let kept = 0;
+    all = all.filter(e => e.kind === 'section' || ++kept <= SEARCH_CAP);
+  }
+  searchHits = all.filter(e => e.kind !== 'section');
   searchCursor = searchHits.length ? 0 : -1;
   if (!searchHits.length) {
-    list.innerHTML = '<div class="pse-empty">No player matches &ldquo;' + esc(query) + '&rdquo;</div>';
-  } else {
-    searchCursor = 0;
-    list.innerHTML = searchHits.map((p, i) =>
-      '<div class="pse-item' + (i === 0 ? ' active' : '') +
-      '" role="option" data-name="' + esc(p.name) + '">' +
-      '<span class="pse-name">' + highlightName(p.name, toks) + '</span>' +
-      '<span class="pse-meta">' + p.form.map(ch =>
-        '<span class="f' + ch.toLowerCase() + '">' + ch + '</span>').join('') +
-      '</span></div>').join('') +
-      (all.length > searchHits.length
-        ? '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + all.length + '</div>' : '');
+    list.innerHTML = '<div class="pse-empty">No player or country matches &ldquo;' + esc(query) + '&rdquo;</div>';
+    list.classList.add('open');
+    return;
   }
+  let html = '', hit = -1;
+  for (const e of all) {
+    if (e.kind === 'section') { html += '<div class="pse-section">' + esc(e.label) + '</div>'; continue; }
+    const active = ++hit === 0 ? ' active' : '';
+    if (e.kind === 'country') {
+      const c = e.country;
+      html += '<div class="pse-item pse-country' + active + '" role="option" data-country="' + esc(c.code) + '">' +
+        searchFlagHtml(c.code, c.name, 'pse-flag') +
+        '<span class="pse-name">' + highlightName(c.name, toks) + '</span>' +
+        '<span class="pse-meta">' + c.players.length + ' player' + (c.players.length === 1 ? '' : 's') + '</span>' +
+        '<span class="pse-chevron">&#9656;</span></div>';
+      continue;
+    }
+    const p = e.player;
+    html += '<div class="pse-item' + active + '" role="option" data-name="' + esc(p.name) + '">' +
+      '<span class="pse-name">' + searchFlagHtml(p.country, p.countryName, 'pf') +
+      highlightName(p.name, toks) + '</span>' +
+      '<span class="pse-meta">' + p.form.map(ch =>
+        '<span class="f' + ch.toLowerCase() + '">' + ch + '</span>').join('') + '</span></div>';
+  }
+  if (capped) {
+    html += '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + selectable.length +
+      ' &mdash; keep typing to narrow</div>';
+  }
+  list.innerHTML = html;
+  list.scrollTop = 0;
   list.classList.add('open');
 }
 
@@ -643,18 +1067,37 @@ function moveCursor(delta) {
   if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
 }
 
-// If the current cut hides every one of this player's matches, widen it until
-// it doesn't. The stage holding their last loss is the target: that is the
-// match that ended their run, and the one you want to land on. Players still
-// in the running have no loss to aim at, so their last match is used instead.
-function ensureVisible(name) {
+function activateEntry(e) {
+  if (!e) return;
+  if (e.kind === 'country') select(null, e.country.code);
+  else select(e.player.name, null);
+}
+
+function setCut(stage) {
+  const el = $('round-from');
+  const pick = stage >= 2 && el.querySelector('option[value="' + stage + '"]') ? stage : 0;
+  state.fromStage = pick;
+  el.value = String(pick);
+  el.classList.toggle('filtered', pick > 0);
+}
+
+// If the current cut hides every one of this selection's matches, widen it
+// until it doesn't. For a player the stage holding their last loss is the
+// target: that is the match that ended their run, and the one you want to land
+// on. Players still in the running have no loss to aim at, so their last match
+// is used instead.
+function ensureVisible(sel) {
+  if (!sel) return;
   const keep = keptMatches(state.rows, state.fromStage);
-  const mine = state.rows.filter(r => !r.is_bye && playerIn(r, name));
+  const mine = state.rows.filter(r => !r.is_bye && selIn(sel, r));
   if (!mine.length || mine.some(r => keep.has(r.match_number))) return;
+  // A delegation ends in as many places as it has players, so there is no one
+  // match to aim at — show the whole bracket rather than pick for them.
+  if (sel.kind !== 'player') { setCut(0); return; }
 
   const lost = mine.filter(r => {
     if (!(r.challenger1_is_winner || r.challenger2_is_winner)) return false;
-    const c1 = r.challenger1 && r.challenger1.name === name;
+    const c1 = r.challenger1 && r.challenger1.name === sel.name;
     return !((c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner));
   });
   const key = (r) => stageOf(r.round) * 1000 + r.match_number;
@@ -662,25 +1105,39 @@ function ensureVisible(name) {
 
   // Options are whole winners-anchored stages, so round down: a match at stage
   // 3.5 is kept by the stage-3 cut, since the cut keeps everything at or past it.
-  const want = Math.floor(stageOf(target.round));
-  const sel = $('round-from');
-  const pick = want >= 2 && sel.querySelector('option[value="' + want + '"]') ? want : 0;
-  state.fromStage = pick;
-  sel.value = String(pick);
-  sel.classList.toggle('filtered', pick > 0);
+  setCut(Math.floor(stageOf(target.round)));
 }
 
-function pickPlayer(name) {
-  state.player = name || null;
-  if (state.player) ensureVisible(state.player);
-  pickPlayerUI(state.player);
-  syncUrl(parseSlug($('slug-input').value));
+// A player and a country are two answers to the same question, so choosing
+// either drops the other. Pass nothing to clear.
+function select(player, country) {
+  state.player = player || null;
+  state.country = (!player && country) || null;
+  const sel = currentSel();
+  ensureVisible(sel);
+  pickPlayerUI(sel);
+  syncUrl();
   render();
 }
 
 // Options are stages, built from the rounds the bracket actually has, so each
 // entry names exactly what it keeps: "W4 / L5-L6 → final".
 function populateRounds(rows) {
+  const sel = $('round-from');
+  // The cut keeps everything from a stage onward, which only means something
+  // where matches lead somewhere. A group stage has no progression at all, so
+  // every option would keep the whole thing — keptMatches re-adds any match
+  // with no winner destination, and there that is all of them.
+  const progresses = rows.some(r => !r.is_bye && r.winner_to_num != null);
+  $('from-group').hidden = !progresses;
+  if (!progresses) {
+    state.fromStage = 0;
+    sel.innerHTML = '<option value="0">All stages</option>';
+    sel.value = '0';
+    sel.classList.remove('filtered');
+    return;
+  }
+
   const w = new Set(), l = new Set();
   for (const r of rows) {
     if (r.is_bye || r.round == null) continue;
@@ -689,22 +1146,51 @@ function populateRounds(rows) {
   // Cut points are the winners-anchored stages; a minor losers round sits on a
   // half step and makes no sense as a "from here to the end" boundary.
   const maxStage = Math.max(0, ...w);
-  const sel = $('round-from');
+  // In a knockout a stage is a single round, so it is named the way the
+  // subgraph is: "Quarterfinals → final", not "W4 → final".
+  const singleElim = !l.size;
+  const rCount = roundCounts(rows);
+  const rLabel = roundLabels(rows);
+  // Cut points stop at the deepest winners round, but the bracket can run past
+  // it — L10 outlives W7, and WNT's L4 outlives W3 — so the last option is only
+  // the last one when nothing sits beyond it.
+  const lastStage = Math.max(0, ...[...w].map(n => stageOf(n)), ...[...l].map(n => stageOf(-n)));
+  // One match with nowhere to send its winner is a final. Sixty-four of them is
+  // a qualifying stage, which ends without one.
+  const tail = rows.filter(r => !r.is_bye && r.winner_to_num == null).length === 1
+    ? ' → final' : ' → end';
   sel.innerHTML = '<option value="0">All stages</option>';
   for (let s = 2; s <= maxStage; s++) {
     const parts = stageRounds(s, w, l);
     if (!parts.length) continue;
     const wPart = parts.filter(p => p[0] === 'W');
     const lPart = parts.filter(p => p[0] === 'L');
-    const label = [wPart.join(''), lPart.join('-')].filter(Boolean).join(' / ');
+    const label = rLabel.get(s) || (singleElim
+      ? roundName(s, rCount.get(s) || 0, true)
+      : [wPart.join(''), lPart.join('-')].filter(Boolean).join(' / '));
     const o = document.createElement('option');
     o.value = String(s);
-    o.textContent = label + ' → final';
+    // Nothing beyond this stage to cut down to, so the suffix says nothing.
+    o.textContent = s >= lastStage ? label : label + tail;
     sel.appendChild(o);
   }
   if (state.fromStage > maxStage) state.fromStage = 0;
   sel.value = String(state.fromStage);
   sel.classList.toggle('filtered', state.fromStage > 0);
+}
+
+// WNT only, and only worth showing when there is a choice to make.
+function populateStages(stages) {
+  const sel = $('stage-sel');
+  $('stage-group').hidden = stages.length < 2;
+  sel.innerHTML = '';
+  for (const s of stages) {
+    const o = document.createElement('option');
+    o.value = String(s.stage);
+    o.textContent = 'Stage ' + s.stage + ' · ' + s.count + ' matches';
+    sel.appendChild(o);
+  }
+  if (stages.length) sel.value = String(state.stage);
 }
 
 // Mermaid ids its node groups "flowchart-<id>-<n>". Match on a boundary so M1
@@ -906,13 +1392,14 @@ function centerOn(el) {
 
 async function render() {
   if (!state.rows.length) return;
-  const { src, nodes, hits, focus, hiPairs } = buildDiagram(state.rows, state.dir, state.fromStage, state.player);
+  const sel = currentSel();
+  const { src, nodes, hits, focus, hiPairs } = buildDiagram(state.rows, state.dir, state.fromStage, sel);
 
   const total = state.rows.filter(r => !r.is_bye).length;
   const live = state.rows.filter(r => r.status === 'IN_PROGRESS').length;
   const left = state.rows.filter(r => !r.is_bye && r.status !== 'COMPLETED').length;
-  $('counts').textContent = state.player
-    ? `${state.player}: ${hits} match${hits === 1 ? '' : 'es'} shown of ${nodes}`
+  $('counts').textContent = sel
+    ? `${sel.label}: ${hits} match${hits === 1 ? '' : 'es'} shown of ${nodes}`
     : `${nodes} of ${total} matches · ${left} left · ${live} in progress`;
 
   try {
@@ -947,64 +1434,154 @@ function syncButtons() {
     b.classList.toggle('active', b.dataset.dir === state.dir));
 }
 
-function parseSlug(raw) {
+function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
+
+// A full URL from either site names its own source. A bare slug keeps whichever
+// source is loaded, since there is nothing in a slug to tell them apart.
+function parseTarget(raw) {
   const s = (raw || '').trim();
-  const m = s.match(/digitalpool\.com\/tournaments\/([^/?#]+)/);
-  return m ? m[1] : s.replace(/^\/+|\/+$/g, '');
+  let m = s.match(/wntlivescores\.com\/events\/([^/?#]+)/i);
+  if (m) return { source: 'wnt', slug: safeDecode(m[1]) };
+  m = s.match(/digitalpool\.com\/tournaments\/([^/?#]+)/i);
+  if (m) return { source: 'digitalpool', slug: safeDecode(m[1]) };
+  return { source: state.source, slug: s.replace(/^\/+|\/+$/g, '') };
 }
 
 // Snap a name from the URL onto the bracket's exact spelling, or drop it —
 // highlighting matches on an exact name, so a near miss would silently
-// highlight nothing and look like a bug.
-function resolvePlayer() {
-  if (!state.player) { pickPlayerUI(null); return; }
-  const want = state.player.toLowerCase();
-  const hit = collectPlayers(state.rows).find(p => p.name.toLowerCase() === want);
-  state.player = hit ? hit.name : null;
+// highlight nothing and look like a bug. A country code has to be one this
+// stage actually fields, for the same reason.
+function resolveSelection() {
+  const players = collectPlayers(state.rows);
+  if (state.player) {
+    const want = state.player.toLowerCase();
+    const hit = players.find(p => p.name.toLowerCase() === want);
+    state.player = hit ? hit.name : null;
+  }
+  if (state.country && !collectCountries(players).some(c => c.code === state.country)) {
+    state.country = null;
+  }
+  const sel = currentSel();
   // A link may name a player the `from` in the same link hides; move the cut
   // rather than drop the selection.
-  if (state.player) ensureVisible(state.player);
-  pickPlayerUI(state.player);
+  ensureVisible(sel);
+  pickPlayerUI(sel);
 }
 
-function pickPlayerUI(name) {
-  $('player-input').value = name || '';
-  $('player-input').classList.toggle('picked', !!name);
-  $('player-clear').hidden = !name;
+function pickPlayerUI(sel) {
+  $('player-input').value = sel ? sel.label : '';
+  $('player-input').classList.toggle('picked', !!sel);
+  $('player-clear').hidden = !sel;
   $('player-list').classList.remove('open');
 }
 
-function syncUrl(slug) {
+function syncUrl() {
+  const wnt = state.source === 'wnt';
   const url = new URL(location);
-  url.searchParams.set('digitalpool', slug);
+  url.searchParams.delete(wnt ? 'digitalpool' : 'wnt');
+  url.searchParams.set(wnt ? 'wnt' : 'digitalpool', state.slug);
+  if (wnt && state.stage) url.searchParams.set('stage', String(state.stage));
+  else url.searchParams.delete('stage');
   if (state.fromStage > 0) url.searchParams.set('from', String(state.fromStage));
   else url.searchParams.delete('from');
+  // Mutually exclusive, so at most one of these is ever written. ?country=tw is
+  // the same parameter index.html shares its country filter under.
   if (state.player) url.searchParams.set('player', state.player);
   else url.searchParams.delete('player');
+  if (state.country) url.searchParams.set('country', state.country);
+  else url.searchParams.delete('country');
   history.replaceState(null, '', url);
 }
 
-async function load(slug) {
-  if (!slug) { setStatus('Enter a tournament slug above, or add <code>?digitalpool=&lt;slug&gt;</code> to the URL.'); return; }
-  setStatus('<span class="spinner"></span>Loading ' + slug + '…');
+// Nothing to steer once a load has failed: the controls would still be offering
+// the last event's stages and rounds, and the Stage picker would happily redraw
+// its bracket under the new slug in the address bar.
+function clearLoaded() {
+  state.rows = [];
+  state.wntData = null;
+  state.tournament = null;
+  populateStages([]);
+  $('from-group').hidden = true;
+  $('round-from').innerHTML = '<option value="0">All stages</option>';
+  $('round-from').classList.remove('filtered');
+  $('counts').textContent = '';
+  $('graph').innerHTML = '';
+  // The tab and the back link named the tournament that is no longer on screen.
+  document.title = 'PoolRadar — Bracket Graph';
+  $('back-link').href = 'index.html';
+  $('back-link').textContent = '← PoolRadar';
+}
+
+// A WNT event is a slow fetch — the proxy walks it stage by stage — so a second
+// Load pressed while the first is still out is entirely normal, and without
+// this the slower response would land last and draw its bracket under the newer
+// slug. Only the newest load is allowed to commit anything.
+let loadSeq = 0;
+
+async function load(source, slug) {
+  if (!slug) {
+    setStatus('Paste a digitalpool.com or wntlivescores.com URL above, or add ' +
+      '<code>?digitalpool=&lt;slug&gt;</code> or <code>?wnt=&lt;slug&gt;</code> to this one.');
+    return;
+  }
+  const seq = ++loadSeq;
+  state.source = source === 'wnt' ? 'wnt' : 'digitalpool';
+  state.slug = slug;
+  $('slug-input').value = slug;
+  setStatus('<span class="spinner"></span>Loading ' + esc(slug) + '…');
   $('graph').innerHTML = '';
   try {
     const t0 = performance.now();
-    const data = await gql(QUERY, { s: slug });
-    state.rows = data.tournament_brackets || [];
-    state.tournament = (data.tournaments || [])[0] || null;
-    if (!state.rows.length) { setStatus('No bracket found for "' + slug + '".', true); return; }
+    let loaded;
+    if (state.source === 'wnt') {
+      const event = await fetchWnt(slug);
+      if (seq !== loadSeq) return;
+      state.wntData = event;
+      const stages = wntStages(state.wntData);
+      if (!stages.length) {
+        clearLoaded();
+        setStatus('No matches published yet for "' + esc(slug) + '".', true);
+        return;
+      }
+      // Open on the furthest stage the event has actually reached — that is
+      // where the tournament is. Stage 1 is a 400-match wall you go back for on
+      // purpose, and a stage whose draw is published but empty is worse still.
+      const pool = stages.filter(s => s.reached);
+      const open = (pool.length ? pool : stages).slice(-1)[0].stage;
+      if (!stages.some(s => s.stage === state.stage)) state.stage = open;
+      populateStages(stages);
+      state.rows = wntRows(state.wntData, state.stage);
+      state.tournament = { name: state.wntData.name || slug };
+      loaded = 'stage ' + state.stage + ', ' + state.rows.length + ' matches';
+    } else {
+      state.wntData = null;
+      state.stage = 0;
+      populateStages([]);
+      const data = await gql(QUERY, { s: slug });
+      if (seq !== loadSeq) return;
+      state.rows = data.tournament_brackets || [];
+      state.tournament = (data.tournaments || [])[0] || null;
+      loaded = state.rows.length + ' bracket rows';
+    }
+    if (!state.rows.length) {
+      clearLoaded();
+      setStatus('No bracket found for "' + esc(slug) + '".', true);
+      return;
+    }
     const name = state.tournament ? state.tournament.name : slug;
     document.title = name + ' — Bracket Graph';
-    $('back-link').href = 'index.html?digitalpool=' + encodeURIComponent(slug);
+    $('back-link').href = 'index.html?' + (state.source === 'wnt' ? 'wnt=' : 'digitalpool=') +
+      encodeURIComponent(slug);
     $('back-link').textContent = '← ' + name;
-    setStatus('Loaded ' + state.rows.length + ' bracket rows in ' + Math.round(performance.now() - t0) + ' ms');
+    setStatus('Loaded ' + loaded + ' in ' + Math.round(performance.now() - t0) + ' ms');
     populateRounds(state.rows);
-    resolvePlayer();
-    syncUrl(slug);
+    resolveSelection();
+    syncUrl();
     await render();
   } catch (err) {
-    setStatus('Failed to load: ' + err.message, true);
+    if (seq !== loadSeq) return;      // a newer load owns the page now
+    clearLoaded();
+    setStatus('Failed to load: ' + esc(err.message), true);
   }
 }
 
@@ -1016,7 +1593,20 @@ $('round-from').addEventListener('change', (e) => {
   e.target.classList.toggle('filtered', state.fromStage > 0);
   // Deliberately no ensureVisible here — choosing a cut by hand should stick,
   // even one that hides the selected player.
-  syncUrl(parseSlug($('slug-input').value));
+  syncUrl();
+  render();
+});
+// A WNT stage is a bracket of its own, already in hand — no refetch, and the
+// round cut is dropped because its stage numbers mean something else here.
+// resolveSelection keeps the selection if it survives into the new stage,
+// which the 64 who came through stage 1, and their countries, all do.
+$('stage-sel').addEventListener('change', (e) => {
+  state.stage = parseInt(e.target.value, 10) || 0;
+  state.fromStage = 0;
+  state.rows = wntRows(state.wntData, state.stage);
+  populateRounds(state.rows);
+  resolveSelection();
+  syncUrl();
   render();
 });
 $('player-input').addEventListener('input', renderResults);
@@ -1026,8 +1616,7 @@ $('player-input').addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor(-1); }
   else if (e.key === 'Enter') {
     e.preventDefault();
-    const hit = searchCursor >= 0 ? searchHits[searchCursor] : null;
-    if (hit) pickPlayer(hit.name);
+    if (searchCursor >= 0) activateEntry(searchHits[searchCursor]);
   } else if (e.key === 'Escape') {
     $('player-list').classList.remove('open');
     $('player-input').blur();
@@ -1038,9 +1627,10 @@ $('player-list').addEventListener('mousedown', (e) => {
   const item = e.target.closest('.pse-item');
   if (!item) return;
   e.preventDefault();
-  pickPlayer(item.dataset.name);
+  if (item.dataset.country) select(null, item.dataset.country);
+  else select(item.dataset.name, null);
 });
-$('player-clear').addEventListener('click', () => pickPlayer(null));
+$('player-clear').addEventListener('click', () => select(null, null));
 
 // One delegated listener, attached once — only #graph's contents are replaced
 // on re-render, never the element itself. Element.closest walks out of the
@@ -1055,7 +1645,7 @@ $('graph').addEventListener('click', (e) => {
   if (!row) return;
   const c = span.classList.contains('pn1') ? row.challenger1 : row.challenger2;
   if (!c || !c.name) return;
-  pickPlayer(state.player === c.name ? null : c.name);   // click again to clear
+  select(state.player === c.name ? null : c.name, null);   // click again to clear
 });
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.psearch')) $('player-list').classList.remove('open');
@@ -1070,18 +1660,28 @@ document.addEventListener('keydown', (e) => {
   input.select();
   renderResults();
 });
-$('load-btn').addEventListener('click', () => load(parseSlug($('slug-input').value)));
-$('slug-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') load(parseSlug($('slug-input').value));
-});
+// A hand-typed target is a different event unless it is the same one again, and
+// stage numbers mean nothing across events — drop it and let the load open on
+// the new event's latest. Retyping the current slug to refresh keeps the stage.
+const loadTyped = () => {
+  const t = parseTarget($('slug-input').value);
+  if (t.source !== state.source || t.slug !== state.slug) state.stage = 0;
+  load(t.source, t.slug);
+};
+$('load-btn').addEventListener('click', loadTyped);
+$('slug-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadTyped(); });
 
 syncButtons();
 const params = new URLSearchParams(location.search);
 state.fromStage = Math.max(0, parseInt(params.get('from') || '0', 10) || 0);
 state.player = params.get('player') || null;
-const initial = params.get('digitalpool') || '';
+state.country = (params.get('country') || '').toLowerCase() || null;
+state.stage = Math.max(0, parseInt(params.get('stage') || '0', 10) || 0);
+const wntSlug = params.get('wnt');
+state.source = wntSlug ? 'wnt' : 'digitalpool';
+const initial = wntSlug || params.get('digitalpool') || '';
 $('slug-input').value = initial;
-load(initial);
+load(state.source, initial);
 </script>
 </body>
 </html>

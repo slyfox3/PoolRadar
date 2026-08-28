@@ -2226,9 +2226,11 @@ button { font-family: inherit; font-size: inherit; }
     html += '<div class="match-header">';
     var links;
     if (t.source === 'wnt') {
-      // graph.html reads DigitalPool slugs only, so it is left out here.
       links = ' <a class="btn btn-link" href="https://www.wntlivescores.com/events/' + encodeURIComponent(t.slug) + '/matches-list/1" target="_blank" rel="noopener">WNT &rarr;</a>'
-        + ' <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?wnt=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">TournamentPerf &rarr;</a>';
+        + ' <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?wnt=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">TournamentPerf &rarr;</a>'
+        // No stage in the link: graph.html opens on the furthest one that has
+        // matches, which is where the event actually is.
+        + ' <a class="btn btn-link" href="graph.html?wnt=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
     } else {
       links = ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a>';
     }
