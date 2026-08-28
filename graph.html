@@ -713,24 +713,30 @@ const playerIn = (r, name) =>
   (r.challenger1 && r.challenger1.name === name) ||
   (r.challenger2 && r.challenger2.name === name);
 
-// What is selected, as a test on one side of a match. A player is one name; a
-// country is everyone carrying its code, so both sides of a match can answer
-// yes — two of a delegation drawn against each other.
-// The country test insists on both sides being present: a DigitalPool
-// challenger has no country at all, and absent must never equal absent.
-const selHas = (sel, c) => !!sel && !!c && (sel.kind === 'player'
-  ? c.name === sel.name
-  : !!c.country && c.country === sel.code);
+// A selection is a set of players, however it was arrived at: picking a name
+// gives a set of one, picking a country gives its whole delegation. Everything
+// downstream — the spotlight, the lit nodes, the runs drawn through them, the
+// rerouting — then works the same way whether that set holds one player or
+// thirty, and both sides of a match answer yes when two of them met.
+const selHas = (sel, c) => !!sel && !!c && sel.names.has(c.name);
 const selIn = (sel, r) => selHas(sel, r.challenger1) || selHas(sel, r.challenger2);
 
-// The selection as buildDiagram wants it. A player and a country are two
-// answers to the same question, so only one is ever set.
+// A player and a country are two answers to the same question, so only one is
+// ever set. Resolving a country to names here rather than testing the code on
+// every challenger is also what keeps DigitalPool out of it: its challengers
+// carry no country, so they can never land in anyone's set.
 function currentSel() {
-  if (state.player) return { kind: 'player', name: state.player, label: state.player };
+  if (state.player) {
+    return { kind: 'player', label: state.player, names: new Set([state.player]) };
+  }
   if (!state.country) return null;
   const c = collectCountries(collectPlayers(state.rows))
     .find(x => x.code === state.country);
-  return { kind: 'country', code: state.country, label: c ? c.name : state.country.toUpperCase() };
+  return {
+    kind: 'country',
+    label: c ? c.name : state.country.toUpperCase(),
+    names: new Set(c ? c.players.map(p => p.name) : []),
+  };
 }
 
 // Which matches survive the stage cut. Shared with the player search so the
@@ -919,22 +925,26 @@ function buildDiagram(rows, dir, fromStage, sel) {
 
   // A selected player's real progression, which includes the two steps drawn
   // for nobody else: out of round 1, and the drop across to the losers side.
+  // One pass over the matches rather than one per selected player: each match
+  // is walked once and answers for whichever of its two sides are selected.
+  // Where two of them were drawn against each other that is both, and the match
+  // sends one run on up the winners side and one down to the losers.
   const hiNodes = new Set();
   const path = [];
   if (sel) {
     for (const r of rows) {
-      if (r.is_bye || !selIn(sel, r) || !keep.has(r.match_number)) continue;
+      if (r.is_bye || !keep.has(r.match_number)) continue;
+      const mine = [];
+      if (selHas(sel, r.challenger1)) mine.push(1);
+      if (selHas(sel, r.challenger2)) mine.push(2);
+      if (!mine.length) continue;
       hiNodes.add(r.match_number);
-      // A delegation is a dozen separate runs, not one chain, so there is no
-      // path to draw through it — and the rerouting below is built on a node
-      // carrying at most one highlighted edge per face. The lit boxes carry it.
-      if (sel.kind !== 'player') continue;
-      const c1 = r.challenger1 && r.challenger1.name === sel.name;
-      const won = (c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner);
-      const decided = r.challenger1_is_winner || r.challenger2_is_winner;
-      if (!decided) continue;
-      const next = hop(won ? r.winner_to_num : r.loser_to_num);
-      if (next != null && keep.has(next)) path.push([r.match_number, next]);
+      if (!(r.challenger1_is_winner || r.challenger2_is_winner)) continue;
+      for (const side of mine) {
+        const won = side === 1 ? r.challenger1_is_winner : r.challenger2_is_winner;
+        const next = hop(won ? r.winner_to_num : r.loser_to_num);
+        if (next != null && keep.has(next)) path.push([r.match_number, next]);
+      }
     }
   }
   // A ghost on the path is promoted to a real edge — styling cannot make `~~~`
@@ -1083,8 +1093,8 @@ function collectCountries(players) {
 }
 
 // A country is a hit on a prefix of its name, of any word in its name, or of
-// any alias. Queries under 3 characters must match a code or alias exactly, so
-// typing "ko" looking for a player does not pull in a whole delegation.
+// any alias. Two characters is enough — "li" should reach Lithuania — but a
+// single letter is not, or a third of the field would answer to "a".
 function countryMatchScore(c, q) {
   if (!q) return -1;
   const name = c.name.toLowerCase();
@@ -1095,7 +1105,7 @@ function countryMatchScore(c, q) {
   let best = -1;
   for (const cand of cands) {
     if (q === cand) return 0;
-    if (q.length >= 3 && cand.indexOf(q) === 0) best = 1;
+    if (q.length >= 2 && cand.indexOf(q) === 0) best = 1;
   }
   return best;
 }
@@ -1156,10 +1166,15 @@ function searchFlagHtml(code, name, cls) {
 
 // One flat list so a single cursor walks countries and names alike. Countries
 // lead, because a two-letter query that hits one is almost always meant as one.
+// Countries lead the list, so how many of them can lead it is capped: a short
+// prefix reaches several, and the list only holds SEARCH_CAP rows, so without a
+// limit the names you were typing towards would be pushed off the bottom.
+const COUNTRY_CAP = 4;
+
 function buildSearchEntries(query) {
   const players = collectPlayers(state.rows);
   const countries = rankCountries(query, players);
-  const entries = countries.map(c => ({ kind: 'country', country: c }));
+  const entries = countries.slice(0, COUNTRY_CAP).map(c => ({ kind: 'country', country: c }));
   const named = rankPlayers(query, players);
   const listed = new Set(named.map(p => p.name));
   for (const p of named) entries.push({ kind: 'player', player: p });
@@ -1261,11 +1276,12 @@ function ensureVisible(sel) {
   if (!mine.length || mine.some(r => keep.has(r.match_number))) return;
   // A delegation ends in as many places as it has players, so there is no one
   // match to aim at — show the whole bracket rather than pick for them.
-  if (sel.kind !== 'player') { setCut(0); return; }
+  if (sel.names.size !== 1) { setCut(0); return; }
+  const [only] = sel.names;
 
   const lost = mine.filter(r => {
     if (!(r.challenger1_is_winner || r.challenger2_is_winner)) return false;
-    const c1 = r.challenger1 && r.challenger1.name === sel.name;
+    const c1 = r.challenger1 && r.challenger1.name === only;
     return !((c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner));
   });
   const key = (r) => stageOf(r.round) * 1000 + r.match_number;
@@ -1451,10 +1467,11 @@ function buried(sx, sy, dx, dy, lane, vert, boxes) {
   return hit;
 }
 
-// pairs is buildDiagram's hiPairs — the selected player's chain, as [from, to]
-// match numbers. Returns how many edges were redrawn, or -1 if it could not run.
+// pairs is buildDiagram's hiPairs — the runs of everyone selected, as [from,
+// to] match numbers. Returns how many edges were redrawn, or -1 if it could
+// not run.
 function reroutePath(pairs, dir) {
-  if (!pairs || !pairs.length) return -1;      // no player selected: a real no-op
+  if (!pairs || !pairs.length) return -1;      // nothing selected: a real no-op
   try {
     const root = $('graph');
     const want = new Set(pairs.map(([a, b]) => 'M' + a + '|M' + b));
@@ -1479,12 +1496,33 @@ function reroutePath(pairs, dir) {
 
     const vert = dir !== 'LR' && dir !== 'RL';
     const face = (bx) => vert ? bx.x1 - bx.x0 : bx.y1 - bx.y0;
-    // The player's run is a chain, so a node carries at most one highlighted
-    // edge per face and there is nothing to spread out. But the faint feeder
-    // Mermaid drew into that same face is still there and still lands near the
-    // middle, so shift off centre towards the other end — two arrowheads on one
-    // spot read as a single broken arrow.
+    // One selected player's run is a chain, so each face carries a single
+    // highlighted edge and there is nothing to spread. A delegation is not: a
+    // match with two of them in it sends one edge on and one down out of the
+    // same face, and a match they both feed takes two into the same face.
+    //
+    // So each face's edges are ordered by where their other end sits and laid
+    // out evenly across it. With one edge that reduces to the old behaviour —
+    // centre, then shifted off it towards the far end, because the faint feeder
+    // Mermaid drew into that same face still lands near the middle and two
+    // arrowheads on one spot read as a single broken arrow.
     const nudge = (size, towards) => Math.sign(towards) * Math.min(size * 0.3, 14);
+    const at = (lo, hi, i, n, towards) => (n > 1)
+      ? lo + (hi - lo) * (i + 1) / (n + 1)
+      : (lo + hi) / 2 + nudge(hi - lo, towards);
+
+    // Group by the face each edge leaves and the face it arrives at, then sort
+    // each group along that face so the fan-out does not cross itself.
+    const mid = (bx) => vert ? (bx.x0 + bx.x1) / 2 : (bx.y0 + bx.y1) / 2;
+    const out = new Map(), into = new Map();
+    const push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+    for (const q of paths) {
+      if (!box.get(q.a) || !box.get(q.b)) continue;
+      push(out, q.a, q);
+      push(into, q.b, q);
+    }
+    for (const list of out.values()) list.sort((p, q) => mid(box.get(p.b)) - mid(box.get(q.b)));
+    for (const list of into.values()) list.sort((p, q) => mid(box.get(p.a)) - mid(box.get(q.a)));
 
     // Only needed by the lane search; most chains contain at most one edge
     // that travels far enough sideways to want it.
@@ -1493,20 +1531,23 @@ function reroutePath(pairs, dir) {
     const n = (v) => Math.round(v * 100) / 100;
     let done = 0;
 
-    for (const { p, a, b } of paths) {
+    for (let pi = 0; pi < paths.length; pi++) {
+      const { p, a, b } = paths[pi];
       const S = box.get(a), D = box.get(b);
       if (!S || !D) continue;                  // an id we cannot place: leave it alone
       const scx = (S.x0 + S.x1) / 2, scy = (S.y0 + S.y1) / 2;
       const dcx = (D.x0 + D.x1) / 2, dcy = (D.y0 + D.y1) / 2;
+      const og = out.get(a) || [], ig = into.get(b) || [];
+      const oi = og.indexOf(paths[pi]), ii = ig.indexOf(paths[pi]);
       let sx, sy, dx, dy, lo, hi;
       if (vert) {
-        sx = scx + nudge(S.x1 - S.x0, dcx - scx);
-        dx = dcx + nudge(D.x1 - D.x0, scx - dcx);
+        sx = at(S.x0, S.x1, oi, og.length, dcx - scx);
+        dx = at(D.x0, D.x1, ii, ig.length, scx - dcx);
         sy = S.y1; dy = D.y0 - ARROWHEAD;
         lo = sy; hi = dy;
       } else {
-        sy = scy + nudge(S.y1 - S.y0, dcy - scy);
-        dy = dcy + nudge(D.y1 - D.y0, scy - dcy);
+        sy = at(S.y0, S.y1, oi, og.length, dcy - scy);
+        dy = at(D.y0, D.y1, ii, ig.length, scy - dcy);
         sx = S.x1; dx = D.x0 - ARROWHEAD;
         lo = sx; hi = dx;
       }
