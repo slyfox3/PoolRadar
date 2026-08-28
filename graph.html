@@ -30,45 +30,67 @@ a:hover { text-decoration: underline; }
 /* .tb-group sets display, which would otherwise beat the UA rule for [hidden] */
 [hidden] { display: none !important; }
 
-.psearch { position: relative; display: flex; align-items: center; gap: 4px; }
-.psearch input { width: 190px; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; border-radius: 6px;
-  padding: 5px 24px 5px 26px; font-size: 12px; font-family: inherit; outline: none; }
-.psearch input:focus { border-color: #3b82f6; }
-.pse-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px;
-  color: #64748b; pointer-events: none; }
-.psearch:hover .pse-icon, .psearch:focus-within .pse-icon { color: #94a3b8; }
-.pse-kbd { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); color: #475569;
-  font: 10px/1 'SF Mono', Menlo, Consolas, monospace; border: 1px solid #334155; border-radius: 3px;
-  padding: 2px 4px; pointer-events: none; }
-.psearch input:focus ~ .pse-kbd, .psearch input.picked ~ .pse-kbd { display: none; }
-.psearch input.picked { border-color: #60a5fa; color: #dbeafe; }
-.pse-list { position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 60; min-width: 290px; max-height: 300px;
-  overflow-y: auto; background: #1e293b; border: 1px solid #475569; border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none; }
-.pse-list.open { display: block; }
-.pse-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; color: #e2e8f0; font-size: 13px; }
-.pse-item.active, .pse-item:hover { background: #334155; }
+/* Floating search, as index.html does it. The page itself is the scroll
+   container for the bracket, so anything in the toolbar is gone the moment you
+   pan into the diagram — which is exactly when you want to look someone up. */
+.gs-fab { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
+  width: 48px; height: 48px; border-radius: 50%; background: #2563eb; border: none; color: #fff;
+  display: none; align-items: center; justify-content: center; cursor: pointer; z-index: 998;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5); -webkit-tap-highlight-color: transparent; }
+.gs-fab.visible { display: flex; }
+.gs-fab:hover { background: #3b82f6; }
+.gs-fab svg { width: 21px; height: 21px; }
+/* Stacked above the magnifier, and only while something is lit. */
+.gs-clear { position: fixed; right: 26px; bottom: calc(78px + env(safe-area-inset-bottom));
+  width: 36px; height: 36px; border-radius: 50%; background: #1e293b; border: 1px solid #475569;
+  color: #cbd5e1; font-size: 20px; line-height: 1; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; z-index: 998; box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+  -webkit-tap-highlight-color: transparent; }
+.gs-clear:hover { border-color: #60a5fa; color: #f8fafc; }
+
+.gs-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.94); z-index: 1001; display: none;
+  padding: max(12px, env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
+.gs-overlay.open { display: block; }
+.gs-box { max-width: 520px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+.gs-bar { display: flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #334155;
+  border-radius: 10px; padding: 6px 10px; flex-shrink: 0; }
+.pse-icon { width: 16px; height: 16px; color: #64748b; flex-shrink: 0; }
+/* 16px keeps iOS Safari from zooming the page on focus */
+#player-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e2e8f0;
+  font-size: 16px; padding: 8px 0; font-family: inherit; }
+.gs-close { background: none; border: none; color: #94a3b8; font-size: 26px; line-height: 1;
+  cursor: pointer; padding: 0 4px; min-width: 32px; }
+.gs-close:hover { color: #e2e8f0; }
+.gs-hint { flex-shrink: 0; padding: 8px 12px 2px; color: #475569; font-size: 11px; }
+
+.pse-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
+.pse-item { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px;
+  border-radius: 8px; cursor: pointer; color: #e2e8f0; font-size: 15px; }
+.pse-item.active, .pse-item:hover { background: #1e293b; }
 .pse-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
 /* Monospace so the runs line up down the list and are scannable as a column */
 .pse-meta { margin-left: auto; padding-left: 10px; flex-shrink: 0; white-space: nowrap;
-  font: 11px/1 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 1px; }
+  font: 12px/1 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 1px; }
 .pse-meta .fw { color: #4ade80; }
 .pse-meta .fl { color: #f87171; }
-.pse-empty { padding: 12px 10px; color: #64748b; font-size: 12px; }
+.pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
 /* Country rows lead the list and stand apart from the names under them. */
-.pse-section { padding: 9px 10px 3px; color: #475569; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.pse-section { padding: 12px 12px 4px; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .pse-item.pse-country .pse-name { font-weight: 600; }
-.pse-item.pse-country .pse-flag { font-size: 17px; line-height: 1; margin-right: 0; }
-.pse-item.pse-country .pse-meta { font-family: inherit; letter-spacing: 0; color: #64748b; }
-.pse-chevron { color: #475569; font-size: 11px; padding-left: 6px; }
+.pse-item.pse-country .pse-flag { font-size: 23.4px; line-height: 1; margin-right: 0; }
+.pse-item.pse-country .pse-meta { font-family: inherit; letter-spacing: 0; color: #64748b; font-size: 12px; }
+.pse-chevron { color: #475569; font-size: 13px; padding-left: 6px; }
 
 .legend { display: flex; gap: 14px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155; font-size: 11px; color: #64748b; flex-wrap: wrap; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend kbd { font: 10px/1 'SF Mono', Menlo, Consolas, monospace; color: #94a3b8;
+  border: 1px solid #334155; border-radius: 3px; padding: 2px 4px; }
 .swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid; display: inline-block; }
 .lg-win { color: #fbbf24; }
 .lg-lose { color: #f87171; }
 .lg-drop { color: #64748b; font-size: 10px; }
+.lg-live { border-color: #ec4899; }
 .solid { width: 18px; border-top: 2px solid #64748b; display: inline-block; }
 
 #status { padding: 12px 16px; font-size: 13px; color: #94a3b8; }
@@ -84,25 +106,81 @@ a:hover { text-decoration: underline; }
 /* Full-bleed bars, so they still span when scrolled right past device width */
 .header, .toolbar, .legend, #status { min-width: max-content; }
 #graph svg { max-width: none !important; }
-/* Mermaid renders labels as HTML in a foreignObject, so the tags inside a
-   node label are stylable from here: <b> the match winner, <i> a slot still
-   waiting on a feeder, <small> the loser's drop destination. classDef sets
-   colour on the label, hence !important. */
-#graph b { color: #fbbf24 !important; font-weight: 400; }
-#graph i { color: #64748b !important; font-style: italic; }
+/* Mermaid renders labels as HTML in a foreignObject, so the tags inside a node
+   label are stylable from here: <b> the match winner, <i> a slot still waiting
+   on a feeder, <small> the loser's drop destination. classDef sets colour on
+   the label, hence !important.
+
+   COLOUR ONLY. Mermaid measures a label in a container of its own before the
+   SVG is ever inserted here, so a rule under #graph is not in effect while it
+   decides how big the box is. Anything that changes a label's SIZE has to be
+   unscoped — see the block below — or every node is measured for one layout and
+   painted with another, and the difference shows as slack along the bottom and
+   right edges, which is where an oversized box leaves its unused room. */
+#graph b { color: #fbbf24 !important; }
+#graph i { color: #64748b !important; }
+#graph small { color: #64748b !important; }
+#graph em { color: #f87171 !important; }
+
+/* The metric half of the rules above, unscoped so they apply while measuring.
+   Keyed off our own classes rather than Mermaid's, so they do not depend on
+   what its wrapper happens to be called. */
+.pn1 b, .pn2 b { font-weight: 400; }
+.pn1 i, .pn2 i { font-style: italic; }
+.pn1 em, .pn2 em { font-style: normal; }
 /* relative, so it tracks themeVariables.fontSize instead of fighting it */
-#graph small { color: #64748b !important; font-size: 0.85em; }
-#graph em { color: #f87171 !important; font-style: normal; }
-/* Nationality on a spotlighted name. Windows ships no regional-indicator
-   glyphs at all and iOS suppresses this one in some regions, so tw comes from
-   the same inlined art index.html uses rather than the emoji. Sized in em, so
-   it tracks themeVariables.fontSize like the rest of the label. */
-/* Unscoped: the same art serves the search dropdown and the diagram. Only the
-   size differs — in a label it is em-relative so it tracks themeVariables. */
+.nd-drop { font-size: 0.85em; }
+
+/* Nationality beside a name. Windows ships no regional-indicator glyphs at all
+   and iOS suppresses this one in some regions, so tw comes from the same
+   inlined art index.html uses rather than the emoji.
+   .pf is the dropdown's size, .nf the diagram's — one fixed, one em-relative so
+   it tracks themeVariables.fontSize. Two classes rather than one class and an
+   override, because the override could only have been scoped. */
 .pf { margin-right: 4px; font-size: 14.3px; line-height: 1; vertical-align: -0.06em; }
-#graph .pf { margin-right: 3px; font-size: 1.15em; }
+.nf { margin-right: 3px; font-size: 1.15em; line-height: 1; vertical-align: -0.06em; }
 .flag-img { display: inline-block; background-position: center; background-size: contain;
   background-repeat: no-repeat; width: 1.36em; height: 0.91em; vertical-align: -0.08em; }
+.nf.flag-img { vertical-align: -0.08em; }
+
+/* Flowing left to right a match is laid out in three columns — number,
+   players, scores — so the box is two rows tall rather than the three or four
+   the stacked form needs. The loser's destination stacks under the number
+   inside the same cell, spending width, which is the cheap direction here.
+   Unscoped on purpose: Mermaid measures a label in a detached container of its
+   own, so a rule under #graph would not apply while it decides how big the
+   node is, and every box would come out the wrong size. */
+/* inline-grid, top-aligned: Mermaid drops the label into a table-cell with
+   line-height 1.5, and a block-level grid in there leaves that line box behind
+   as an empty band under the last row, inside the node's border. Every cell is
+   placed by hand and the rows are declared, so no implicit third row can be
+   created either. */
+.nd { display: inline-grid; vertical-align: top;
+  grid-template-columns: auto auto auto; grid-template-rows: auto auto;
+  align-items: center; column-gap: 5px; row-gap: 0; text-align: left; line-height: 1.25; }
+.nd-h { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column;
+  justify-content: center; padding-right: 2px; }
+.nd-id { white-space: nowrap; }
+.nd-p { grid-column: 2; white-space: nowrap; }
+.nd-s { grid-column: 3; text-align: right; white-space: nowrap; }
+.nd-r1 { grid-row: 1; }
+.nd-r2 { grid-row: 2; }
+
+/* Flowing top to bottom the box stays tall and narrow, so the match number and
+   the drop keep their own full-width rows and only the score is pulled out into
+   a column of its own — which is all it takes to line the scores up down the
+   node instead of letting each one float off the end of its name. */
+.nt { display: inline-grid; vertical-align: top; grid-template-columns: auto auto;
+  align-items: center; column-gap: 6px; row-gap: 0; line-height: 1.25; text-align: left; }
+.nt-id { grid-column: 1 / -1; grid-row: 1; text-align: center; }
+.nt-p { grid-column: 1; white-space: nowrap; }
+.nt-s { grid-column: 2; text-align: right; white-space: nowrap; }
+.nt-r1 { grid-row: 2; }
+.nt-r2 { grid-row: 3; }
+.nt-drop { grid-column: 1 / -1; grid-row: 4; text-align: center; }
+/* Mermaid wraps the label in a <p>, whose default block margin would band the
+   node top and bottom. Harmless for the stacked flow, which wants none either. */
+.nodeLabel p { margin: 0; }
 .flag-tw { width: 0.9em; height: 0.9em; vertical-align: -0.05em; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8.7 -21 531.4 531.9'%3E%3Cg transform='matrix(1.0350939,0,0,1.0479042,-208.77414,-69.356587)'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23fff' stroke='%23fff' stroke-width='40' stroke-linejoin='round' /%3E%3Cg clip-rule='evenodd' fill-rule='evenodd'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23ffffff' /%3E%3Cpath d='m 451.725,190.979 c -32.534,0 -58.923,26.402 -58.923,58.91 0,32.562 26.389,58.952 58.923,58.952 32.563,0 58.952,-26.39 58.952,-58.952 0,-32.508 -26.389,-58.91 -58.952,-58.91 z m -0.014,87.339 c -15.682,0 -28.4,-12.707 -28.4,-28.43 0,-15.668 12.719,-28.415 28.4,-28.415 15.71,0 28.442,12.746 28.442,28.415 10e-4,15.723 -12.732,28.43 -28.442,28.43 z' fill='%23003283' /%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z m -67.949,85.864 c 5.637,12.953 8.75,27.215 8.75,42.234 0,58.621 -47.5,106.108 -106.106,106.108 -26.403,0 -50.587,-9.66 -69.149,-25.617 -18.575,15.957 -42.732,25.617 -69.148,25.617 -58.621,0 -106.107,-47.487 -106.107,-106.108 0,-14.371 2.88,-28.069 8.048,-40.594 -29.931,-18.784 -49.857,-52.035 -49.857,-89.972 0,-58.607 47.486,-106.107 106.094,-106.107 2.205,0 4.354,0.042 6.504,0.221 11.629,-45.985 53.273,-80.007 102.854,-80.007 49.566,0 91.21,34.022 102.84,80.007 2.149,-0.179 4.342,-0.221 6.505,-0.221 58.607,0 106.106,47.5 106.106,106.107 0,36.821 -18.823,69.301 -47.334,88.332 z' fill='%23003283' /%3E%3Cpath d='m 651.797,277.752 c 0,-53.702 -43.488,-97.191 -97.19,-97.191 -3.06,0 -6.159,0.179 -9.177,0.427 -9.688,-43.448 -48.479,-75.873 -94.82,-75.873 -46.356,0 -85.134,32.425 -94.808,75.873 -3.004,-0.248 -6.063,-0.427 -9.122,-0.427 -53.702,0 -97.192,43.489 -97.192,97.191 0,35.912 19.499,67.273 48.533,84.101 -5.153,11.85 -8.019,24.846 -8.019,38.583 0,53.701 43.545,97.191 97.205,97.191 24.97,0 47.748,-9.439 64.973,-24.9 17.212,15.461 39.989,24.9 64.96,24.9 53.659,0 97.15,-43.49 97.15,-97.191 0,-14.248 -3.06,-27.808 -8.614,-40.044 27.699,-17.102 46.121,-47.707 46.121,-82.64 z m -62.615,76.521 c 8.792,13.435 13.917,29.462 13.917,46.687 0,47.128 -38.198,85.325 -85.312,85.325 -26.61,0 -50.312,-12.14 -65.965,-31.169 -15.655,19.029 -39.384,31.169 -65.952,31.169 -47.155,0 -85.354,-38.197 -85.354,-85.325 0,-16.716 4.823,-32.342 13.132,-45.516 -30.537,-12.968 -51.979,-43.284 -51.979,-78.547 0,-47.155 38.198,-85.354 85.354,-85.354 6.711,0 13.285,0.812 19.595,2.288 4.438,-42.939 40.734,-76.439 84.858,-76.439 43.917,0 80.089,33.197 84.788,75.873 5.513,-1.116 11.189,-1.722 17.005,-1.722 47.113,0 85.313,38.198 85.313,85.354 10e-4,34.272 -20.201,63.817 -49.4,77.376 z' fill='%23e41f20' /%3E%3Cg fill='%23ffffff'%3E%3Cpath d='m 444.684,217.464 h 14.814 l -7.056,-22.558 z' /%3E%3Cpath d='m 429.402,225.346 12.829,-7.4 -17.418,-16.068 z' /%3E%3Cpath d='m 420.1,239.815 7.414,-12.87 -23.082,-5.169 z' /%3E%3Cpath d='m 419.288,256.958 v -14.814 l -22.572,7.055 z' /%3E%3Cpath d='m 427.169,272.239 -7.414,-12.829 -16.012,17.404 z' /%3E%3Cpath d='m 441.611,281.542 -12.816,-7.401 -5.209,23.082 z' /%3E%3Cpath d='m 458.767,282.369 h -14.813 l 7.069,22.558 z' /%3E%3Cpath d='m 474.078,274.485 -12.858,7.401 17.433,16.026 z' /%3E%3Cpath d='m 483.337,260.017 -7.386,12.829 23.109,5.168 z' /%3E%3Cpath d='m 484.164,242.874 v 14.814 l 22.599,-7.055 z' /%3E%3Cpath d='m 476.323,227.592 7.4,12.83 16.027,-17.405 z' /%3E%3Cpath d='m 461.854,218.291 12.829,7.399 5.167,-23.082 z' /%3E%3C/g%3E%3C/g%3E%3Cpath d='m 409.544,366.854 c 0,-20.754 -16.784,-37.552 -37.551,-37.552 -20.753,0 -37.55,16.798 -37.55,37.552 0,20.752 16.797,37.551 37.55,37.551 1.131,0 2.205,-0.042 3.28,-0.125 -0.083,-0.991 -0.124,-1.984 -0.124,-2.976 0,-1.116 0.041,-2.246 0.124,-3.321 -1.075,0.139 -2.149,0.179 -3.28,0.179 -17.266,0 -31.293,-13.999 -31.293,-31.308 0,-17.268 14.027,-31.309 31.293,-31.309 17.321,0 31.309,14.041 31.309,31.309 0,13.903 -9.04,25.658 -21.565,29.75 -0.221,1.518 -0.345,3.102 -0.345,4.7 0,0.646 0.041,1.294 0.054,1.888 16.179,-4.175 28.098,-18.851 28.098,-36.338 z' fill='%230083ce' /%3E%3Cpath d='m 572.301,366.854 c 0,20.752 -16.784,37.551 -37.551,37.551 -19.636,0 -35.73,-15.035 -37.413,-34.244 2.232,0.221 4.383,0.689 6.45,1.379 2.287,15.075 15.295,26.622 30.963,26.622 17.322,0 31.309,-13.999 31.309,-31.308 0,-17.268 -13.986,-31.309 -31.309,-31.309 -16.618,0 -30.22,13.008 -31.213,29.364 -2.024,-0.509 -4.092,-0.854 -6.2,-1.033 1.503,-19.332 17.694,-34.574 37.413,-34.574 20.767,10e-4 37.551,16.799 37.551,37.552 z' fill='%23e61446' /%3E%3Cpath d='m 525.326,403.192 c -0.992,16.439 -14.595,29.42 -31.268,29.42 -17.268,0 -31.281,-14.015 -31.281,-31.308 0,-13.918 9.04,-25.673 21.554,-29.765 0.219,-1.544 0.343,-3.088 0.343,-4.686 0,-0.648 0,-1.295 -0.04,-1.944 -16.179,4.23 -28.127,18.907 -28.127,36.395 0,20.739 16.826,37.563 37.552,37.563 19.732,0 35.911,-15.24 37.469,-34.588 -2.152,-0.178 -4.219,-0.522 -6.202,-1.087 z m -31.268,-33.196 c 15.724,0 28.731,11.548 30.964,26.608 2.066,0.689 4.217,1.172 6.464,1.379 -1.682,-19.195 -17.791,-34.229 -37.428,-34.229 -1.075,0 -2.149,0.04 -3.226,0.123 0.084,0.992 0.084,1.985 0.084,2.978 0,1.115 -0.042,2.231 -0.124,3.307 1.075,-0.125 2.191,-0.166 3.266,-0.166 z' fill='%23009c45' /%3E%3Cpath d='m 450.14,404.28 c -1.529,19.348 -17.72,34.588 -37.44,34.588 -20.766,0 -37.55,-16.824 -37.55,-37.563 0,-17.487 11.919,-32.164 28.097,-36.395 0.042,0.649 0.056,1.296 0.056,1.944 0,1.598 -0.124,3.142 -0.344,4.686 -12.526,4.092 -21.566,15.847 -21.566,29.765 0,17.293 14.015,31.308 31.308,31.308 16.619,0 30.247,-12.98 31.24,-29.378 1.997,0.522 4.065,0.866 6.199,1.045 z m -40.719,-34.119 c 0.083,-1.075 0.124,-2.191 0.124,-3.307 0,-0.992 0,-1.985 -0.096,-2.978 1.074,-0.083 2.149,-0.123 3.251,-0.123 19.637,0 35.732,15.034 37.414,34.229 -2.232,-0.207 -4.396,-0.689 -6.463,-1.379 -2.26,-15.061 -15.242,-26.608 -30.951,-26.608 -1.102,10e-4 -2.204,0.042 -3.279,0.166 z' fill='%23f7b000' /%3E%3Cpath d='m 453.393,398.162 c -15.723,0 -28.704,-11.547 -30.963,-26.622 -2.068,-0.689 -4.217,-1.158 -6.464,-1.379 1.681,19.209 17.791,34.244 37.427,34.244 1.075,0 2.164,-0.042 3.252,-0.125 -0.096,-0.991 -0.139,-1.984 -0.139,-2.976 0,-1.116 0.069,-2.246 0.152,-3.321 -1.075,0.139 -2.15,0.179 -3.265,0.179 z m 0,-68.859 c -19.747,0 -35.925,15.242 -37.427,34.574 2.108,0.18 4.175,0.524 6.188,1.033 1.006,-16.356 14.606,-29.364 31.239,-29.364 17.281,0 31.28,14.041 31.28,31.309 0,13.903 -9.025,25.658 -21.538,29.75 -0.234,1.518 -0.358,3.102 -0.358,4.7 0,0.646 0,1.294 0.042,1.888 16.191,-4.176 28.139,-18.852 28.139,-36.338 0,-20.754 -16.839,-37.552 -37.565,-37.552 z' fill='%23000006' /%3E%3C/g%3E%3C/svg%3E"); }
 #graph .pn1, #graph .pn2 { cursor: pointer; }
 #graph .pn1:hover, #graph .pn2:hover { text-decoration: underline; }
@@ -130,18 +208,6 @@ a:hover { text-decoration: underline; }
   <span class="tb-group" id="from-group"><span class="tb-label">From</span>
     <select class="select-input" id="round-from"><option value="0">All stages</option></select>
   </span>
-  <span class="tb-group"><span class="tb-label">Find</span>
-    <span class="psearch" title="Highlight a player or a country (/)">
-      <svg class="pse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
-      <input type="text" id="player-input" placeholder="Player or country…" autocomplete="off"
-             autocorrect="off" autocapitalize="off" spellcheck="false"
-             aria-label="Highlight a player or a country (press / to focus)">
-      <kbd class="pse-kbd">/</kbd>
-      <div class="pse-list" id="player-list" role="listbox"></div>
-    </span>
-    <button class="toggle-btn" id="player-clear" hidden>&times;</button>
-  </span>
   <span class="tb-group"><span class="tb-label">Flow</span>
     <button class="toggle-btn" data-dir="TB">&darr;</button>
     <button class="toggle-btn" data-dir="LR">&rarr;</button>
@@ -156,11 +222,33 @@ a:hover { text-decoration: underline; }
   <span><i class="solid"></i> winner advances</span>
   <span><span class="lg-drop">(L to L4-4)</span> = where this match sends its loser</span>
   <span>click a name to highlight that player &middot; click again to clear</span>
-  <span>search a country to light up its whole delegation</span>
+  <span><i class="swatch lg-live"></i> match under way</span>
+  <span>press <kbd>/</kbd> or the magnifier to find a player, or a whole country</span>
 </div>
 
 <div id="status"></div>
 <div id="viewport"><div id="graph"></div></div>
+
+<button class="gs-fab" id="search-fab" aria-label="Find a player or a country" title="Find a player or a country (/)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
+</button>
+<button class="gs-clear" id="search-clear" hidden aria-label="Clear the highlight">&times;</button>
+
+<div class="gs-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-label="Find a player or a country">
+  <div class="gs-box">
+    <div class="gs-bar">
+      <svg class="pse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
+      <input type="text" id="player-input" placeholder="Player or country…" autocomplete="off"
+             autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go"
+             aria-label="Player or country" aria-autocomplete="list" aria-controls="player-list">
+      <button class="gs-close" id="search-close" aria-label="Close search">&times;</button>
+    </div>
+    <div class="gs-hint" id="search-hint" hidden></div>
+    <div class="pse-list" id="player-list" role="listbox"></div>
+  </div>
+</div>
 
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
@@ -189,7 +277,9 @@ mermaid.initialize({
   // responsive SVG that scales to the container, so the more rounds are shown
   // the smaller every box gets. Off, nodes keep a constant readable size and
   // the page scrolls instead.
-  flowchart: { curve: 'basis', nodeSpacing: 22, rankSpacing: 60, padding: 6, useMaxWidth: false },
+  // Tight: nodeSpacing is the gutter between boxes in a rank, rankSpacing the
+  // gap between ranks, padding the box's own inner margin around the label.
+  flowchart: { curve: 'basis', nodeSpacing: 12, rankSpacing: 40, padding: 3, useMaxWidth: false },
 });
 
 const QUERY = `query($s:String!){
@@ -278,10 +368,10 @@ function flagHtml(c) {
   const cc = c.country;
   const label = String(c.countryName || cc).replace(/[^A-Za-z0-9 .-]/g, '').trim() || cc;
   if (FLAG_IMG[cc]) {
-    return "<span class='pf flag-img flag-" + cc + "' role='img' aria-label='" + label + "'></span>";
+    return "<span class='nf flag-img flag-" + cc + "' role='img' aria-label='" + label + "'></span>";
   }
   const flag = wntFlag(cc);
-  return flag ? "<span class='pf' role='img' aria-label='" + label + "'>" + flag + '</span>' : '';
+  return flag ? "<span class='nf' role='img' aria-label='" + label + "'>" + flag + '</span>' : '';
 }
 
 function wntPlayer(p) {
@@ -467,7 +557,7 @@ function buildShortNames(rows) {
   return out;
 }
 
-function nodeLabel(r, short, feeders, dropTo, sel) {
+function nodeLabel(r, short, feeders, dropTo, sel, wide) {
   // In a selected player's matches both sides get their full name and rating —
   // that is the detail you want when following one player, and the shortened
   // form is only there to keep the general view narrow.
@@ -491,17 +581,20 @@ function nodeLabel(r, short, feeders, dropTo, sel) {
     return f;
   };
   // slot is 1 or 2 — the wrapper is what lets a delegated click tell which of
-  // the two players in a node was clicked.
+  // the two players in a node was clicked. Name and score come back apart, so
+  // the two flows can put them on one line or in two columns.
   const line = (c, score, won, slot) => {
     if (!c) {
       const f = takeFeeder(slot);
-      if (!f) return '<i>TBD</i>';
-      return '<i>' + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.match_number)) + '</i>';
+      const t = !f ? '<i>TBD</i>'
+        : '<i>' + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.match_number)) + '</i>';
+      return { name: t, score: '' };
     }
-    // WNT carries no rating but does carry a nationality; it shows in the same
-    // spotlight-only slot, so the general view stays as narrow as it was. The
-    // flag is markup and so is built outside mmEsc, which would escape it.
-    const flag = spotlight ? flagHtml(c) : '';
+    // A flag on every name, in both flows — an international field reads by
+    // nationality as much as by name. Costs about a character of node width and
+    // nothing at all on the DigitalPool side, which carries no country. It is
+    // markup, so it is built outside mmEsc, which would escape it.
+    const flag = flagHtml(c);
     const nm = mmEsc(spotlight
       ? c.name + (c.skill_level ? ' (' + c.skill_level + ')' : '')
       : (short.get(c.name) || c.name));
@@ -519,19 +612,33 @@ function nodeLabel(r, short, feeders, dropTo, sel) {
     }
     // Single-quoted attribute: the label itself is delimited by double quotes,
     // which is why mmEsc strips them from the text in the first place.
-    return "<span class='pn" + slot + "'>" + flag + body + '</span>' + sc;
+    return { name: "<span class='pn" + slot + "'>" + flag + body + '</span>', score: sc };
   };
-  const parts = [
-    mmEsc(r.identifier || ('#' + r.match_number)),
-    line(r.challenger1, r.challenger1_score, r.challenger1_is_winner, 1),
-    line(r.challenger2, r.challenger2_score, r.challenger2_is_winner, 2),
-  ];
+  const id = mmEsc(r.identifier || ('#' + r.match_number));
+  const p1 = line(r.challenger1, r.challenger1_score, r.challenger1_is_winner, 1);
+  const p2 = line(r.challenger2, r.challenger2_score, r.challenger2_is_winner, 2);
   // Where the loser drops, as a footnote on the match itself rather than a
   // separate node with an edge into it.
   // Parens go through mmEsc like everything else — they are escaped in every
   // other label, and a bare "(" is exactly what Mermaid's parser trips on.
-  if (dropTo) parts.push('<small>' + mmEsc('(L to ' + dropTo + ')') + '</small>');
-  return parts.join('<br/>');
+  const drop = dropTo ? "<small class='nd-drop'>" + mmEsc('(L to ' + dropTo + ')') + '</small>' : '';
+
+  // Three columns, laid out by .nd in the stylesheet. The number and the drop
+  // share one cell down the left, so the box stays two rows tall whether or not
+  // there is a drop to report.
+  if (wide) {
+    return "<span class='nd'>" +
+      "<span class='nd-h'><span class='nd-id'>" + id + '</span>' + drop + '</span>' +
+      "<span class='nd-p nd-r1'>" + p1.name + "</span><span class='nd-s nd-r1'>" + p1.score.trim() + '</span>' +
+      "<span class='nd-p nd-r2'>" + p2.name + "</span><span class='nd-s nd-r2'>" + p2.score.trim() + '</span>' +
+      '</span>';
+  }
+  return "<span class='nt'>" +
+    "<span class='nt-id'>" + id + '</span>' +
+    "<span class='nt-p nt-r1'>" + p1.name + "</span><span class='nt-s nt-r1'>" + p1.score.trim() + '</span>' +
+    "<span class='nt-p nt-r2'>" + p2.name + "</span><span class='nt-s nt-r2'>" + p2.score.trim() + '</span>' +
+    (drop ? "<span class='nt-drop'>" + drop + '</span>' : '') +
+    '</span>';
 }
 
 // A stage is the pair named by a winners match's two outgoing edges: W3-1 goes
@@ -616,7 +723,8 @@ function buildDiagram(rows, dir, fromStage, sel) {
   // round. Left to right a round is a column, so width costs almost nothing and
   // every name can be given in full — an empty map is the whole switch, since
   // the lookup already falls back to the full name.
-  const short = (dir === 'LR' || dir === 'RL') ? new Map() : buildShortNames(rows);
+  const wide = dir === 'LR' || dir === 'RL';
+  const short = wide ? new Map() : buildShortNames(rows);
   const keep = keptMatches(rows, fromStage);
   // No losers side anywhere means a straight knockout — WNT's stage 2. Two
   // things below are double-elimination habits that are wrong for one.
@@ -760,7 +868,7 @@ function buildDiagram(rows, dir, fromStage, sel) {
       const label = rLabel.get(k) || roundName(k, rCount.get(k) || 0, singleElim);
       sgIds.push(id);
       lines.push(`${pad}subgraph ${id}["${label}"]`);
-      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), sel)}"]`);
+      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), sel, wide)}"]`);
       lines.push(`${pad}end`);
     }
     if (wrap) lines.push('  end');
@@ -811,14 +919,32 @@ function buildDiagram(rows, dir, fromStage, sel) {
     if (l.hi) hiPairs.push([l.from, l.to]);
   });
 
-  // One uniform look for every match — status is no longer encoded in colour.
-  const plain = kept.filter(r => !hiNodes.has(r.match_number));
-  lines.push('  classDef match fill:#1e293b,stroke:#475569,color:#cbd5e1');
-  if (plain.length) lines.push(`  class ${plain.map(r => 'M' + r.match_number).join(',')} match`);
-  if (hiNodes.size) {
-    lines.push('  classDef hilite fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#e2e8f0');
-    lines.push(`  class ${[...hiNodes].map(n => 'M' + n).join(',')} hilite`);
-  }
+  // One uniform look for every match, except that one under way is ringed in
+  // pink. Four exclusive classes rather than two overlapping ones: Mermaid
+  // writes each classDef property onto the shape as an `!important` inline
+  // style, so leaning on two classes and letting the later one win would rest
+  // on the order it happens to concatenate them in.
+  //
+  // A selected match that is also being played keeps the blue fill and takes
+  // the pink border, so neither fact is lost.
+  const liveNums = new Set(kept.filter(r => r.status === 'IN_PROGRESS').map(r => r.match_number));
+  const isLive = (n) => liveNums.has(n);
+  const cls = (list, name, def) => {
+    if (!list.length) return;
+    lines.push('  classDef ' + name + ' ' + def);
+    lines.push(`  class ${list.map(n => 'M' + n).join(',')} ${name}`);
+  };
+  const kd = kept.map(r => r.match_number);
+  cls(kd.filter(n => !hiNodes.has(n) && !isLive(n)), 'match',
+      'fill:#1e293b,stroke:#475569,color:#cbd5e1');
+  // No stroke-width, so a live match keeps the 1px the theme gives every other
+  // node and differs from them in colour alone. Only a selection thickens.
+  cls(kd.filter(n => !hiNodes.has(n) && isLive(n)), 'live',
+      'fill:#1e293b,stroke:#ec4899,color:#cbd5e1');
+  cls(kd.filter(n => hiNodes.has(n) && !isLive(n)), 'hilite',
+      'fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#e2e8f0');
+  cls(kd.filter(n => hiNodes.has(n) && isLive(n)), 'hilitelive',
+      'fill:#1e3a5f,stroke:#ec4899,stroke-width:2px,color:#e2e8f0');
   // Indices are listed explicitly rather than using `linkStyle default`, which
   // would also hit the invisible links and make them show up. Only a player has
   // a path, so a country selection leaves every edge exactly as it was — with
@@ -1017,7 +1143,7 @@ function buildSearchEntries(query) {
 
 function renderResults() {
   const list = $('player-list');
-  if (!state.rows.length) { list.classList.remove('open'); return; }
+  if (!state.rows.length) { list.innerHTML = ''; return; }
   const query = $('player-input').value;
   const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   let all = buildSearchEntries(query);
@@ -1033,7 +1159,6 @@ function renderResults() {
   searchCursor = searchHits.length ? 0 : -1;
   if (!searchHits.length) {
     list.innerHTML = '<div class="pse-empty">No player or country matches &ldquo;' + esc(query) + '&rdquo;</div>';
-    list.classList.add('open');
     return;
   }
   let html = '', hit = -1;
@@ -1062,7 +1187,6 @@ function renderResults() {
   }
   list.innerHTML = html;
   list.scrollTop = 0;
-  list.classList.add('open');
 }
 
 function moveCursor(delta) {
@@ -1123,6 +1247,7 @@ function select(player, country) {
   const sel = currentSel();
   ensureVisible(sel);
   pickPlayerUI(sel);
+  closeSearch();
   syncUrl();
   render();
 }
@@ -1475,11 +1600,31 @@ function resolveSelection() {
   pickPlayerUI(sel);
 }
 
+// The search box is transient now, so what is lit is reported by the counts
+// line and by the clear button riding above the magnifier — the box itself no
+// longer carries the selection, since it is only on screen while you type.
 function pickPlayerUI(sel) {
-  $('player-input').value = sel ? sel.label : '';
-  $('player-input').classList.toggle('picked', !!sel);
-  $('player-clear').hidden = !sel;
-  $('player-list').classList.remove('open');
+  const clear = $('search-clear');
+  clear.hidden = !sel;
+  clear.title = sel ? 'Clear the highlight on ' + sel.label : '';
+  $('search-fab').classList.toggle('visible', state.rows.length > 0);
+  // Shown above the results so the overlay says what is lit while you retype.
+  const hint = $('search-hint');
+  hint.hidden = !sel;
+  hint.textContent = sel ? 'Highlighted: ' + sel.label : '';
+}
+
+function openSearch() {
+  if (!state.rows.length) return;
+  $('search-overlay').classList.add('open');
+  $('player-input').value = '';
+  renderResults();
+  $('player-input').focus();
+}
+
+function closeSearch() {
+  $('search-overlay').classList.remove('open');
+  $('player-input').blur();
 }
 
 function syncUrl() {
@@ -1513,6 +1658,9 @@ function clearLoaded() {
   $('round-from').classList.remove('filtered');
   $('counts').textContent = '';
   $('graph').innerHTML = '';
+  // Nothing to search either, so the magnifier goes with it.
+  closeSearch();
+  pickPlayerUI(null);
   // The tab and the back link named the tournament that is no longer on screen.
   document.title = 'PoolRadar — Bracket Graph';
   $('back-link').href = 'index.html';
@@ -1616,8 +1764,14 @@ $('stage-sel').addEventListener('change', (e) => {
   syncUrl();
   render();
 });
+$('search-fab').addEventListener('click', openSearch);
+$('search-close').addEventListener('click', closeSearch);
+$('search-clear').addEventListener('click', () => select(null, null));
+// Only the backdrop closes; a click inside the box is aimed at something.
+$('search-overlay').addEventListener('click', (e) => {
+  if (e.target === $('search-overlay')) closeSearch();
+});
 $('player-input').addEventListener('input', renderResults);
-$('player-input').addEventListener('focus', renderResults);
 $('player-input').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); moveCursor(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveCursor(-1); }
@@ -1625,19 +1779,17 @@ $('player-input').addEventListener('keydown', (e) => {
     e.preventDefault();
     if (searchCursor >= 0) activateEntry(searchHits[searchCursor]);
   } else if (e.key === 'Escape') {
-    $('player-list').classList.remove('open');
-    $('player-input').blur();
+    closeSearch();
   }
 });
-$('player-list').addEventListener('mousedown', (e) => {
-  // mousedown, not click — the input's blur would close the list first.
+// click, not mousedown — the list is its own panel now, so there is no blur
+// racing to close it out from under the pointer.
+$('player-list').addEventListener('click', (e) => {
   const item = e.target.closest('.pse-item');
   if (!item) return;
-  e.preventDefault();
   if (item.dataset.country) select(null, item.dataset.country);
   else select(item.dataset.name, null);
 });
-$('player-clear').addEventListener('click', () => select(null, null));
 
 // One delegated listener, attached once — only #graph's contents are replaced
 // on re-render, never the element itself. Element.closest walks out of the
@@ -1654,18 +1806,18 @@ $('graph').addEventListener('click', (e) => {
   if (!c || !c.name) return;
   select(state.player === c.name ? null : c.name, null);   // click again to clear
 });
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.psearch')) $('player-list').classList.remove('open');
-});
 document.addEventListener('keydown', (e) => {
+  // Escape closes the overlay from anywhere, including a click that moved focus
+  // off the input without closing it.
+  if (e.key === 'Escape' && $('search-overlay').classList.contains('open')) {
+    closeSearch();
+    return;
+  }
   // Same guard as index.html — "/" is a normal character while typing.
   if (e.target.closest('input, textarea, [contenteditable]')) return;
   if (e.key !== '/' || !state.rows.length) return;
   e.preventDefault();
-  const input = $('player-input');
-  input.focus();
-  input.select();
-  renderResults();
+  openSearch();
 });
 // A hand-typed target is a different event unless it is the same one again, and
 // stage numbers mean nothing across events — drop it and let the load open on
