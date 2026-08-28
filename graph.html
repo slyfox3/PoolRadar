@@ -205,7 +205,9 @@ const QUERY = `query($s:String!){
 
 const $ = (id) => document.getElementById(id);
 const state = {
-  dir: 'TB', fromStage: 0, player: null, rows: [], tournament: null,
+  // Left to right by default: a bracket is read along its rounds, and the
+  // columns leave room for full names.
+  dir: 'LR', fromStage: 0, player: null, rows: [], tournament: null,
   source: 'digitalpool', slug: '',
   // WNT only. One event JSON holds every stage and one stage is drawn at a
   // time, so the fetch is kept and switching stages is just a re-render.
@@ -609,7 +611,12 @@ function keptMatches(rows, fromStage) {
 
 function buildDiagram(rows, dir, fromStage, sel) {
   const byNum = new Map(rows.map(r => [r.match_number, r]));
-  const short = buildShortNames(rows);
+  // Node width is the crowded dimension only in a top-down flow, where every
+  // match in a round sits side by side and the diagram is as wide as the widest
+  // round. Left to right a round is a column, so width costs almost nothing and
+  // every name can be given in full — an empty map is the whole switch, since
+  // the lookup already falls back to the full name.
+  const short = (dir === 'LR' || dir === 'RL') ? new Map() : buildShortNames(rows);
   const keep = keptMatches(rows, fromStage);
   // No losers side anywhere means a straight knockout — WNT's stage 2. Two
   // things below are double-elimination habits that are wrong for one.
