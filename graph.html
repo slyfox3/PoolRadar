@@ -27,6 +27,7 @@ a:hover { text-decoration: underline; }
 .select-input.filtered { border-color: #3b82f6; color: #dbeafe; }
 .tb-label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
 .spacer { flex: 1; }
+.refresh { color: #64748b; font-size: 12px; margin-left: 10px; flex-shrink: 0; }
 /* .tb-group sets display, which would otherwise beat the UA rule for [hidden] */
 [hidden] { display: none !important; }
 
@@ -100,9 +101,15 @@ a:hover { text-decoration: underline; }
 
 /* The graph overflows the page rather than sitting in its own scroll box: a
    device-width scroll container would clip at the same place however far you
-   pinched out, so zooming out would shrink everything and reveal nothing. */
-#viewport { padding: 16px; touch-action: pan-x pan-y pinch-zoom; }
-#graph { display: inline-block; }
+   pinched out, so zooming out would shrink everything and reveal nothing.
+   touch-action gives up pinch over the diagram so the handler below can take
+   it — the page's own zoom is still there over the bars. */
+#viewport { padding: 16px; touch-action: pan-x pan-y; }
+/* #zoom carries the scaled footprint. A transform does not change layout size,
+   so without a box sized to match, a zoomed-in diagram would have nothing to
+   scroll to and a zoomed-out one would leave its old area behind as blank. */
+#zoom { position: relative; }
+#graph { display: inline-block; transform-origin: 0 0; }
 /* Full-bleed bars, so they still span when scrolled right past device width */
 .header, .toolbar, .legend, #status { min-width: max-content; }
 #graph svg { max-width: none !important; }
@@ -120,7 +127,6 @@ a:hover { text-decoration: underline; }
 #graph b { color: #fbbf24 !important; }
 #graph i { color: #64748b !important; }
 #graph small { color: #64748b !important; }
-#graph em { color: #f87171 !important; }
 /* classDef puts an !important colour on the label, so this needs one too, and
    the extra g.node keeps it ahead of anything Mermaid injects into the SVG —
    that stylesheet sits inside #graph, so it wins ties on document order.
@@ -132,7 +138,6 @@ a:hover { text-decoration: underline; }
    Keyed off our own classes rather than Mermaid's, so they do not depend on
    what its wrapper happens to be called. */
 .pn1 b, .pn2 b { font-weight: 400; }
-.pn1 em, .pn2 em { font-style: normal; }
 /* relative, so it tracks themeVariables.fontSize instead of fighting it */
 .nd-drop { font-size: 0.85em; }
 
@@ -204,6 +209,30 @@ a:hover { text-decoration: underline; }
    node top and bottom. Harmless for the stacked flow, which wants none either. */
 .nodeLabel p { margin: 0; }
 .flag-tw { width: 0.9em; height: 0.9em; vertical-align: -0.05em; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8.7 -21 531.4 531.9'%3E%3Cg transform='matrix(1.0350939,0,0,1.0479042,-208.77414,-69.356587)'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23fff' stroke='%23fff' stroke-width='40' stroke-linejoin='round' /%3E%3Cg clip-rule='evenodd' fill-rule='evenodd'%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z' fill='%23ffffff' /%3E%3Cpath d='m 451.725,190.979 c -32.534,0 -58.923,26.402 -58.923,58.91 0,32.562 26.389,58.952 58.923,58.952 32.563,0 58.952,-26.39 58.952,-58.952 0,-32.508 -26.389,-58.91 -58.952,-58.91 z m -0.014,87.339 c -15.682,0 -28.4,-12.707 -28.4,-28.43 0,-15.668 12.719,-28.415 28.4,-28.415 15.71,0 28.442,12.746 28.442,28.415 10e-4,15.723 -12.732,28.43 -28.442,28.43 z' fill='%23003283' /%3E%3Cpath d='m 686.676,277.504 c 0,-66.792 -51.373,-121.569 -116.787,-126.915 -17.61,-49.223 -64.67,-84.403 -119.9,-84.403 -55.257,0 -102.275,35.181 -119.886,84.403 -65.415,5.346 -116.814,60.123 -116.814,126.915 0,39.217 17.776,74.315 45.695,97.659 -2.536,9.991 -3.873,20.492 -3.873,31.267 0,70.334 57.009,127.356 127.356,127.356 24.805,0 47.955,-7.083 67.522,-19.36 19.568,12.277 42.691,19.36 67.536,19.36 70.32,0 127.344,-57.022 127.344,-127.356 0,-10.774 -1.339,-21.275 -3.874,-31.267 27.906,-23.344 45.681,-58.441 45.681,-97.659 z m -67.949,85.864 c 5.637,12.953 8.75,27.215 8.75,42.234 0,58.621 -47.5,106.108 -106.106,106.108 -26.403,0 -50.587,-9.66 -69.149,-25.617 -18.575,15.957 -42.732,25.617 -69.148,25.617 -58.621,0 -106.107,-47.487 -106.107,-106.108 0,-14.371 2.88,-28.069 8.048,-40.594 -29.931,-18.784 -49.857,-52.035 -49.857,-89.972 0,-58.607 47.486,-106.107 106.094,-106.107 2.205,0 4.354,0.042 6.504,0.221 11.629,-45.985 53.273,-80.007 102.854,-80.007 49.566,0 91.21,34.022 102.84,80.007 2.149,-0.179 4.342,-0.221 6.505,-0.221 58.607,0 106.106,47.5 106.106,106.107 0,36.821 -18.823,69.301 -47.334,88.332 z' fill='%23003283' /%3E%3Cpath d='m 651.797,277.752 c 0,-53.702 -43.488,-97.191 -97.19,-97.191 -3.06,0 -6.159,0.179 -9.177,0.427 -9.688,-43.448 -48.479,-75.873 -94.82,-75.873 -46.356,0 -85.134,32.425 -94.808,75.873 -3.004,-0.248 -6.063,-0.427 -9.122,-0.427 -53.702,0 -97.192,43.489 -97.192,97.191 0,35.912 19.499,67.273 48.533,84.101 -5.153,11.85 -8.019,24.846 -8.019,38.583 0,53.701 43.545,97.191 97.205,97.191 24.97,0 47.748,-9.439 64.973,-24.9 17.212,15.461 39.989,24.9 64.96,24.9 53.659,0 97.15,-43.49 97.15,-97.191 0,-14.248 -3.06,-27.808 -8.614,-40.044 27.699,-17.102 46.121,-47.707 46.121,-82.64 z m -62.615,76.521 c 8.792,13.435 13.917,29.462 13.917,46.687 0,47.128 -38.198,85.325 -85.312,85.325 -26.61,0 -50.312,-12.14 -65.965,-31.169 -15.655,19.029 -39.384,31.169 -65.952,31.169 -47.155,0 -85.354,-38.197 -85.354,-85.325 0,-16.716 4.823,-32.342 13.132,-45.516 -30.537,-12.968 -51.979,-43.284 -51.979,-78.547 0,-47.155 38.198,-85.354 85.354,-85.354 6.711,0 13.285,0.812 19.595,2.288 4.438,-42.939 40.734,-76.439 84.858,-76.439 43.917,0 80.089,33.197 84.788,75.873 5.513,-1.116 11.189,-1.722 17.005,-1.722 47.113,0 85.313,38.198 85.313,85.354 10e-4,34.272 -20.201,63.817 -49.4,77.376 z' fill='%23e41f20' /%3E%3Cg fill='%23ffffff'%3E%3Cpath d='m 444.684,217.464 h 14.814 l -7.056,-22.558 z' /%3E%3Cpath d='m 429.402,225.346 12.829,-7.4 -17.418,-16.068 z' /%3E%3Cpath d='m 420.1,239.815 7.414,-12.87 -23.082,-5.169 z' /%3E%3Cpath d='m 419.288,256.958 v -14.814 l -22.572,7.055 z' /%3E%3Cpath d='m 427.169,272.239 -7.414,-12.829 -16.012,17.404 z' /%3E%3Cpath d='m 441.611,281.542 -12.816,-7.401 -5.209,23.082 z' /%3E%3Cpath d='m 458.767,282.369 h -14.813 l 7.069,22.558 z' /%3E%3Cpath d='m 474.078,274.485 -12.858,7.401 17.433,16.026 z' /%3E%3Cpath d='m 483.337,260.017 -7.386,12.829 23.109,5.168 z' /%3E%3Cpath d='m 484.164,242.874 v 14.814 l 22.599,-7.055 z' /%3E%3Cpath d='m 476.323,227.592 7.4,12.83 16.027,-17.405 z' /%3E%3Cpath d='m 461.854,218.291 12.829,7.399 5.167,-23.082 z' /%3E%3C/g%3E%3C/g%3E%3Cpath d='m 409.544,366.854 c 0,-20.754 -16.784,-37.552 -37.551,-37.552 -20.753,0 -37.55,16.798 -37.55,37.552 0,20.752 16.797,37.551 37.55,37.551 1.131,0 2.205,-0.042 3.28,-0.125 -0.083,-0.991 -0.124,-1.984 -0.124,-2.976 0,-1.116 0.041,-2.246 0.124,-3.321 -1.075,0.139 -2.149,0.179 -3.28,0.179 -17.266,0 -31.293,-13.999 -31.293,-31.308 0,-17.268 14.027,-31.309 31.293,-31.309 17.321,0 31.309,14.041 31.309,31.309 0,13.903 -9.04,25.658 -21.565,29.75 -0.221,1.518 -0.345,3.102 -0.345,4.7 0,0.646 0.041,1.294 0.054,1.888 16.179,-4.175 28.098,-18.851 28.098,-36.338 z' fill='%230083ce' /%3E%3Cpath d='m 572.301,366.854 c 0,20.752 -16.784,37.551 -37.551,37.551 -19.636,0 -35.73,-15.035 -37.413,-34.244 2.232,0.221 4.383,0.689 6.45,1.379 2.287,15.075 15.295,26.622 30.963,26.622 17.322,0 31.309,-13.999 31.309,-31.308 0,-17.268 -13.986,-31.309 -31.309,-31.309 -16.618,0 -30.22,13.008 -31.213,29.364 -2.024,-0.509 -4.092,-0.854 -6.2,-1.033 1.503,-19.332 17.694,-34.574 37.413,-34.574 20.767,10e-4 37.551,16.799 37.551,37.552 z' fill='%23e61446' /%3E%3Cpath d='m 525.326,403.192 c -0.992,16.439 -14.595,29.42 -31.268,29.42 -17.268,0 -31.281,-14.015 -31.281,-31.308 0,-13.918 9.04,-25.673 21.554,-29.765 0.219,-1.544 0.343,-3.088 0.343,-4.686 0,-0.648 0,-1.295 -0.04,-1.944 -16.179,4.23 -28.127,18.907 -28.127,36.395 0,20.739 16.826,37.563 37.552,37.563 19.732,0 35.911,-15.24 37.469,-34.588 -2.152,-0.178 -4.219,-0.522 -6.202,-1.087 z m -31.268,-33.196 c 15.724,0 28.731,11.548 30.964,26.608 2.066,0.689 4.217,1.172 6.464,1.379 -1.682,-19.195 -17.791,-34.229 -37.428,-34.229 -1.075,0 -2.149,0.04 -3.226,0.123 0.084,0.992 0.084,1.985 0.084,2.978 0,1.115 -0.042,2.231 -0.124,3.307 1.075,-0.125 2.191,-0.166 3.266,-0.166 z' fill='%23009c45' /%3E%3Cpath d='m 450.14,404.28 c -1.529,19.348 -17.72,34.588 -37.44,34.588 -20.766,0 -37.55,-16.824 -37.55,-37.563 0,-17.487 11.919,-32.164 28.097,-36.395 0.042,0.649 0.056,1.296 0.056,1.944 0,1.598 -0.124,3.142 -0.344,4.686 -12.526,4.092 -21.566,15.847 -21.566,29.765 0,17.293 14.015,31.308 31.308,31.308 16.619,0 30.247,-12.98 31.24,-29.378 1.997,0.522 4.065,0.866 6.199,1.045 z m -40.719,-34.119 c 0.083,-1.075 0.124,-2.191 0.124,-3.307 0,-0.992 0,-1.985 -0.096,-2.978 1.074,-0.083 2.149,-0.123 3.251,-0.123 19.637,0 35.732,15.034 37.414,34.229 -2.232,-0.207 -4.396,-0.689 -6.463,-1.379 -2.26,-15.061 -15.242,-26.608 -30.951,-26.608 -1.102,10e-4 -2.204,0.042 -3.279,0.166 z' fill='%23f7b000' /%3E%3Cpath d='m 453.393,398.162 c -15.723,0 -28.704,-11.547 -30.963,-26.622 -2.068,-0.689 -4.217,-1.158 -6.464,-1.379 1.681,19.209 17.791,34.244 37.427,34.244 1.075,0 2.164,-0.042 3.252,-0.125 -0.096,-0.991 -0.139,-1.984 -0.139,-2.976 0,-1.116 0.069,-2.246 0.152,-3.321 -1.075,0.139 -2.15,0.179 -3.265,0.179 z m 0,-68.859 c -19.747,0 -35.925,15.242 -37.427,34.574 2.108,0.18 4.175,0.524 6.188,1.033 1.006,-16.356 14.606,-29.364 31.239,-29.364 17.281,0 31.28,14.041 31.28,31.309 0,13.903 -9.025,25.658 -21.538,29.75 -0.234,1.518 -0.358,3.102 -0.358,4.7 0,0.646 0,1.294 0.042,1.888 16.191,-4.176 28.139,-18.852 28.139,-36.338 0,-20.754 -16.839,-37.552 -37.565,-37.552 z' fill='%23000006' /%3E%3C/g%3E%3C/svg%3E"); }
+/* Every node's look comes from here now, not from a Mermaid classDef. classDef
+   writes its properties onto the shape inline and !important, which nothing can
+   override afterwards — and being able to override afterwards is exactly what
+   turns a selection from a two-second relayout into a class change. */
+#graph g.node > rect { fill: #1e293b !important; stroke: #475569 !important; }
+#graph .nodeLabel { color: #cbd5e1 !important; }
+/* a match under way */
+#graph g.node.is-live > rect { stroke: #ec4899 !important; }
+/* selected */
+#graph g.node.is-hi > rect {
+  fill: #1e3a5f !important; stroke: #60a5fa !important; stroke-width: 2px !important; }
+#graph g.node.is-hi .nodeLabel { color: #e2e8f0 !important; }
+#graph g.node.is-hi.is-live > rect { stroke: #ec4899 !important; }
+/* Inside a lit node every winner's gold is muted back, and the rule injected
+   for the selection puts it back on just their names — so a selected player and
+   the opponent who beat them can never read the same. */
+#graph g.node.is-hi b { color: #cbd5e1 !important; }
+/* Edges. is-faint dims everything that is not part of a run; is-run is the run
+   itself; is-added is a step Mermaid never drew, which we draw ourselves. */
+#graph path.is-faint { stroke: #1e293b !important; stroke-width: 1px !important; }
+#graph path.is-run { stroke: #60a5fa !important; stroke-width: 3px !important; }
+/* A step we drew ourselves. fill:none belongs to Mermaid's .flowchart-link,
+   which the clone inherits — this is the belt to that braces. */
+#graph path.is-added { fill: none !important; }
 #graph .pn1, #graph .pn2 { cursor: pointer; }
 #graph .pn1:hover, #graph .pn2:hover { text-decoration: underline; }
 
@@ -236,6 +265,8 @@ a:hover { text-decoration: underline; }
   </span>
   <span class="spacer"></span>
   <span class="sub" id="counts"></span>
+  <button class="toggle-btn" id="zoom-reset" hidden title="Back to 100%">100%</button>
+  <span class="refresh" id="refresh" hidden>&#8635; <span id="countdown">60</span>s</span>
 </div>
 
 <div class="legend">
@@ -249,7 +280,8 @@ a:hover { text-decoration: underline; }
 </div>
 
 <div id="status"></div>
-<div id="viewport"><div id="graph"></div></div>
+<style id="sel-style"></style>
+<div id="viewport"><div id="zoom"><div id="graph"></div></div></div>
 
 <button class="gs-fab" id="search-fab" aria-label="Find a player or a country" title="Find a player or a country (/)">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -288,9 +320,10 @@ mermaid.initialize({
   startOnLoad: false,
   theme: 'dark',
   // Node width is the measured label plus padding, and the label is measured
-  // at this size — so halving it roughly halves the boxes. This is the knob to
-  // turn if they want to be bigger or smaller; nothing else scales them.
-  themeVariables: { fontSize: '8px' },
+  // at this size — so halving it roughly halves the boxes. This sets how big a
+  // box is when the diagram is laid out; the zoom below scales what was laid
+  // out, and can go well under this without relaying anything.
+  themeVariables: { fontSize: '10px' },
   securityLevel: 'strict',
   // A full double-elim bracket is ~126 nodes / ~250 edges, well past the defaults.
   maxTextSize: 500000,
@@ -324,6 +357,9 @@ const state = {
   // WNT only. One event JSON holds every stage and one stage is drawn at a
   // time, so the fetch is kept and switching stages is just a re-render.
   wntData: null, stage: 0,
+  // What buildDiagram last produced, so a selection can be painted onto the SVG
+  // on screen instead of asking for a new one.
+  diagram: null,
 };
 
 function setStatus(msg, isError) {
@@ -588,11 +624,11 @@ function tableLabel(name) {
   return /^[0-9]+[A-Za-z]?$/.test(s) ? 'T' + s : s;
 }
 
-function nodeLabel(r, short, feeders, dropTo, sel, wide) {
-  // In a selected player's matches both sides get their full name and rating —
-  // that is the detail you want when following one player, and the shortened
-  // form is only there to keep the general view narrow.
-  const spotlight = sel && selIn(sel, r);
+// pid gives each player a small stable number. It goes on their name spans so
+// a selection can be painted by injecting one stylesheet rule instead of
+// rebuilding the diagram — the label itself never mentions who is selected, and
+// that is what keeps the whole source selection-independent.
+function nodeLabel(r, short, feeders, dropTo, wide, pid) {
   const decided = !!(r.challenger1_is_winner || r.challenger2_is_winner);
   // An empty slot is waiting on a specific match, so name it rather than
   // printing TBD twice. Feeders that already have a winner have delivered
@@ -626,24 +662,21 @@ function nodeLabel(r, short, feeders, dropTo, sel, wide) {
     // nothing at all on the DigitalPool side, which carries no country. It is
     // markup, so it is built outside mmEsc, which would escape it.
     const flag = flagHtml(c);
-    const nm = mmEsc(spotlight
-      ? c.name + (c.skill_level ? ' (' + c.skill_level + ')' : '')
-      : (short.get(c.name) || c.name));
+    const nm = mmEsc(c.name + (c.skill_level ? ' (' + c.skill_level + ')' : ''));
     const sc = score == null ? '' : ' ' + score;
-    // In a spotlighted match only the selected player is coloured — gold won,
-    // red lost — so their run reads at a glance. The opponent stays default
-    // even when they won, so the two can never be confused.
-    let body = nm;
-    if (spotlight) {
-      const mine = selHas(sel, c);
-      if (mine && won) body = '<b>' + nm + '</b>';
-      else if (mine && decided) body = '<em>' + nm + '</em>';
-    } else if (won) {
-      body = '<b>' + nm + '</b>';
-    }
+    // The winner is always gold. What a selection changes is handled in CSS:
+    // inside a lit node every bold name is muted back except the selected
+    // player's, so the two can still never be confused, and a selected player
+    // who lost is turned red by the same injected rule. how says which of those
+    // a name is; pl-N says whose it is.
+    const body = won ? '<b>' + nm + '</b>' : nm;
+    const how = won ? 'won' : (decided ? 'lost' : 'open');
     // Single-quoted attribute: the label itself is delimited by double quotes,
     // which is why mmEsc strips them from the text in the first place.
-    return { name: "<span class='pn" + slot + "'>" + flag + body + '</span>', score: sc };
+    return {
+      name: "<span class='pn" + slot + ' ' + how + ' pl-' + pid(c.name) + "'>" + flag + body + '</span>',
+      score: sc,
+    };
   };
   const id = mmEsc(r.identifier || ('#' + r.match_number));
   const p1 = line(r.challenger1, r.challenger1_score, r.challenger1_is_winner, 1);
@@ -759,7 +792,7 @@ function keptMatches(rows, fromStage) {
   return keep;
 }
 
-function buildDiagram(rows, dir, fromStage, sel) {
+function buildDiagram(rows, dir, fromStage) {
   const byNum = new Map(rows.map(r => [r.match_number, r]));
   // Node width is the crowded dimension only in a top-down flow, where every
   // match in a round sits side by side and the diagram is as wide as the widest
@@ -768,6 +801,11 @@ function buildDiagram(rows, dir, fromStage, sel) {
   // the lookup already falls back to the full name.
   const wide = dir === 'LR' || dir === 'RL';
   const short = wide ? new Map() : buildShortNames(rows);
+  const pids = new Map();
+  const pid = (name) => {
+    if (!pids.has(name)) pids.set(name, pids.size);
+    return pids.get(name);
+  };
   const keep = keptMatches(rows, fromStage);
   // No losers side anywhere means a straight knockout — WNT's stage 2. Two
   // things below are double-elimination habits that are wrong for one.
@@ -911,7 +949,7 @@ function buildDiagram(rows, dir, fromStage, sel) {
       const label = rLabel.get(k) || roundName(k, rCount.get(k) || 0, singleElim);
       sgIds.push(id);
       lines.push(`${pad}subgraph ${id}["${label}"]`);
-      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), sel, wide)}"]`);
+      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), wide, pid)}"]`);
       lines.push(`${pad}end`);
     }
     if (wrap) lines.push('  end');
@@ -929,90 +967,114 @@ function buildDiagram(rows, dir, fromStage, sel) {
   // is walked once and answers for whichever of its two sides are selected.
   // Where two of them were drawn against each other that is both, and the match
   // sends one run on up the winners side and one down to the losers.
-  const hiNodes = new Set();
-  const path = [];
-  if (sel) {
-    for (const r of rows) {
-      if (r.is_bye || !keep.has(r.match_number)) continue;
-      const mine = [];
-      if (selHas(sel, r.challenger1)) mine.push(1);
-      if (selHas(sel, r.challenger2)) mine.push(2);
-      if (!mine.length) continue;
-      hiNodes.add(r.match_number);
-      if (!(r.challenger1_is_winner || r.challenger2_is_winner)) continue;
-      for (const side of mine) {
-        const won = side === 1 ? r.challenger1_is_winner : r.challenger2_is_winner;
-        const next = hop(won ? r.winner_to_num : r.loser_to_num);
-        if (next != null && keep.has(next)) path.push([r.match_number, next]);
-      }
-    }
-  }
-  // A ghost on the path is promoted to a real edge — styling cannot make `~~~`
-  // visible. An edge already drawn is marked in place rather than duplicated.
-  for (const [a, b] of path) {
-    const at = links.findIndex(l => l.from === a && l.to === b);
-    if (at >= 0) { links[at].ghost = false; links[at].hi = true; }
-    else links.push({ from: a, to: b, hi: true });
-  }
+  // Nothing below depends on what is selected. The source is the bracket and
+  // only the bracket, so choosing a player or a country never asks Mermaid to
+  // lay anything out again — at five milliseconds a node that was two seconds
+  // a click on a full stage 1. Everything a selection changes is painted onto
+  // the rendered SVG afterwards by applySelection().
+  links.forEach((l) => lines.push(`  M${l.from} ${l.ghost ? '~~~' : '-->'} M${l.to}`));
 
-  // hiPairs is the player's chain as node-id pairs, which is all the renderer
-  // needs to find those paths again in the SVG. Collected here rather than
-  // re-derived later, where the match numbers would have to be parsed back out.
-  const hiIdx = [], faintIdx = [], hiPairs = [];
-  links.forEach((l, i) => {
-    lines.push(`  M${l.from} ${l.ghost ? '~~~' : '-->'} M${l.to}`);
-    if (l.ghost) return;              // never style an invisible link
-    (l.hi ? hiIdx : faintIdx).push(i);
-    if (l.hi) hiPairs.push([l.from, l.to]);
-  });
-
-  // One uniform look for every match, except that one under way is ringed in
-  // pink. Four exclusive classes rather than two overlapping ones: Mermaid
-  // writes each classDef property onto the shape as an `!important` inline
-  // style, so leaning on two classes and letting the later one win would rest
-  // on the order it happens to concatenate them in.
-  //
-  // A selected match that is also being played keeps the blue fill and takes
-  // the pink border, so neither fact is lost.
-  const liveNums = new Set(kept.filter(r => r.status === 'IN_PROGRESS').map(r => r.match_number));
-  const isLive = (n) => liveNums.has(n);
-  const cls = (list, name, def) => {
-    if (!list.length) return;
-    lines.push('  classDef ' + name + ' ' + def);
-    lines.push(`  class ${list.map(n => 'M' + n).join(',')} ${name}`);
-  };
-  const kd = kept.map(r => r.match_number);
-  cls(kd.filter(n => !hiNodes.has(n) && !isLive(n)), 'match',
-      'fill:#1e293b,stroke:#475569,color:#cbd5e1');
-  // No stroke-width, so a live match keeps the 1px the theme gives every other
-  // node and differs from them in colour alone. Only a selection thickens.
-  cls(kd.filter(n => !hiNodes.has(n) && isLive(n)), 'live',
-      'fill:#1e293b,stroke:#ec4899,color:#cbd5e1');
-  cls(kd.filter(n => hiNodes.has(n) && !isLive(n)), 'hilite',
-      'fill:#1e3a5f,stroke:#60a5fa,stroke-width:2px,color:#e2e8f0');
-  cls(kd.filter(n => hiNodes.has(n) && isLive(n)), 'hilitelive',
-      'fill:#1e3a5f,stroke:#ec4899,stroke-width:2px,color:#e2e8f0');
-  // Indices are listed explicitly rather than using `linkStyle default`, which
-  // would also hit the invisible links and make them show up. Only a player has
-  // a path, so a country selection leaves every edge exactly as it was — with
-  // nothing drawn bold there is nothing for dimming the rest to set off.
-  if (hiIdx.length) {
-    if (faintIdx.length) lines.push(`  linkStyle ${faintIdx.join(',')} stroke:#1e293b,stroke-width:1px`);
-    lines.push(`  linkStyle ${hiIdx.join(',')} stroke:#60a5fa,stroke-width:3px`);
-  }
   for (const id of sgIds) lines.push(`  style ${id} fill:none,stroke:#334155,color:#64748b`);
   for (const id of stageIds) lines.push(`  style ${id} fill:none,stroke:none`);
 
-  // Where the player enters the visible bracket — earliest stage wins, so it
+  const drawn = links.filter(l => !l.ghost).length;
+  // keep and hop are handed out so applySelection can work out a run without
+  // recomputing the cut or re-walking the byes.
+  return { src: lines.join('\n'), nodes: keep.size, keep, hop, byNum, pid: pids,
+    cost: { links: links.length, drawn, ghosts: links.length - drawn } };
+}
+
+// What a selection lights up, and the runs through it. Pure computation over
+// the rows and the diagram's own keep/hop, so it costs nothing next to a
+// render — this is the whole reason selecting is now instant.
+function selectionRuns(rows, d, sel) {
+  const nodes = new Set(), runs = [];
+  if (!sel || !d) return { nodes, runs, focus: null };
+  for (const r of rows) {
+    if (r.is_bye || !d.keep.has(r.match_number)) continue;
+    const mine = [];
+    if (selHas(sel, r.challenger1)) mine.push(1);
+    if (selHas(sel, r.challenger2)) mine.push(2);
+    if (!mine.length) continue;
+    nodes.add(r.match_number);
+    if (!(r.challenger1_is_winner || r.challenger2_is_winner)) continue;
+    // Both sides can be selected at once — two of a delegation drawn against
+    // each other — and then the match sends one run on and one down.
+    for (const side of mine) {
+      const won = side === 1 ? r.challenger1_is_winner : r.challenger2_is_winner;
+      const next = d.hop(won ? r.winner_to_num : r.loser_to_num);
+      if (next != null && d.keep.has(next)) runs.push([r.match_number, next]);
+    }
+  }
+  // Where the selection enters the visible bracket — earliest stage wins, so it
   // works whichever side that is, and it follows the cut rather than assuming
   // round 1 is on screen. Match number only breaks ties within a stage.
   let focus = null;
-  for (const n of hiNodes) {
-    const st = stageOf(byNum.get(n).round);
+  for (const n of nodes) {
+    const st = stageOf(d.byNum.get(n).round);
     if (!focus || st < focus.st || (st === focus.st && n < focus.n)) focus = { n, st };
   }
+  return { nodes, runs, focus: focus && focus.n };
+}
 
-  return { src: lines.join('\n'), nodes: keep.size, hits: hiNodes.size, focus: focus && focus.n, hiPairs };
+// Paint a selection onto the SVG that is already on screen. Nothing here asks
+// Mermaid for anything, so it is a few milliseconds however big the bracket is.
+function applySelection(sel, opts) {
+  const root = $('graph');
+  const d = state.diagram;
+  if (!root.querySelector('svg') || !d) return;
+  const { nodes, runs, focus } = selectionRuns(state.rows, d, sel);
+
+  // Wipe the last selection first: classes off, and the paths we drew ourselves
+  // removed outright, since a different selection needs different ones.
+  for (const el of root.querySelectorAll('.is-hi, .is-faint, .is-run')) {
+    el.classList.remove('is-hi', 'is-faint', 'is-run');
+  }
+  for (const el of root.querySelectorAll('path.is-added')) el.remove();
+
+  // Live is data, not selection, but it lives in the same layer of classes.
+  const live = new Set(state.rows
+    .filter(r => !r.is_bye && r.status === 'IN_PROGRESS').map(r => r.match_number));
+  for (const gEl of root.querySelectorAll('g.node')) {
+    const m = (gEl.id || '').match(NODE_ID);
+    if (!m) continue;
+    const n = +m[1].slice(1);
+    gEl.classList.toggle('is-live', live.has(n));
+    if (nodes.has(n)) gEl.classList.add('is-hi');
+  }
+
+  // One injected rule carries who is selected, rather than the label markup
+  // carrying it — which is what let the labels stop depending on the selection.
+  const ids = [];
+  for (const name of (sel ? sel.names : [])) {
+    const i = d.pid.get(name);
+    if (i != null) ids.push(i);
+  }
+  let css = '';
+  if (ids.length) {
+    css = '#graph g.node.is-hi :is(' + ids.map(i => '.pl-' + i).join(',') + ').won b' +
+      '{color:#fbbf24!important}\n' +
+      '#graph g.node.is-hi :is(' + ids.map(i => '.pl-' + i).join(',') + ').lost' +
+      '{color:#f87171!important}';
+  }
+  $('sel-style').textContent = css;
+
+  drawRuns(runs, state.dir, !!sel);
+  $('counts').textContent = sel
+    ? `${sel.label}: ${nodes.size} match${nodes.size === 1 ? '' : 'es'} shown of ${d.nodes}`
+    : countsLine();
+  if (opts && opts.centre && focus != null) {
+    const el = findNodeEl('M' + focus);
+    if (el) centerOn(el);
+  }
+}
+
+function countsLine() {
+  const total = state.rows.filter(r => !r.is_bye).length;
+  const live = state.rows.filter(r => r.status === 'IN_PROGRESS').length;
+  const left = state.rows.filter(r => !r.is_bye && r.status !== 'COMPLETED').length;
+  const shown = state.diagram ? state.diagram.nodes : total;
+  return `${shown} of ${total} matches · ${left} left · ${live} in progress`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1298,11 +1360,15 @@ function select(player, country) {
   state.player = player || null;
   state.country = (!player && country) || null;
   const sel = currentSel();
+  const before = state.fromStage;
   ensureVisible(sel);
   pickPlayerUI(sel);
   closeSearch();
   syncUrl();
-  render();
+  // Only a moved cut changes the bracket, and only that needs Mermaid. Picking
+  // someone is painted straight onto the diagram already on screen.
+  if (state.fromStage !== before) render();
+  else applySelection(sel, { centre: true });
 }
 
 // Options are stages, built from the rounds the bracket actually has, so each
@@ -1467,20 +1533,57 @@ function buried(sx, sy, dx, dy, lane, vert, boxes) {
   return hit;
 }
 
-// pairs is buildDiagram's hiPairs — the runs of everyone selected, as [from,
-// to] match numbers. Returns how many edges were redrawn, or -1 if it could
-// not run.
-function reroutePath(pairs, dir) {
-  if (!pairs || !pairs.length) return -1;      // nothing selected: a real no-op
+// runs are the selected players' steps, as [from, to] match numbers.
+//
+// Two of them exist in the SVG already — a winners-side or losers-side
+// progression is an edge Mermaid drew — and those are marked and rerouted. The
+// rest are steps the bracket deliberately does not draw: round one, whose
+// fan-out is the noise the ghost links hide, and the drop across to the losers
+// side, which is a footnote inside the box. Those used to be added to the
+// source, which meant Mermaid laid the whole diagram out again. They are drawn
+// here instead, with the same geometry the rerouting already computes, so a
+// selection never costs a relayout.
+//
+// dim says whether the rest of the diagram should fall back — it should when
+// something is selected, and not when the selection was just cleared.
+function drawRuns(runs, dir, dim) {
   try {
     const root = $('graph');
-    const want = new Set(pairs.map(([a, b]) => 'M' + a + '|M' + b));
+    const all = [...root.querySelectorAll('path[data-id]')];
+    if (!all.length) return -1;
+    const want = new Map(runs.map(([a, b]) => ['M' + a + '|M' + b, [a, b]]));
     const paths = [];
-    for (const p of root.querySelectorAll('path[data-id]')) {
+    const seen = new Set();
+    for (const p of all) {
       const m = (p.getAttribute('data-id') || '').match(EDGE_ID);
-      if (m && want.has(m[1] + '|' + m[2])) paths.push({ p, a: m[1], b: m[2] });
+      const key = m ? m[1] + '|' + m[2] : null;
+      if (key && want.has(key)) {
+        p.classList.add('is-run');
+        seen.add(key);
+        paths.push({ p, a: m[1], b: m[2] });
+      } else if (dim) {
+        p.classList.add('is-faint');
+      }
     }
-    if (!paths.length) return -1;
+    // Whatever is left has no path of its own. Clone one so the arrow marker
+    // and the layer come with it, then give it our own shape below.
+    const proto = all[0];
+    for (const [key, [a, b]] of want) {
+      if (seen.has(key)) continue;
+      const p = proto.cloneNode(false);
+      // Add to the cloned classes, never replace them: Mermaid's own
+      // .flowchart-link is what carries `fill: none`, and a curve with a fill
+      // paints in the whole area it encloses. fill is pinned here as well, so
+      // this cannot come back if the class Mermaid uses ever changes name.
+      p.classList.add('is-run', 'is-added');
+      p.setAttribute('fill', 'none');
+      p.removeAttribute('id');            // the clone must not duplicate one
+      p.setAttribute('data-id', 'L_M' + a + '_M' + b + '_0');
+      p.setAttribute('d', '');
+      proto.parentNode.appendChild(p);
+      paths.push({ p, a: 'M' + a, b: 'M' + b });
+    }
+    if (!paths.length) return 0;
 
     // Every edge path is a direct child of the same <g>, with no transform of
     // its own, so one inverse serves all of them.
@@ -1552,8 +1655,15 @@ function reroutePath(pairs, dir) {
         lo = sx; hi = dx;
       }
       // Not comfortably downstream — a same-rank or backwards edge is not the
-      // case this was written for, so leave Mermaid's own path in place.
-      if (![sx, sy, dx, dy].every(Number.isFinite) || !(hi - lo > 8)) continue;
+      // case this was written for, so leave Mermaid's own path in place. One we
+      // drew ourselves has no path to fall back on, so it gets a straight line.
+      if (![sx, sy, dx, dy].every(Number.isFinite) || !(hi - lo > 8)) {
+        if (p.classList.contains('is-added') && [sx, sy, dx, dy].every(Number.isFinite)) {
+          p.setAttribute('d', `M${n(sx)},${n(sy)} L${n(dx)},${n(dy)}`);
+          done++;
+        }
+        continue;
+      }
 
       // A near-vertical edge — every winners→winners and losers→losers hop —
       // can only run through the empty gutter between two ranks, so the
@@ -1587,12 +1697,13 @@ function reroutePath(pairs, dir) {
   } catch (err) {
     // A selector or a coordinate space that moved under us is not worth losing
     // the graph over: Mermaid's own paths are still there, detours and all.
-    console.warn('Highlighted edges left as Mermaid routed them:', err);
+    console.warn('Runs left as Mermaid routed them:', err);
     return -1;
   }
 }
 
-// The page is the only scroll container now, on both axes.
+// The page is the only scroll container now, on both axes. getBoundingClientRect
+// reports painted pixels, so the zoom is already in the numbers.
 function centerOn(el) {
   const er = el.getBoundingClientRect();
   const x = er.left + window.scrollX + er.width / 2 - window.innerWidth / 2;
@@ -1600,41 +1711,57 @@ function centerOn(el) {
   window.scrollTo({ left: Math.max(0, x), top: Math.max(0, y), behavior: 'smooth' });
 }
 
-async function render() {
+// Lays the bracket out. This is the expensive one — Mermaid is about five
+// milliseconds a node — so it runs only when the bracket itself changes: a new
+// event, a stage, a stage cut, a flow direction, or fresh scores. Choosing a
+// player or a country does not come through here at all; see applySelection.
+//
+// quiet is the auto-refresh: redraw in place. Recentring is right when you have
+// just chosen something and intolerable every sixty seconds, and replacing the
+// SVG can shift the page under a reader even without it.
+async function render(quiet) {
   if (!state.rows.length) return;
-  const sel = currentSel();
-  const { src, nodes, hits, focus, hiPairs } = buildDiagram(state.rows, state.dir, state.fromStage, sel);
-
-  const total = state.rows.filter(r => !r.is_bye).length;
-  const live = state.rows.filter(r => r.status === 'IN_PROGRESS').length;
-  const left = state.rows.filter(r => !r.is_bye && r.status !== 'COMPLETED').length;
-  $('counts').textContent = sel
-    ? `${sel.label}: ${hits} match${hits === 1 ? '' : 'es'} shown of ${nodes}`
-    : `${nodes} of ${total} matches · ${left} left · ${live} in progress`;
+  const hold = quiet ? { x: window.scrollX, y: window.scrollY } : null;
+  const t0 = performance.now();
+  const d = buildDiagram(state.rows, state.dir, state.fromStage);
+  const tBuild = performance.now() - t0;
+  state.diagram = d;
+  $('counts').textContent = countsLine();
 
   try {
-    const { svg } = await mermaid.render('bracket-' + Date.now(), src);
+    // Mermaid measures every label in a container of its own and blocks while
+    // it does, so a full stage 1 stalls the tab for a couple of seconds. Say so,
+    // and give the browser two frames to actually paint the message before
+    // handing it the work; otherwise the page just appears to lock up.
+    if (d.nodes > 150) {
+      setStatus('<span class="spinner"></span>Laying out ' + d.nodes + ' matches…');
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+    const t1 = performance.now();
+    const { svg } = await mermaid.render('bracket-' + Date.now(), d.src);
+    const tMermaid = performance.now() - t1;
     $('graph').innerHTML = svg;
+    applyZoom();                 // the diagram is new; the zoom is the reader's
     setStatus('');
     // Straight away rather than on the next frame, so there is never a painted
-    // frame with the old splines on screen. getBBox/getCTM force the layout
-    // they need, so the numbers are real already.
-    const t0 = performance.now();
-    const routed = reroutePath(hiPairs, state.dir);
-    if (routed > 0) console.log('[reroute] %d edges in %s ms', routed, (performance.now() - t0).toFixed(1));
-    // After a frame, so the SVG has been laid out and the rects are real.
+    // frame without the selection on it. getBBox/getCTM force the layout they
+    // need, so the numbers are real already.
+    const t2 = performance.now();
+    applySelection(currentSel(), { centre: !quiet });
+    const tSel = performance.now() - t2;
+    console.log('[graph] %d nodes, %d links (%d drawn, %d ghost) · build %sms, mermaid %sms, select %sms',
+      d.nodes, d.cost.links, d.cost.drawn, d.cost.ghosts,
+      tBuild.toFixed(0), tMermaid.toFixed(0), tSel.toFixed(0));
     requestAnimationFrame(() => {
-      // Second chance only if there was something to do and it could not measure.
-      if (routed < 0 && hiPairs.length) reroutePath(hiPairs, state.dir);
-      if (focus != null) {
-        const el = findNodeEl('M' + focus);
-        if (el) centerOn(el);
-      }
+      // Second chance: the first pass runs before the SVG has been through a
+      // layout, and on a cold render the boxes can still measure as nothing.
+      applySelection(currentSel(), { centre: !quiet && !hold });
+      if (hold) window.scrollTo(hold.x, hold.y);
     });
   } catch (err) {
     // Source is no longer shown on the page, so put it where it is still
     // reachable when a render fails.
-    console.error('Mermaid render failed\n', err, '\n--- source ---\n', src);
+    console.error('Mermaid render failed\n', err, '\n--- source ---\n', d.src);
     setStatus('Mermaid failed to render: ' + err.message + ' (source logged to console)', true);
   }
 }
@@ -1727,7 +1854,10 @@ function syncUrl() {
 // the last event's stages and rounds, and the Stage picker would happily redraw
 // its bracket under the new slug in the address bar.
 function clearLoaded() {
+  stopRefresh();
   state.rows = [];
+  state.diagram = null;
+  $('sel-style').textContent = '';
   state.wntData = null;
   state.tournament = null;
   populateStages([]);
@@ -1811,12 +1941,179 @@ async function load(source, slug) {
     resolveSelection();
     syncUrl();
     await render();
+    startRefresh();
   } catch (err) {
     if (seq !== loadSeq) return;      // a newer load owns the page now
     clearLoaded();
     setStatus('Failed to load: ' + esc(err.message), true);
   }
 }
+
+// =====================================================
+// Zoom — the diagram only, not the page
+// =====================================================
+// A CSS transform on #graph rather than re-rendering at another font size:
+// scaling what is already laid out is instant and keeps every node in the same
+// relative place, where a re-layout would reflow the whole bracket. It also
+// means the floor is far below the 10px the diagram is built at — the text is
+// vector, so shrinking it is just scaling, not re-measuring.
+//
+// A transform leaves layout size alone, so #zoom is sized to the scaled
+// footprint; that is what the page actually scrolls over.
+const ZOOM_MIN = 0.15, ZOOM_MAX = 4;
+let zoom = 1;
+
+function applyZoom() {
+  const g = $('graph');
+  // offsetWidth ignores transforms, so this is always the unscaled footprint
+  // however far in or out we currently are.
+  const w = g.offsetWidth, h = g.offsetHeight;
+  g.style.transform = zoom === 1 ? '' : 'scale(' + zoom + ')';
+  const z = $('zoom');
+  z.style.width = w ? Math.round(w * zoom) + 'px' : '';
+  z.style.height = h ? Math.round(h * zoom) + 'px' : '';
+  const btn = $('zoom-reset');
+  btn.hidden = zoom === 1;
+  btn.textContent = Math.round(zoom * 100) + '%';
+}
+
+// Zoom about a point, keeping whatever is under it under it. Without this the
+// diagram slides away from the cursor and you chase it.
+function zoomAt(next, cx, cy) {
+  next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+  if (Math.abs(next - zoom) < 0.0005) return;
+  const g = $('graph');
+  const before = g.getBoundingClientRect();
+  const gx = (cx - before.left) / zoom;      // the anchor, in unscaled units
+  const gy = (cy - before.top) / zoom;
+  zoom = next;
+  applyZoom();
+  const after = g.getBoundingClientRect();
+  window.scrollBy(after.left + gx * zoom - cx, after.top + gy * zoom - cy);
+}
+
+// ctrl/cmd + wheel is the desktop convention, and a trackpad pinch arrives as
+// exactly that. A plain wheel is left alone so the page still scrolls.
+$('viewport').addEventListener('wheel', (e) => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  zoomAt(zoom * Math.exp(-e.deltaY / 300), e.clientX, e.clientY);
+}, { passive: false });
+
+const pinchSpan = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+let pinch = null;
+$('viewport').addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 2) { pinch = null; return; }
+  pinch = { span: pinchSpan(e.touches) || 1, zoom };
+}, { passive: true });
+$('viewport').addEventListener('touchmove', (e) => {
+  if (!pinch || e.touches.length !== 2) return;
+  e.preventDefault();
+  zoomAt(pinch.zoom * pinchSpan(e.touches) / pinch.span,
+    (e.touches[0].clientX + e.touches[1].clientX) / 2,
+    (e.touches[0].clientY + e.touches[1].clientY) / 2);
+}, { passive: false });
+for (const ev of ['touchend', 'touchcancel']) {
+  $('viewport').addEventListener(ev, () => { pinch = null; });
+}
+$('zoom-reset').addEventListener('click', () => {
+  zoom = 1;
+  applyZoom();
+});
+
+// =====================================================
+// Auto-refresh — the same sixty seconds index.html runs on
+// =====================================================
+// A bracket with nothing left to play will never change again, so the timer
+// stops rather than reloading a finished draw once a minute. That is per stage:
+// sitting on the US Open's completed stage 1 is as static as a finished event,
+// even while stage 2 is being played.
+const REFRESH_INTERVAL = 60;
+let refreshTimer = null, lastRefresh = 0;
+
+const stillRunning = () => state.rows.some(r => !r.is_bye && r.status !== 'COMPLETED');
+
+function showCountdown(secs) {
+  $('refresh').hidden = !refreshTimer;
+  $('countdown').textContent = String(secs);
+}
+
+function stopRefresh() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  $('refresh').hidden = true;
+}
+
+function startRefresh() {
+  stopRefresh();
+  if (!state.slug || !stillRunning()) return;
+  lastRefresh = Date.now();
+  refreshTimer = setInterval(tickRefresh, 1000);
+  showCountdown(REFRESH_INTERVAL);
+}
+
+function tickRefresh() {
+  const left = REFRESH_INTERVAL - (Date.now() - lastRefresh) / 1000;
+  // Not under an open search: the overlay hides the diagram anyway, and
+  // rebuilding the rows under a list someone is arrowing through is rude.
+  // lastRefresh is left alone, so it fires as soon as the overlay closes.
+  if (left <= 0 && !$('search-overlay').classList.contains('open')) {
+    showCountdown(REFRESH_INTERVAL);
+    refreshData();
+    return;
+  }
+  showCountdown(Math.max(1, Math.round(left)));
+}
+
+// Refetches the loaded target and redraws in place. Everything the reader has
+// set — stage, cut, selection, flow, scroll — is left exactly as it was; only
+// the scores and statuses move.
+async function refreshData() {
+  if (!state.slug) return;
+  const seq = ++loadSeq;
+  lastRefresh = Date.now();
+  try {
+    let rows, tournament;
+    if (state.source === 'wnt') {
+      const event = await fetchWnt(state.slug);
+      if (seq !== loadSeq) return;
+      const stages = wntStages(event);
+      if (!stages.length) return;
+      state.wntData = event;
+      // A stage can appear mid-event; keep the one being read unless it is gone.
+      if (!stages.some(s => s.stage === state.stage)) return;
+      populateStages(stages);
+      rows = wntRows(event, state.stage);
+      tournament = { name: event.name || state.slug };
+    } else {
+      const data = await gql(QUERY, { s: state.slug });
+      if (seq !== loadSeq) return;
+      rows = data.tournament_brackets || [];
+      tournament = (data.tournaments || [])[0] || state.tournament;
+    }
+    if (!rows.length) return;
+    state.rows = rows;
+    state.tournament = tournament;
+    populateRounds(state.rows);
+    resolveSelection();
+    await render(true);
+    if (!stillRunning()) stopRefresh();
+  } catch (err) {
+    // Silent: the next tick tries again, and a transient proxy hiccup should
+    // not replace a good diagram with an error.
+    console.warn('Auto-refresh failed, will retry:', err);
+  }
+}
+
+// A backgrounded tab throttles timers, so coming back can be well past due.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !refreshTimer) return;
+  if ((Date.now() - lastRefresh) / 1000 >= REFRESH_INTERVAL) {
+    showCountdown(REFRESH_INTERVAL);
+    refreshData();
+  } else {
+    tickRefresh();
+  }
+});
 
 document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => {
   state.dir = b.dataset.dir; syncButtons(); render();
@@ -1841,6 +2138,7 @@ $('stage-sel').addEventListener('change', (e) => {
   resolveSelection();
   syncUrl();
   render();
+  startRefresh();
 });
 $('search-fab').addEventListener('click', openSearch);
 $('search-close').addEventListener('click', closeSearch);
