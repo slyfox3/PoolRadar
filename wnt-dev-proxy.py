@@ -192,6 +192,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if '/wnt/' in (self.path or ''):
             sys.stderr.write('  %s\n' % (fmt % args))
 
+    def end_headers(self):
+        # SimpleHTTPRequestHandler sends Last-Modified and nothing else — no
+        # Cache-Control, no ETag — which leaves the browser free to invent a
+        # freshness lifetime of its own. Chrome's guess is a tenth of the file's
+        # age, so a file untouched for four months is held for eleven days
+        # without ever asking again, and an edit to it appears to do nothing.
+        # That is a full afternoon lost to a page that is not running the code
+        # on disk, so a dev server should never allow it.
+        self.send_header('Cache-Control', 'no-store, must-revalidate')
+        super().end_headers()
+
     def _json(self, obj, code=200):
         body = json.dumps(obj).encode()
         self.send_response(code)
