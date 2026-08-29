@@ -134,6 +134,19 @@ a:hover { text-decoration: underline; }
    A lighter blue than the app's usual #60a5fa on purpose: at 7px, next to
    #cbd5e1 text, a blue darker than its neighbours reads as grey. */
 #graph g.node .nd-tbl, #graph g.node .nt-tbl { color: #38bdf8 !important; }
+/* The scheduled time is the same blue turned down, and it used to get there
+   with opacity: 0.75. Not on iOS Safari it did not. An element with an opacity
+   below 1 gets its own stacking context, and WebKit composites a stacking
+   context inside a foreignObject against the SVG root rather than against the
+   box it actually lives in — so every "1:00pm" left its node and stacked up in
+   the top-left corner of the diagram. Only these, because they are the only
+   thing in a label that ever asked for opacity; the table on the same row,
+   placed by the same rule, stayed where it was put.
+   #38bdf8 at 75% over the node fill is #3298c9, so this is the same colour by
+   another route, and it composites like ordinary text. The extra class beats
+   the !important above it on specificity. */
+#graph g.node .nd-tbl.tbl-when, #graph g.node .nt-tbl.tbl-when {
+  color: #3298c9 !important; }
 
 /* The metric half of the rules above, unscoped so they apply while measuring.
    Keyed off our own classes rather than Mermaid's, so they do not depend on
@@ -205,9 +218,11 @@ a:hover { text-decoration: underline; }
 /* A scheduled start sits in the table's row but reads as the quieter of the
    two: a table is where to go now, a time is only a plan. Lighter and smaller
    so it does not out-shout the match number it hangs under, and nowrap because
-   "Sun 10:00am" breaking in half would make the node two rows taller. */
+   "Sun 10:00am" breaking in half would make the node two rows taller.
+   The "lighter" is a colour rather than an opacity — see the note beside it in
+   the #graph block, which is where it had to move to. */
 .nd-tbl.tbl-when, .nt-tbl.tbl-when {
-  font-size: 0.8em; font-weight: 400; opacity: 0.75; white-space: nowrap; }
+  font-size: 0.8em; font-weight: 400; white-space: nowrap; }
 .nt-tbl { grid-column: 1 / -1; grid-row: 2; text-align: center; }
 .nt.nt-t .nt-r1 { grid-row: 3; }
 .nt.nt-t .nt-r2 { grid-row: 4; }
