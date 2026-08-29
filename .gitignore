@@ -5,8 +5,10 @@ __pycache__/
 # Local OG-preview generator (only preview.png is tracked)
 previews/gen/
 
-# WNT live-scores session cookie for the local dev proxy — never commit
-.wnt-session
+# WNT live-scores session cookie for the local dev proxy — never commit.
+# Globbed, because the exact name is only ever typed by hand: a .wnt-sessions
+# once landed here as an untracked file, one `git add -A` from being published.
+.wnt-session*
 
 # wrangler's local state. Holds the Cloudflare account it last deployed to.
 worker/.wrangler/
