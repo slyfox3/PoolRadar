@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoolRadar &mdash; WNT Events</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; font-size: 14px; }
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; flex-wrap: wrap; }
+.header h1 { margin: 0; font-size: 18px; color: #f8fafc; flex-shrink: 0; }
+.header .sub { color: #64748b; font-size: 12px; }
+.url-input { flex: 1; min-width: 180px; max-width: 420px; padding: 7px 12px; border: 1px solid #475569; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 14px; font-family: inherit; }
+.toggle-btn { background: #0f172a; border: 1px solid #475569; color: #94a3b8; border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 12px; font-family: inherit; }
+.toggle-btn:hover { border-color: #64748b; color: #e2e8f0; }
+.spacer { flex: 1; }
+
+#status { padding: 12px 16px; font-size: 13px; color: #94a3b8; }
+#status.error { color: #fca5a5; }
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #334155; border-top-color: #60a5fa; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.wrap { padding: 0 16px 32px; max-width: 900px; }
+.section-title { color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 6px; }
+
+.ev { display: flex; align-items: baseline; gap: 10px; padding: 9px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.ev-name { font-size: 15px; color: #f8fafc; font-weight: 600; }
+/* Monospace so slugs line up as a column and a typo in one is obvious. */
+.ev-slug { font: 12px/1.4 'SF Mono', Menlo, Consolas, monospace; color: #64748b; }
+.ev-meta { color: #94a3b8; font-size: 12px; }
+.ev-links { margin-left: auto; display: flex; gap: 12px; font-size: 12px; flex-shrink: 0; }
+/* Same pink that rings a live match in graph.html, so "live" means one thing
+   across the two pages. */
+.live { border: 1px solid #ec4899; color: #f9a8d4; border-radius: 4px; padding: 1px 5px; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+
+details { margin-top: 22px; }
+summary { cursor: pointer; color: #64748b; font-size: 12px; }
+summary:hover { color: #e2e8f0; }
+pre { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px; overflow: auto; max-height: 60vh;
+  font: 11px/1.5 'SF Mono', Menlo, Consolas, monospace; color: #cbd5e1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>WNT Events</h1>
+  <input class="url-input" id="filter" placeholder="Filter by name, slug, venue&hellip;" autocomplete="off"
+         autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Filter events">
+  <button class="toggle-btn" id="reload">Reload</button>
+  <span class="spacer"></span>
+  <span class="sub" id="via"></span>
+  <a href="index.html">&larr; PoolRadar</a>
+</div>
+
+<div id="status"></div>
+<div class="wrap">
+  <div id="list"></div>
+  <details id="raw-box" hidden>
+    <summary>Raw JSON from the proxy</summary>
+    <pre id="raw"></pre>
+  </details>
+</div>
+
+<script>
+// The same proxy graph.html and index.html read: wntlivescores.com is
+// login-only, so every read goes through a Worker holding the session. Served
+// locally by wnt-dev-proxy.py, which also serves this page — hence the switch,
+// which lets one file work both here and on the deployed site.
+const WNT_PROXY_REMOTE = 'https://wnt-proxy.slyfox3.workers.dev';
+const WNT_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? '/wnt' : WNT_PROXY_REMOTE + '/wnt';
+
+const $ = (id) => document.getElementById(id);
+
+function setStatus(msg, isError) {
+  const el = $('status');
+  el.className = isError ? 'error' : '';
+  el.innerHTML = msg;
+}
+
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+// Everything the list route returns, held so the filter can redraw without
+// asking the proxy again — the scrape behind it is a 280KB page fetch.
+let events = [];
+
+function fetchEvents() {
+  return fetch(WNT_PROXY + '/events')
+    .then((r) => r.json().then((d) => {
+      // The proxy reports its own failures as JSON with an `error` key and a
+      // non-2xx status, so the body is worth reading even when the fetch failed.
+      if (!r.ok) throw new Error(d.message || d.error || ('HTTP ' + r.status));
+      return d;
+    }));
+}
+
+function render() {
+  const q = $('filter').value.trim().toLowerCase();
+  const shown = !q ? events : events.filter((e) =>
+    [e.name, e.slug, e.venue, e.city, e.dates].some((v) => v && String(v).toLowerCase().includes(q)));
+
+  let html = '';
+  let section = null;
+  for (const e of shown) {
+    // Cards arrive in the site's own order, already grouped under "Upcoming
+    // events" / "Past events", so a heading on each change is enough.
+    if (e.section !== section) {
+      section = e.section;
+      html += '<div class="section-title">' + esc(section || 'Events') + '</div>';
+    }
+    const meta = [e.dates, e.venue, e.city].filter(Boolean).map(esc).join(' &middot; ');
+    html += '<div class="ev">'
+      + '<span class="ev-name">' + esc(e.name) + '</span>'
+      + (e.live ? '<span class="live">Live scores</span>' : '')
+      + (meta ? '<span class="ev-meta">' + meta + '</span>' : '')
+      + '<span class="ev-slug">' + esc(e.slug) + '</span>'
+      + '<span class="ev-links">'
+      + '<a href="graph.html?wnt=' + encodeURIComponent(e.slug) + '">Graph &rarr;</a>'
+      + '<a href="index.html?wnt=' + encodeURIComponent(e.slug) + '">PoolRadar &rarr;</a>'
+      + '<a href="https://www.wntlivescores.com/events/' + encodeURIComponent(e.slug) + '" target="_blank" rel="noopener">WNT &rarr;</a>'
+      + '</span></div>';
+  }
+  $('list').innerHTML = html || '<div class="ev">Nothing matches that filter.</div>';
+  setStatus(shown.length === events.length
+    ? events.length + ' events'
+    : shown.length + ' of ' + events.length + ' events');
+}
+
+function load() {
+  setStatus('<span class="spinner"></span>Asking the proxy for the event list&hellip;');
+  $('raw-box').hidden = true;
+  fetchEvents().then((data) => {
+    events = Array.isArray(data) ? data : [];
+    // The point of a test page is to see the real shape, entity quirks and all
+    // — so this is the untouched body, not the rendered view re-serialised.
+    $('raw').textContent = JSON.stringify(data, null, 2);
+    $('raw-box').hidden = false;
+    render();
+  }).catch((err) => {
+    // Failures here are nearly always the session or the origin allowlist, and
+    // both are invisible unless the page says so out loud.
+    setStatus('Could not load the event list: ' + esc(err.message)
+      + '<br>Proxy: <code>' + esc(WNT_PROXY) + '/events</code>'
+      + (WNT_PROXY === '/wnt'
+        ? '<br>Is wnt-dev-proxy.py running, and does .wnt-session still hold a live session?'
+        : '<br>The deployed Worker only answers for allowlisted origins; check its ALLOWED_ORIGINS.'),
+      true);
+  });
+}
+
+$('via').textContent = 'via ' + WNT_PROXY;
+$('reload').addEventListener('click', load);
+$('filter').addEventListener('input', () => { if (events.length) render(); });
+load();
+</script>
+
+</body>
+</html>
