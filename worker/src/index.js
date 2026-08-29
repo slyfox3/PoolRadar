@@ -30,6 +30,33 @@ function originAllowed(origin) {
 // Upstream polls itself every 33s, so 20s is fresh without adding load.
 const EVENT_TTL = 20;
 const EVENTS_TTL = 600;
+// Whether an event has a bracket at all is settled for anything already played,
+// and an upcoming one gains its draw days ahead, so a day is generous either
+// way — and it is what stops a second visit re-asking about the same events.
+const PROBE_TTL = 86400;
+// A batch is a URL and a URL has a length. This is only the backstop against a
+// hand-typed one; PROBE_MAX_PER_INVOCATION is the limit that actually binds.
+const PROBE_MAX = 200;
+// A slug costs THREE subrequests, not one: cache.match, fetch, and cache.put
+// all count against the same ceiling, which is fifty on the free plan. Fifty
+// over three is sixteen, and sixteen is exactly what a thirty-slug batch used
+// to get through before throwing "Too many subrequests" — four chunks answering
+// seventeen each is the 68/105 that sent me looking at CPU, which was never the
+// problem. Twelve leaves headroom for the login the first invocation may need.
+const PROBE_MAX_PER_INVOCATION = 12;
+// Subrequests are capped per invocation, so a chunk is walked a few at a time
+// rather than all at once. Six keeps a thirty-slug chunk near two seconds
+// without stampeding upstream.
+const PROBE_CONCURRENCY = 6;
+// Enough of the body to see whether the matches array is empty. "matches" is
+// within thirty bytes of the start of every reply; 512 is slack for a header
+// order nobody has seen yet, and still a thousandth of a populated response.
+const PROBE_PREFIX = 512;
+// Bump to throw away every cached verdict. A deploy does not clear the cache —
+// entries outlive it by a day — so without this, a change to how a probe
+// decides cannot be observed until tomorrow, which is a poor way to find out it
+// was wrong.
+const PROBE_CACHE_VERSION = 2;
 
 const MAX_STAGES = 6;
 const MAX_GROUPS = 32;
@@ -66,7 +93,9 @@ async function login(env) {
   throw new AuthError('Login returned no session cookie.');
 }
 
-async function wntFetch(path, env, retry = true) {
+// prefixBytes asks for only the start of the body: enough to answer a question
+// that lives in the first line, without pulling down the rest. See probeEvent.
+async function wntFetch(path, env, retry = true, prefixBytes = 0) {
   if (!sessionCookie) sessionCookie = await login(env);
   const res = await fetch(BASE + path, {
     headers: {
@@ -79,11 +108,31 @@ async function wntFetch(path, env, retry = true) {
   // An expired or anonymous session bounces to /login rather than 401ing.
   if (res.status >= 300 && res.status < 400) {
     sessionCookie = null;
-    if (retry) return wntFetch(path, env, false);
+    if (retry) return wntFetch(path, env, false, prefixBytes);
     throw new AuthError('WNT rejected the session. Check WNT_EMAIL / WNT_PASSWORD.');
   }
   if (!res.ok) throw new Error('WNT returned ' + res.status + ' for ' + path);
-  return res.text();
+  if (!prefixBytes) return res.text();
+
+  // Read chunks until there is enough, then cancel — which drops the
+  // connection instead of waiting out the remaining four hundred kilobytes.
+  const reader = res.body.getReader();
+  const parts = [];
+  let got = 0;
+  try {
+    while (got < prefixBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      got += value.length;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  const buf = new Uint8Array(got);
+  let at = 0;
+  for (const p of parts) { buf.set(p, at); at += p.length; }
+  return new TextDecoder().decode(buf);
 }
 
 function decodeEntities(s) {
@@ -195,6 +244,66 @@ async function loadEvent(slug, env) {
   return meta;
 }
 
+// Whether an event has a bracket behind it at all, in one upstream call.
+//
+// loadEvent stops at the first empty reply, so asking for stage 1 group 1 IS
+// the question — and finding out the long way costs about three seconds and
+// half a megabyte for an event that turns out to hold nothing. Roughly half of
+// what WNT lists is exactly that: events whose results were never published,
+// which the events page cannot be told apart from the ones that were.
+//
+// Throws rather than answering false, so the caller can leave a slug out of the
+// reply entirely. That distinction matters: a dead session would otherwise mark
+// the whole calendar empty and have it remembered that way for a day.
+async function probeEvent(slug, env, ctx) {
+  // Cached per slug rather than per batch, so overlapping batches — and the two
+  // pages do ask about overlapping sets — pay only for what neither has asked.
+  const key = new Request('https://wnt-proxy.invalid/probe/v' + PROBE_CACHE_VERSION +
+    '/' + encodeURIComponent(slug));
+  const cache = caches.default;
+  const hit = await cache.match(key);
+  if (hit) return (await hit.json()).hasData;
+
+  // The whole answer is in the first line. Every reply opens the same way —
+  // {"tmp":0,"matches":[] for an event with nothing, {"tmp":...,"matches":[{
+  // for one with something — so "matches" sits inside the first thirty bytes
+  // whatever the event. Reading the rest is what made this expensive: a
+  // populated first group is four hundred kilobytes, thirty of those in one
+  // invocation is twelve megabytes fetched and JSON.parsed, and a Worker gets
+  // ten milliseconds of CPU. That is why a third of a full sweep used to come
+  // back unanswered. A prefix and a substring test cost neither.
+  const raw = await wntFetch(`/events/${slug}/group-matches/1/1/0`, env, true, PROBE_PREFIX);
+  const at = raw.search(/"matches"\s*:\s*\[/);
+  if (at < 0) throw new AuthError(`Unrecognised reply probing ${slug}`);
+  const hasData = !/^\s*\]/.test(raw.slice(raw.indexOf('[', at) + 1, at + 64));
+  ctx.waitUntil(cache.put(key, new Response(JSON.stringify({ hasData }), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=' + PROBE_TTL,
+    },
+  })));
+  return hasData;
+}
+
+async function probeEvents(slugs, env, ctx) {
+  const out = {};
+  const queue = slugs.slice();
+  const lane = async () => {
+    for (let s = queue.shift(); s !== undefined; s = queue.shift()) {
+      try {
+        out[s] = await probeEvent(s, env, ctx);
+      } catch (e) {
+        // Left out of the answer rather than reported as false. A slug missing
+        // from the reply keeps its row, which is the safe direction to fail:
+        // a dead row costs a click, a wrongly hidden one costs the event.
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(PROBE_CONCURRENCY, queue.length) }, lane));
+  return out;
+}
+
 function corsHeaders(origin) {
   const h = { 'Content-Type': 'application/json' };
   if (origin && originAllowed(origin)) {
@@ -272,8 +381,25 @@ export default {
       return json(out, out.ok ? 200 : 503, origin);
     }
 
-    // Cache on path alone; the payload never varies by caller.
-    const cacheKey = new Request('https://wnt-proxy.invalid' + url.pathname, { method: 'GET' });
+    // Answered before the shared cache below, because its answers are cached a
+    // slug at a time instead — two batches that overlap should not each be a
+    // miss just because their URLs differ.
+    if (url.pathname === '/wnt/probe') {
+      const raw = url.searchParams.get('slugs') || '';
+      const asked = raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, PROBE_MAX);
+      // Anything past the ceiling is left out of the reply rather than
+      // attempted and lost to an exception. The callers chunk to fit, so this
+      // only catches a caller that did not — and an omitted slug keeps its row,
+      // which is the same safe direction every other failure here takes.
+      const slugs = asked.slice(0, PROBE_MAX_PER_INVOCATION);
+      return json(await probeEvents(slugs, env, ctx), 200, origin, PROBE_TTL);
+    }
+
+    // Path and query. The payload never varies by caller, but it does vary by
+    // what was asked for, and keying on the path alone would hand one batch's
+    // answer to another the moment a route takes a query string.
+    const cacheKey = new Request('https://wnt-proxy.invalid' + url.pathname + url.search,
+      { method: 'GET' });
     const cache = caches.default;
     const hit = await cache.match(cacheKey);
     if (hit) {
