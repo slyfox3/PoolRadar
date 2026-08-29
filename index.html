@@ -110,6 +110,16 @@ button { font-family: inherit; font-size: inherit; }
 .feed-table tr:hover td { background: #1e293b; }
 .feed-table tr.active td { background: #1e3a5f; }
 .feed-table .fav-names { font-size: 12px; }
+/* The tour's mark, at the head of every row that came from it. Inlined as a
+   data URI the way graph.html carries the Taiwan flag: it is a page asset, not
+   a network round trip, and at 1.5KB it costs less than the request would.
+   Sized in em off the cell's own text so it sits on the date's baseline and
+   scales with it; the ratio matches the artwork's 146.5x55.31 viewBox, so
+   background-size: contain never letterboxes it. The artwork is white and
+   assumes a dark row, which is what it gets. */
+.wnt-mark { display: inline-block; width: 3.18em; height: 1.2em; margin-right: 6px;
+  vertical-align: -0.265em; background-repeat: no-repeat; background-position: left center;
+  background-size: contain; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 146.5 55.31'%3E%3Cdefs%3E%3Cstyle%3E .cls-1 { fill: %23fff; } .cls-2 { fill: %23ee342a; } %3C/style%3E%3C/defs%3E%3Cg%3E%3Cg%3E%3Cpolygon class='cls-1' points='56.27 15.35 44.05 40.84 39.08 15.35 28.21 15.35 15.52 40.84 10.95 15.35 0 15.35 7.81 55.31 18.44 55.31 31.37 29.89 36.75 55.31 47.3 55.31 67.14 15.35 56.27 15.35'/%3E%3Cpath class='cls-1' d='M91.32,14.55c-2.29,0-4.45.47-6.47,1.4-2.02.93-3.79,2.22-5.3,3.88l.63-4.48h-10.87l-5.62,39.96h10.95l3.07-21.82c.47-3.36,1.56-5.8,3.27-7.31,1.7-1.52,3.6-2.28,5.67-2.28,2.45,0,4.19.73,5.21,2.2,1.02,1.47,1.34,3.56.96,6.27l-3.22,22.94h11.11l3.43-24.38c.73-5.17-.04-9.19-2.3-12.07-2.26-2.88-5.76-4.32-10.5-4.32Z'/%3E%3Cpolygon class='cls-1' points='69.31 15.35 69.31 15.35 69.31 15.34 69.31 15.35'/%3E%3Cpath class='cls-1' d='M127.98,0l-11.79,5.99-1.31,9.35h-10.24c.54.49,1.04,1.03,1.51,1.62,1.74,2.21,2.78,4.93,3.1,8.12l.06.09h4.19l-1.8,12.79c-.46,3.25-.56,5.98-.31,8.19.25,2.21.94,4,2.09,5.36,1.14,1.36,2.74,2.33,4.79,2.92,2.05.59,4.67.88,7.87.88h1.6l1.44-10.23c-1.71,0-3.04-.08-4-.24-.96-.16-1.66-.49-2.1-1-.44-.51-.67-1.24-.69-2.2-.02-.96.07-2.21.29-3.76l1.79-12.71h7.51l1.38-9.83h-7.51l2.16-15.35Z'/%3E%3Cpath class='cls-2' d='M144.91,45.46c-1.06-1.06-2.44-1.59-4.14-1.59s-3.07.53-4.1,1.59c-1.04,1.06-1.55,2.44-1.55,4.14s.52,3.07,1.55,4.1c1.04,1.04,2.4,1.55,4.1,1.55s3.08-.52,4.14-1.55c1.06-1.04,1.59-2.4,1.59-4.1s-.53-3.08-1.59-4.14Z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
 .feed-section-collapsed { display: none; }
 .slug-loading #feed-section { display: none; }
 .back-to-list { background: none; border: none; color: #64748b; cursor: pointer; font-size: 12px; padding: 0 0 8px 0; font-family: inherit; }
@@ -1123,6 +1133,115 @@ button { font-family: inherit; font-size: inherit; }
       .then(function(data) { return wntBuildResult(slug, data); });
   }
 
+  // The tour's own calendar, which the proxy scrapes off wntlivescores.com's
+  // events page. One fetch serves the whole feed — it is about a hundred events
+  // and twenty kilobytes, and the proxy holds it for ten minutes — so it is
+  // kept here for the life of the tab rather than asked for per render.
+  var wntEventsCache = null;
+  function fetchWntEvents() {
+    if (!WNT_PROXY) return Promise.resolve([]);
+    if (wntEventsCache) return Promise.resolve(wntEventsCache);
+    return fetch(WNT_PROXY + '/events')
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .then(function(list) {
+        wntEventsCache = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+        return wntEventsCache;
+      })
+      // A feed of DigitalPool events is still worth showing without these.
+      .catch(function() { return []; });
+  }
+
+  // The proxy strips tags from every field it scrapes except the venue and the
+  // city, so a fifth of the events arrive with their entities still in them —
+  // "Metro Sportz Bar &amp; Grill". Decoded here rather than waited for,
+  // because the deployed Worker is a build behind the one in the repo. &amp;
+  // goes last, or a single-encoded string would be decoded twice.
+  function unescapeEntities(s) {
+    return String(s || '')
+      .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+  }
+
+  // WNT writes a run of days rather than a start and an end: "Aug 25 - 30,
+  // 2026" inside one month, "Jul 29 - Aug 1, 2026" across two, and the year is
+  // written once at the finish. So a run whose second month is earlier than its
+  // first crossed New Year and started the year before.
+  var WNT_MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+                     Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  function wntEventDates(s) {
+    var m = /^([A-Z][a-z]{2})\s+(\d+)(?:\s*-\s*(?:([A-Z][a-z]{2})\s+)?(\d+))?,\s*(\d{4})$/.exec(s || '');
+    if (!m) return null;
+    var sm = WNT_MONTHS[m[1]];
+    var em = m[3] ? WNT_MONTHS[m[3]] : sm;
+    if (sm == null || em == null) return null;
+    var sd = parseInt(m[2], 10);
+    var ed = m[4] ? parseInt(m[4], 10) : sd;
+    var year = parseInt(m[5], 10);
+    return {
+      start: new Date(em < sm ? year - 1 : year, sm, sd),
+      end: new Date(year, em, ed, 23, 59, 59),
+    };
+  }
+
+  // Roughly half of what WNT lists has no bracket behind it — the calendar
+  // keeps events whose results were never published, and the events page gives
+  // no sign of which: an empty event and a full one carry the same card, the
+  // same badge, the same link. Asking costs one upstream request per slug, so
+  // it is asked only about the few that survived the date window, never about
+  // the whole hundred.
+  function probeWntSlugs(slugs) {
+    if (!WNT_PROXY || !slugs.length) return Promise.resolve({});
+    return fetch(WNT_PROXY + '/probe?slugs=' + encodeURIComponent(slugs.join(',')))
+      .then(function(r) { return r.ok ? r.json() : {}; })
+      .catch(function() { return {}; });
+  }
+
+  // WNT events as feed rows, in the shape the table already renders.
+  //
+  // They come in whatever the favourites are. The tour's events are the ones
+  // worth knowing about by default, and the list carries no players to match a
+  // favourite against in any case — matching would mean fetching all hundred
+  // brackets.
+  //
+  // An event counts if it overlaps the window, where the DigitalPool half asks
+  // for a start inside it. That difference is deliberate: an event that began
+  // before the window opened but is still being played is precisely the one you
+  // want on screen, and on a phone the window opens two days ago, which would
+  // have hidden the US Open on its fifth day.
+  function fetchWntFeedRows(from, to) {
+    return fetchWntEvents().then(function(list) {
+      var rows = [], now = new Date();
+      for (var i = 0; i < list.length; i++) {
+        var e = list[i];
+        var d = wntEventDates(e.dates);
+        if (!d || d.end < from || d.start > to) continue;
+        var venue = unescapeEntities(e.venue), city = unescapeEntities(e.city);
+        rows.push({
+          id: 'wnt:' + e.slug, source: 'wnt', slug: e.slug, name: e.name,
+          date: d.start.toISOString(),
+          status: e.live ? 'IN_PROGRESS' : (d.end < now ? 'COMPLETED' : 'NOT_STARTED'),
+          progress: null,
+          venue: (venue || city) ? { id: null, name: venue, city: city, region: null } : null,
+          organizer: null, director: null,
+          favNames: [], favPlayerNames: [], favPlayerPlaces: {},
+        });
+      }
+      // Date first, probe second — the window is usually a handful of events,
+      // and this is the whole reason the order matters. A slug the probe could
+      // not answer for is kept: a proxy that is down should cost a dead row,
+      // not the entire tour.
+      return probeWntSlugs(rows.map(function(r) { return r.slug; })).then(function(has) {
+        var kept = rows.filter(function(r) { return has[r.slug] !== false; });
+        var dropped = rows.filter(function(r) { return has[r.slug] === false; });
+        console.log('[feed] WNT: %d of %d events in the date window, %d with a bracket, %d dropped%s',
+          rows.length, list.length, kept.length, dropped.length,
+          dropped.length ? ' — ' + dropped.map(function(r) { return r.slug; }).join(', ') : '');
+        return kept;
+      });
+    });
+  }
+
   function wntBuildResult(slug, data) {
     var matches = [];
     var bByNum = {};
@@ -1511,6 +1630,9 @@ button { font-family: inherit; font-size: inherit; }
   // Tournament Feed
   // =====================================================
   var feedData = [];
+  // Kept apart from feedData because both the first load and "load more"
+  // rebuild that from the DigitalPool map and would otherwise drop these.
+  var wntFeedRows = [];
   var feedSort = { col: 'date', asc: false };
   var feedLoading = false;
   var feedTruncated = { players: false, venues: false, tds: false };
@@ -1542,12 +1664,9 @@ button { font-family: inherit; font-size: inherit; }
 
   function loadFeed() {
     feedLoaded = true;
-    if (favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0) {
-      feedData = [];
-      renderFeed();
-      return;
-    }
-
+    // No early return for an empty favourites list any more: the WNT calendar
+    // is in the feed whether or not anything has been favourited, so there is
+    // always something to go and fetch.
     feedLoading = true;
     renderFeed();
 
@@ -1590,7 +1709,15 @@ button { font-family: inherit; font-size: inherit; }
 
     var vars = { pids: allPlayerIds, pnames: allPlayerNames, vids: allVenueIds, tids: allTdIds, from: fromStr, to: toStr };
 
-    gql(query, vars).then(function(res) {
+    // With nothing favourited there is nothing for the query to match, so it is
+    // skipped rather than sent — but the WNT half still runs, and the two are
+    // waited on together so the table is drawn once.
+    var haveFavs = favs.players.length > 0 || favs.venues.length > 0 || favs.tds.length > 0;
+    var dpPending = haveFavs ? gql(query, vars) : Promise.resolve({ data: { tournaments: [] } });
+
+    Promise.all([dpPending, fetchWntFeedRows(from, to)]).then(function(both) {
+      var res = both[0];
+      wntFeedRows = both[1];
       var tournaments = (res.data && res.data.tournaments) || [];
       if (tournaments.length >= 1000) feedWasTruncated = true;
 
@@ -1639,6 +1766,9 @@ button { font-family: inherit; font-size: inherit; }
 
       feedData = [];
       for (var id in tournamentMap) feedData.push(tournamentMap[id]);
+      // Re-concatenated rather than pushed once, because paging in more
+      // DigitalPool results rebuilds this list from the map alone.
+      feedData = feedData.concat(wntFeedRows);
       feedLoading = false;
       feedTruncated = { players: feedWasTruncated, venues: false, tds: false };
       feedPaginationState = { tournamentMap: tournamentMap, fromStr: fromStr, toStr: toStr, offset: 1000,
@@ -1696,7 +1826,10 @@ button { font-family: inherit; font-size: inherit; }
       return;
     }
 
-    if (favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0) {
+    // Only worth saying when there is genuinely nothing here. The WNT calendar
+    // usually fills the table on its own, and telling someone to go and paste a
+    // URL over a list of events would read as a bug.
+    if (feedData.length === 0 && favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0) {
       tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#475569;">Paste a tournament URL above to get started</td></tr>';
       return;
     }
@@ -1711,6 +1844,11 @@ button { font-family: inherit; font-size: inherit; }
     if (hasAnySelection()) {
       var selNames = getSelectedFavNames();
       filtered = feedData.filter(function(t) {
+        // A WNT row carries no favourites to be matched against — the calendar
+        // lists no players — so filtering on one would make the tour's events
+        // disappear the moment anybody narrowed the list, which is the opposite
+        // of always being there.
+        if (t.source === 'wnt') return true;
         for (var i = 0; i < t.favNames.length; i++) {
           if (selNames.indexOf(t.favNames[i].toLowerCase()) !== -1) return true;
         }
@@ -1765,21 +1903,30 @@ button { font-family: inherit; font-size: inherit; }
       if (isLive) tag = ' <span class="mr-live" style="font-size:13px">\uD83D\uDD25</span>';
       else if (isFuture) tag = ' <span style="filter:grayscale(1) opacity(0.5);font-size:11px">\uD83D\uDCC5</span>';
       var venueName = t.venue ? t.venue.name : '';
+      // In the favourites column, which is empty on a WNT row anyway — the
+      // calendar lists no players, so there is nothing to have matched a
+      // favourite against. That makes it the one cell where the mark costs no
+      // layout at all and fills space that would otherwise be blank, while
+      // still answering the question that column raises: why is this row here?
+      var mark = t.source === 'wnt'
+        ? '<span class="wnt-mark" role="img" aria-label="WNT" title="WNT Live Scores"></span>' : '';
       tr.innerHTML = '<td>' + esc(dateStr) + tag + '</td>'
         + '<td>' + esc(t.name) + '</td>'
         + '<td class="venue-col">' + esc(venueName) + '</td>'
-        + '<td class="' + (isFuture ? '' : 'fav-names') + '">' + formatFavPlayers(t) + '</td>';
-      tr.addEventListener('click', (function(slug, status) {
+        + '<td class="' + (isFuture ? '' : 'fav-names') + '">' + mark + formatFavPlayers(t) + '</td>';
+      tr.addEventListener('click', (function(slug, source) {
         return function(e) {
           if (e.metaKey || e.ctrlKey) {
             var url = new URL(window.location);
-            url.searchParams.set('digitalpool', slug);
+            url.searchParams.set(source === 'wnt' ? 'wnt' : 'digitalpool', slug);
             window.open(url.toString(), '_blank');
             return;
           }
-          loadSmartTournament(slug);
+          // Undefined for a DigitalPool row, which is what loadTournament
+          // already treats as its default.
+          loadTournament(slug, source);
         };
-      })(t.slug, t.status));
+      })(t.slug, t.source));
       tbody.appendChild(tr);
     }
 
@@ -1853,6 +2000,9 @@ button { font-family: inherit; font-size: inherit; }
 
       feedData = [];
       for (var id in tournamentMap) feedData.push(tournamentMap[id]);
+      // Re-concatenated rather than pushed once, because paging in more
+      // DigitalPool results rebuilds this list from the map alone.
+      feedData = feedData.concat(wntFeedRows);
       ps.offset += 1000;
       clearStatus();
       renderFeed();
