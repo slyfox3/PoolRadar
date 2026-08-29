@@ -201,6 +201,12 @@ a:hover { text-decoration: underline; }
 /* The table a match is being played on, under its number. In the stacked flow
    that is a row of its own, which pushes everything below it down one. */
 .nd-tbl, .nt-tbl { font-size: 0.9em; font-weight: 600; }
+/* A scheduled start sits in the table's row but reads as the quieter of the
+   two: a table is where to go now, a time is only a plan. Lighter and smaller
+   so it does not out-shout the match number it hangs under, and nowrap because
+   "Sun 10:00am" breaking in half would make the node two rows taller. */
+.nd-tbl.tbl-when, .nt-tbl.tbl-when {
+  font-size: 0.8em; font-weight: 400; opacity: 0.75; white-space: nowrap; }
 .nt-tbl { grid-column: 1 / -1; grid-row: 2; text-align: center; }
 .nt.nt-t .nt-r1 { grid-row: 3; }
 .nt.nt-t .nt-r2 { grid-row: 4; }
@@ -344,7 +350,7 @@ const QUERY = `query($s:String!){
     challenger1{name skill_level} challenger2{name skill_level}
     challenger1_score challenger2_score
     challenger1_is_winner challenger2_is_winner
-    winner_to_num loser_to_num table_name
+    winner_to_num loser_to_num table_name scheduled_time start_time
   }
 }`;
 
@@ -400,6 +406,10 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 
 // 0 not started, 1 players called to the table, 2 under way, 3 done.
 const WNT_STATUS = { 0: 'NOT_STARTED', 1: 'NOT_STARTED', 2: 'IN_PROGRESS', 3: 'COMPLETED' };
+
+// WNT writes "2026-08-29 00:45:00", which is UTC but says neither that nor
+// anything Date can parse on its own, as index.html corrects it.
+function wntTime(s) { return s ? s.replace(' ', 'T') + 'Z' : null; }
 
 // alpha-2 -> regional indicator pair, as index.html does it. WNT writes
 // 'unknown' for the unaffiliated, which fails the shape test and drops out.
@@ -530,6 +540,10 @@ function wntRows(data, stageNo) {
       loser_to_num: dest(sd.loserDest),
       // table_preName is what WNT publishes before the match is called on.
       table_name: m.tableName || m.table_preName || null,
+      // When it is due to start. TBA means the field carries a placeholder
+      // rather than a plan, so it is dropped rather than printed.
+      scheduled_time: m.dateScheduledTBA ? null : wntTime(m.dateScheduled),
+      start_time: wntTime(m.dateStart),
       // Which of the destination's two slots this match fills, so an empty slot
       // names the feeder that is really going to fill it. DigitalPool does not
       // say, and there the slots are filled in the order the feeders came in.
@@ -624,6 +638,24 @@ function tableLabel(name) {
   return /^[0-9]+[A-Za-z]?$/.test(s) ? 'T' + s : s;
 }
 
+// When a match that has not started yet is due, in the reader's own timezone
+// and at the shortest length that stays unambiguous — "10:00am" today,
+// "Sun 10:00am" within the week, "Aug 9 10:00am" beyond it. Same rule as
+// index.html's matchTimeInfo, kept short because it goes inside a node.
+function timeLabel(r) {
+  const iso = r.scheduled_time || r.start_time;
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    .replace(/\s*([AP])M$/i, (_, p) => p.toLowerCase() + 'm');
+  const now = new Date();
+  const days = Math.floor((d - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  if (days === 0) return time;
+  if (days > 0 && days < 7) return d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + time;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + time;
+}
+
 // pid gives each player a small stable number. It goes on their name spans so
 // a selection can be painted by injecting one stylesheet rule instead of
 // rebuilding the diagram — the label itself never mentions who is selected, and
@@ -686,10 +718,25 @@ function nodeLabel(r, short, feeders, dropTo, wide, pid) {
   // Parens go through mmEsc like everything else — they are escaped in every
   // other label, and a bare "(" is exactly what Mermaid's parser trips on.
   const drop = dropTo ? "<small class='nd-drop'>" + mmEsc('(L to ' + dropTo + ')') + '</small>' : '';
-  // Which table it is on, and only while it is on one — the field survives after
-  // the match ends, where it is history rather than something to go and watch.
-  const table = (r.status === 'IN_PROGRESS' && r.table_name)
-    ? "<span class='" + (wide ? 'nd' : 'nt') + "-tbl'>" + mmEsc(tableLabel(r.table_name)) + '</span>'
+  // The line under the match number says the one thing worth knowing about when
+  // to watch it: which table it is on now, or when it is due to start. Only
+  // while it is on one — table_name survives after the match ends, where it is
+  // history rather than somewhere to go — and only before, since a scheduled
+  // time is a prediction that a played match has already settled.
+  let sub = '', subKind = '';
+  if (r.status === 'IN_PROGRESS' && r.table_name) {
+    sub = mmEsc(tableLabel(r.table_name));
+  } else if (r.status !== 'COMPLETED' && !r.is_bye) {
+    // Tested against COMPLETED rather than for NOT_STARTED: that is the one
+    // status both sources agree on the spelling of, and anything that is
+    // neither finished nor under way is by definition still to come.
+    sub = mmEsc(timeLabel(r));
+    if (sub) subKind = ' tbl-when';
+  }
+  // Both share the -tbl class, which is what places the row; tbl-when only
+  // restyles it, so the stacked flow's row shuffle keys off the one class.
+  const table = sub
+    ? "<span class='" + (wide ? 'nd' : 'nt') + '-tbl' + subKind + "'>" + sub + '</span>'
     : '';
 
   // Three columns, laid out by .nd in the stylesheet. The number and the drop
