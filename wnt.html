@@ -37,13 +37,23 @@ a:hover { text-decoration: underline; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .wrap { padding: 0 16px 32px; max-width: 900px; }
+/* The margin above is the separation as much as the words are. */
 .section-title { color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 6px; }
 
 .ev { display: flex; align-items: baseline; gap: 10px; padding: 9px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .ev-name { font-size: 15px; color: #f8fafc; font-weight: 600; }
-/* Monospace so slugs line up as a column and a typo in one is obvious. */
-.ev-slug { font: 12px/1.4 'SF Mono', Menlo, Consolas, monospace; color: #64748b; }
-.ev-meta { color: #94a3b8; font-size: 12px; }
+/* A fixed basis so the dates line up down the page instead of starting wherever
+   the name before them happened to end — which is also why the date leads the
+   row now. Pinning the name instead would have aligned them just as well and
+   truncated "Diamond Open NineBall Professional Players Championship" to do it.
+   11em clears the longest the feed carries ("Jul 29 - Aug 1, 2026"); nowrap so
+   a narrow window drops the whole date to the next line rather than breaking it
+   in half, and tabular figures so the digits stack as a column too. */
+.ev-date { flex: 0 0 11em; color: #94a3b8; font-size: 12px; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+/* One step up the slate scale from the date beside it — 400 to 300, the same
+   #cbd5e1 the rest of the app uses for ordinary body text. */
+.ev-where { color: #cbd5e1; font-size: 12px; }
 .ev-links { margin-left: auto; display: flex; gap: 12px; font-size: 12px; flex-shrink: 0; }
 /* Same pink that rings a live match in graph.html, so "live" means one thing
    across the two pages. */
@@ -93,6 +103,19 @@ function setStatus(msg, isError) {
   const el = $('status');
   el.className = isError ? 'error' : '';
   el.innerHTML = msg;
+}
+
+// A safety net, not the fix. The proxy strips entities from every field it
+// scrapes, but venue and city skipped that for a while and the deployed Worker
+// is still a build behind the repo — so until it catches up, "Harrah&#39;s
+// Resort" would reach the page verbatim. Harmless once it does: there is
+// nothing left to decode. &amp; goes last, or a single-encoded string decodes
+// twice.
+function unescapeEntities(s) {
+  return String(s == null ? '' : s)
+    .replace(/&#0?39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
 }
 
 function esc(s) {
@@ -168,35 +191,43 @@ function render() {
   const shown = !q ? live : live.filter((e) =>
     [e.name, e.slug, e.venue, e.city, e.dates].some((v) => v && String(v).toLowerCase().includes(q)));
 
+  // The group the list opens on needs no label — you are looking at it, and the
+  // dates say what it is. The boundary into the next one is the whole point of
+  // a heading: it marks where upcoming stops and the archive starts. Read off
+  // the full list rather than the filtered one, so a filter that happens to
+  // hide every upcoming event still leaves "Past events" labelled.
+  const firstSection = events.length ? events[0].section : null;
   let html = '';
   let section = null;
   for (const e of shown) {
-    // Cards arrive in the site's own order, already grouped under "Upcoming
-    // events" / "Past events", so a heading on each change is enough.
     if (e.section !== section) {
       section = e.section;
-      html += '<div class="section-title">' + esc(section || 'Events') + '</div>';
+      if (section !== firstSection) {
+        html += '<div class="section-title">' + esc(section || 'Events') + '</div>';
+      }
     }
-    const meta = [e.dates, e.venue, e.city].filter(Boolean).map(esc).join(' &middot; ');
+    // Where an event is carries further at a glance than when it was, so it is
+    // lifted a step out of the grey the date sits in.
+    const when = e.dates ? esc(unescapeEntities(e.dates)) : '';
+    const where = [e.venue, e.city].filter(Boolean)
+      .map(unescapeEntities).map(esc).join(' &middot; ');
     html += '<div class="ev">'
+      + '<span class="ev-date">' + when + '</span>'
       + '<span class="ev-name">' + esc(e.name) + '</span>'
       + (e.live ? '<span class="live">Live scores</span>' : '')
-      + (meta ? '<span class="ev-meta">' + meta + '</span>' : '')
-      + '<span class="ev-slug">' + esc(e.slug) + '</span>'
+      + (where ? '<span class="ev-where">' + where + '</span>' : '')
       + '<span class="ev-links">'
       + '<a href="graph.html?wnt=' + encodeURIComponent(e.slug) + '">Graph &rarr;</a>'
-      + '<a href="index.html?wnt=' + encodeURIComponent(e.slug) + '">PoolRadar &rarr;</a>'
       + '<a href="https://www.wntlivescores.com/events/' + encodeURIComponent(e.slug) + '" target="_blank" rel="noopener">WNT &rarr;</a>'
       + '</span></div>';
   }
   $('list').innerHTML = html || '<div class="ev">Nothing matches that filter.</div>';
-  const hidden = events.length - live.length;
-  setStatus((shown.length === live.length
-    ? live.length + ' events'
-    : shown.length + ' of ' + live.length + ' events')
-    + (hidden ? ' &middot; ' + hidden + ' hidden, no bracket published' : ''));
+  // The counts go to the console rather than the page: the list is its own
+  // answer to how many there are, and a line above it saying so was just
+  // another thing to read.
+  setStatus('');
   console.log('[wnt] render: %d listed, %d with a bracket, %d hidden, %d shown after filter %o',
-    events.length, live.length, hidden, shown.length, q || '(none)');
+    events.length, live.length, events.length - live.length, shown.length, q || '(none)');
 }
 
 function load() {
