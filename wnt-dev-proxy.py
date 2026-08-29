@@ -23,7 +23,9 @@ import socketserver
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://www.wntlivescores.com'
@@ -33,6 +35,13 @@ UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
 # Upstream polls itself every 33s; 20s keeps us fresh without hammering them.
 EVENT_TTL = 20
 EVENTS_TTL = 600
+# Whether an event has a bracket at all is settled for anything already played,
+# and an upcoming one gains its draw days ahead — so a day is generous either
+# way, and it is what keeps a repeat visit from re-asking about the same events.
+PROBE_TTL = 86400
+# A batch is a URL, and a URL has a length. Two hundred slugs is about 8KB and
+# comfortably more than the hundred-odd events WNT lists at once.
+PROBE_MAX = 200
 
 MAX_STAGES = 6
 MAX_GROUPS = 32
@@ -153,6 +162,33 @@ def load_event(slug):
     return meta
 
 
+def probe_event(slug):
+    """Whether an event has a bracket behind it at all, in one upstream call.
+
+    load_event stops at the first empty response, so asking for stage 1 group 1
+    IS the question — and finding out the long way costs about three seconds and
+    half a megabyte for an event that turns out to hold nothing. Worth a route
+    of its own because roughly half of what WNT lists is exactly that: events
+    whose results were never published, indistinguishable on the events page
+    from the ones that were.
+    """
+    try:
+        return bool((group_matches(slug, 1, 1) or {}).get('matches'))
+    except Exception:
+        # Unreadable is not showable, but it is also not a reason to fail the
+        # rest of the batch.
+        return False
+
+
+def probe_events(slugs):
+    # The fan-out is the only thing batched; each answer is cached under its own
+    # slug, so an overlapping request later pays for nothing it already knows.
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        vals = pool.map(
+            lambda s: cached('p:' + s, PROBE_TTL, lambda s=s: probe_event(s)), slugs)
+    return dict(zip(slugs, vals))
+
+
 def load_events():
     html = fetch('/events')
     events = []
@@ -218,6 +254,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             if self.path == '/wnt/events':
                 return self._json(cached('events', EVENTS_TTL, load_events))
+            if self.path.startswith('/wnt/probe'):
+                raw = urllib.parse.parse_qs(
+                    urllib.parse.urlparse(self.path).query).get('slugs', [''])[0]
+                slugs = [s for s in (x.strip() for x in raw.split(',')) if s][:PROBE_MAX]
+                return self._json(probe_events(slugs))
             m = re.match(r'^/wnt/event/([A-Za-z0-9._-]+)/?$', self.path)
             if m:
                 slug = m.group(1)
