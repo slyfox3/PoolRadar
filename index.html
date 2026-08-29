@@ -1190,11 +1190,32 @@ button { font-family: inherit; font-size: inherit; }
   // same badge, the same link. Asking costs one upstream request per slug, so
   // it is asked only about the few that survived the date window, never about
   // the whole hundred.
+  // Twelve at a time. The date window is usually two or three events, so this
+  // is normally one request — but the window is the reader's to set, and a from
+  // date in 2023 asks about the whole calendar. Twelve is what one Worker
+  // invocation can finish: the ceiling is subrequests, and a slug costs three of
+  // them — the cache read, the fetch, the cache write — so the free plan's fifty
+  // is really sixteen slugs.
+  var PROBE_CHUNK = 12;
   function probeWntSlugs(slugs) {
     if (!WNT_PROXY || !slugs.length) return Promise.resolve({});
-    return fetch(WNT_PROXY + '/probe?slugs=' + encodeURIComponent(slugs.join(',')))
-      .then(function(r) { return r.ok ? r.json() : {}; })
-      .catch(function() { return {}; });
+    var chunks = [];
+    for (var i = 0; i < slugs.length; i += PROBE_CHUNK) {
+      chunks.push(slugs.slice(i, i + PROBE_CHUNK));
+    }
+    return Promise.all(chunks.map(function(c) {
+      return fetch(WNT_PROXY + '/probe?slugs=' + encodeURIComponent(c.join(',')))
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        // A batch that fails leaves its own slugs unanswered, which keeps them
+        // listed, rather than taking the others down with it.
+        .catch(function() { return {}; });
+    })).then(function(maps) {
+      var out = {};
+      for (var j = 0; j < maps.length; j++) {
+        for (var k in maps[j]) out[k] = maps[j][k];
+      }
+      return out;
+    });
   }
 
   // WNT events as feed rows, in the shape the table already renders.

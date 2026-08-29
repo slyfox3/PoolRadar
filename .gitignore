@@ -7,3 +7,6 @@ previews/gen/
 
 # WNT live-scores session cookie for the local dev proxy — never commit
 .wnt-session
+
+# wrangler's local state. Holds the Cloudflare account it last deployed to.
+worker/.wrangler/

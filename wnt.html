@@ -140,15 +140,28 @@ let probed = {};
 // Asked after the list is already on screen rather than before: it takes a few
 // seconds for a hundred events, and nothing else on the page needs to wait for
 // it. The dead rows drop out when it lands.
+// Twelve at a time, matching what one Worker invocation can actually finish.
+// The ceiling is subrequests, and a slug costs three of them — the cache read,
+// the fetch, the cache write — so the free plan's fifty is really sixteen slugs,
+// not fifty. Thirty used to come back two thirds answered for exactly that
+// reason. Sent in parallel, so splitting costs nothing in wall clock, and a
+// batch that fails leaves its own slugs unanswered and the rest unaffected.
+const PROBE_CHUNK = 12;
+
 function probeAll() {
   const slugs = events.map((e) => e.slug);
   if (!WNT_PROXY || !slugs.length) return;
   const t0 = performance.now();
-  console.log('[wnt] probing %d slugs…', slugs.length);
-  fetch(WNT_PROXY + '/probe?slugs=' + encodeURIComponent(slugs.join(',')))
-    .then((r) => (r.ok ? r.json() : {}))
-    .then((map) => {
-      probed = map || {};
+  const chunks = [];
+  for (let i = 0; i < slugs.length; i += PROBE_CHUNK) chunks.push(slugs.slice(i, i + PROBE_CHUNK));
+  console.log('[wnt] probing %d slugs in %d batch(es) of up to %d…',
+    slugs.length, chunks.length, PROBE_CHUNK);
+  Promise.all(chunks.map((c) =>
+    fetch(WNT_PROXY + '/probe?slugs=' + encodeURIComponent(c.join(',')))
+      .then((r) => (r.ok ? r.json() : {}))
+      .catch(() => ({}))))
+    .then((maps) => {
+      probed = Object.assign({}, ...maps);
       const answered = Object.keys(probed);
       const withData = answered.filter((k) => probed[k]);
       const without = answered.filter((k) => !probed[k]);

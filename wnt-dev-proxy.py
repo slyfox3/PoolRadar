@@ -171,22 +171,29 @@ def probe_event(slug):
     of its own because roughly half of what WNT lists is exactly that: events
     whose results were never published, indistinguishable on the events page
     from the ones that were.
+
+    Raises rather than answering False, so probe_events can leave the slug out
+    of the reply altogether. The distinction matters: a dead session would
+    otherwise mark the whole calendar empty and cache it that way for a day.
     """
-    try:
-        return bool((group_matches(slug, 1, 1) or {}).get('matches'))
-    except Exception:
-        # Unreadable is not showable, but it is also not a reason to fail the
-        # rest of the batch.
-        return False
+    return bool((group_matches(slug, 1, 1) or {}).get('matches'))
 
 
 def probe_events(slugs):
     # The fan-out is the only thing batched; each answer is cached under its own
     # slug, so an overlapping request later pays for nothing it already knows.
+    def one(slug):
+        try:
+            return slug, cached('p:' + slug, PROBE_TTL, lambda: probe_event(slug))
+        except Exception:
+            # Missing from the reply rather than False. A slug with no answer
+            # keeps its row, which is the safe direction to fail — a dead row
+            # costs a click, a wrongly hidden one costs the event.
+            return slug, None
+
     with ThreadPoolExecutor(max_workers=8) as pool:
-        vals = pool.map(
-            lambda s: cached('p:' + s, PROBE_TTL, lambda s=s: probe_event(s)), slugs)
-    return dict(zip(slugs, vals))
+        pairs = list(pool.map(one, slugs))
+    return {s: v for s, v in pairs if v is not None}
 
 
 def load_events():
