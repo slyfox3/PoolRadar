@@ -212,8 +212,12 @@ def load_events():
                 # Titles end in a decorative "." span: "US Open 2026<span>.</span>"
                 'name': strip_tags(title.group(1)).rstrip(' .') if title else slug,
                 'dates': strip_tags(date.group(1)) if date else None,
-                'venue': places[0].strip() if len(places) > 0 else None,
-                'city': places[1].strip() if len(places) > 1 else None,
+                # strip_tags rather than a bare strip(): these two were the only
+                # scraped fields that skipped it, which is why a fifth of the
+                # venues came back as "Harrah&#39;s Resort" while the name and
+                # the dates beside them were clean.
+                'venue': strip_tags(places[0]) if len(places) > 0 else None,
+                'city': strip_tags(places[1]) if len(places) > 1 else None,
                 'live': 'Live Scores' in body,
                 'section': section,
             })

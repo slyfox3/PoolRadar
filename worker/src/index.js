@@ -116,7 +116,12 @@ async function loadEvents(env) {
       if (locBlock) {
         const pr = /<div class="text-center">([^<]*)<\/div>/g;
         let p;
-        while ((p = pr.exec(locBlock[0])) !== null) places.push(p[1].trim());
+        // stripTags rather than a bare trim: these two were the only scraped
+        // fields that skipped it, which is why a fifth of the venues came back
+        // as "Harrah&#39;s Resort" while the name and dates beside them were
+        // clean — and why /wnt/events and /wnt/event/<slug> disagreed about the
+        // spelling of the same venue.
+        while ((p = pr.exec(locBlock[0])) !== null) places.push(stripTags(p[1]));
       }
       events.push({
         slug,
