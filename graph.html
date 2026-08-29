@@ -92,6 +92,7 @@ a:hover { text-decoration: underline; }
 .lg-lose { color: #f87171; }
 .lg-drop { color: #64748b; font-size: 10px; }
 .lg-live { border-color: #ec4899; }
+.lg-next { border-color: #4ade80; }
 .solid { width: 18px; border-top: 2px solid #64748b; display: inline-block; }
 
 #status { padding: 12px 16px; font-size: 13px; color: #94a3b8; }
@@ -228,6 +229,13 @@ a:hover { text-decoration: underline; }
   fill: #1e3a5f !important; stroke: #60a5fa !important; stroke-width: 2px !important; }
 #graph g.node.is-hi .nodeLabel { color: #e2e8f0 !important; }
 #graph g.node.is-hi.is-live > rect { stroke: #ec4899 !important; }
+/* The far end of a waiting route: both players known, nothing left to wait for,
+   so these are the matches that actually have to be played next. Green rather
+   than the route's blue because they are the answer and the route is only the
+   question, and overridden by is-live below because a match already under way
+   is the more urgent fact about it. */
+#graph g.node.is-next > rect { stroke: #4ade80 !important; stroke-width: 2.5px !important; }
+#graph g.node.is-next.is-live > rect { stroke: #ec4899 !important; }
 /* Inside a lit node every winner's gold is muted back, and the rule injected
    for the selection puts it back on just their names — so a selected player and
    the opponent who beat them can never read the same. */
@@ -241,6 +249,16 @@ a:hover { text-decoration: underline; }
 #graph path.is-added { fill: none !important; }
 #graph .pn1, #graph .pn2 { cursor: pointer; }
 #graph .pn1:hover, #graph .pn2:hover { text-decoration: underline; }
+/* The number column is the match itself rather than either player in it, which
+   is what makes it the thing to click to ask what the match is waiting on. A
+   bigger and less ambiguous target than the number alone — flowing left to
+   right it is the whole left-hand edge of the box — and an empty slot answers
+   the same question from where the reader is already looking anyway.
+   Colour and underline only: a rule in here cannot change a label's size, or
+   Mermaid would have measured the box before it applied. */
+#graph .nd-h, #graph .nt-id, #graph .pnd { cursor: pointer; }
+#graph .nd-h:hover .nd-id, #graph .nt-id:hover,
+#graph .pnd:hover { text-decoration: underline; color: #94a3b8 !important; }
 
 @media (max-width: 768px) {
   .header h1 { font-size: 16px; }
@@ -281,6 +299,8 @@ a:hover { text-decoration: underline; }
   <span><i class="solid"></i> winner advances</span>
   <span><span class="lg-drop">(L to L4-4)</span> = where this match sends its loser</span>
   <span>click a name to highlight that player &middot; click again to clear</span>
+  <span>click a match number or a <i class="lg-drop">TBD</i> to trace what it is waiting on</span>
+  <span><i class="swatch lg-next"></i> ready to play &mdash; nothing left to wait for</span>
   <span><i class="swatch lg-live"></i> match under way</span>
   <span>press <kbd>/</kbd> or the magnifier to find a player, or a whole country</span>
 </div>
@@ -310,6 +330,14 @@ a:hover { text-decoration: underline; }
   </div>
 </div>
 
+<!-- The draw, indexed both ways, shared with index.html rather than written
+     again here: its followTo() and this page's hop() were the same eight lines
+     twice over, and its blockers table and this page's feeder map were the same
+     map built twice. A classic script rather than a module, because index.html
+     and test_blockers.html load it with a plain tag and jsc runs it alongside
+     the unit tests — and a classic script is specified to run before any
+     module, so its globals are already there when the one below starts. -->
+<script src="bracket-algo.js"></script>
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
@@ -358,14 +386,20 @@ const $ = (id) => document.getElementById(id);
 const state = {
   // Left to right by default: a bracket is read along its rounds, and the
   // columns leave room for full names.
-  dir: 'LR', fromStage: 0, player: null, rows: [], tournament: null,
+  dir: 'LR', fromStage: 0, player: null, waiting: null, rows: [], tournament: null,
   source: 'digitalpool', slug: '',
   // WNT only. One event JSON holds every stage and one stage is drawn at a
   // time, so the fetch is kept and switching stages is just a re-render.
   wntData: null, stage: 0,
   // What buildDiagram last produced, so a selection can be painted onto the SVG
-  // on screen instead of asking for a new one.
-  diagram: null,
+  // on screen instead of asking for a new one. src is the source that SVG was
+  // laid out from, kept so a refresh that changed nothing can recognise itself.
+  diagram: null, src: null,
+  // The draw indexed both ways, and the two rollups read off it. All four are
+  // functions of the rows and nothing else, so setRows owns them and everything
+  // downstream reads rather than rebuilds. keep is the one thing here that also
+  // depends on the reader — the stage cut — so it is a cache, not a value.
+  index: null, players: [], countries: [], playerBy: new Map(), keep: new Map(),
 };
 
 function setStatus(msg, isError) {
@@ -638,6 +672,17 @@ function tableLabel(name) {
   return /^[0-9]+[A-Za-z]?$/.test(s) ? 'T' + s : s;
 }
 
+// Hoisted because toLocaleTimeString and toLocaleDateString construct a fresh
+// Intl.DateTimeFormat on every call, and constructing one is most of what
+// formatting a date costs — the formatting itself is nearly free. Early in an
+// event almost every match is still to come, so timeLabel runs for almost every
+// node: at four hundred of them that measured thirty milliseconds a layout,
+// which was more than the rest of building the source put together. Reusing
+// three formatters takes it to nothing.
+const FMT_TIME = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const FMT_DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+const FMT_DATE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+
 // When a match that has not started yet is due, in the reader's own timezone
 // and at the shortest length that stays unambiguous — "10:00am" today,
 // "Sun 10:00am" within the week, "Aug 9 10:00am" beyond it. Same rule as
@@ -647,26 +692,29 @@ function timeLabel(r) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    .replace(/\s*([AP])M$/i, (_, p) => p.toLowerCase() + 'm');
+  const time = FMT_TIME.format(d).replace(/\s*([AP])M$/i, (_, p) => p.toLowerCase() + 'm');
   const now = new Date();
   const days = Math.floor((d - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
   if (days === 0) return time;
-  if (days > 0 && days < 7) return d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + time;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + time;
+  if (days > 0 && days < 7) return FMT_DAY.format(d) + ' ' + time;
+  return FMT_DATE.format(d) + ' ' + time;
 }
 
 // pid gives each player a small stable number. It goes on their name spans so
 // a selection can be painted by injecting one stylesheet rule instead of
 // rebuilding the diagram — the label itself never mentions who is selected, and
 // that is what keeps the whole source selection-independent.
-function nodeLabel(r, short, feeders, dropTo, wide, pid) {
+function nodeLabel(r, short, idx, dropTo, wide, pid) {
   const decided = !!(r.challenger1_is_winner || r.challenger2_is_winner);
   // An empty slot is waiting on a specific match, so name it rather than
   // printing TBD twice. Feeders that already have a winner have delivered
   // their player, so only undecided ones can correspond to an empty slot.
-  const pending = (feeders.get(r.match_number) || [])
-    .filter(f => !f.src.challenger1_is_winner && !f.src.challenger2_is_winner);
+  // The index stores the edge rather than the row it came from — it outlives
+  // any one render and a held row would be a bracket behind after a refresh —
+  // so the feeder is looked back up here.
+  const pending = (idx.rev[r.match_number] || [])
+    .map(f => ({ src: idx.byNum[f.num], kind: f.kind, pos: f.pos }))
+    .filter(f => f.src && !f.src.p1Won && !f.src.p2Won);
   // WNT says which of the two slots a feeder is going to fill; DigitalPool does
   // not, so there they are consumed in the order they were collected. Taken
   // entries are nulled rather than spliced, so a positional take cannot shift
@@ -685,8 +733,13 @@ function nodeLabel(r, short, feeders, dropTo, wide, pid) {
   const line = (c, score, won, slot) => {
     if (!c) {
       const f = takeFeeder(slot);
-      const t = !f ? '<i>TBD</i>'
-        : '<i>' + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.match_number)) + '</i>';
+      // Clickable, because an empty slot is the one thing in a node worth
+      // clicking when there is no name in it yet — it is the way into the
+      // waiting route. A bare TBD names no feeder of its own but still belongs
+      // to a match that may have one on its other side, so it opens the same
+      // walk rather than being inert.
+      const t = !f ? "<i class='pnd'>TBD</i>"
+        : "<i class='pnd'>" + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.num)) + '</i>';
       return { name: t, score: '' };
     }
     // A flag on every name, in both flows — an international field reads by
@@ -809,9 +862,17 @@ function currentSel() {
   if (state.player) {
     return { kind: 'player', label: state.player, names: new Set([state.player]) };
   }
+  // A waiting route names no players at all — it is a set of matches — so it
+  // carries an empty name set and everything keyed off names simply finds
+  // nothing, which is the right answer for it.
+  if (state.waiting) {
+    const r = state.index && state.index.byNum[state.waiting];
+    const id = r ? (r.identifier || '#' + r.num) : '#' + state.waiting;
+    return { kind: 'waiting', match: state.waiting, label: 'What ' + id + ' waits on',
+      names: new Set() };
+  }
   if (!state.country) return null;
-  const c = collectCountries(collectPlayers(state.rows))
-    .find(x => x.code === state.country);
+  const c = state.countries.find(x => x.code === state.country);
   return {
     kind: 'country',
     label: c ? c.name : state.country.toUpperCase(),
@@ -839,7 +900,116 @@ function keptMatches(rows, fromStage) {
   return keep;
 }
 
+// The cut is a function of the rows and the stage the reader picked, and the
+// stage moves far more often than the rows do — ensureVisible asks for one cut
+// and buildDiagram then asks for the same one again. Memoised per stage and
+// thrown away with the index, so it can never outlive the draw it describes.
+function keepFor(fromStage) {
+  if (!state.keep.has(fromStage)) {
+    state.keep.set(fromStage, keptMatches(state.rows, fromStage));
+  }
+  return state.keep.get(fromStage);
+}
+
+// ---------------------------------------------------------------------------
+// The draw, indexed
+//
+// bracket-algo.js walks the rows once and hands back both directions at once —
+// where each match sends its winner and its loser, byes already hopped, and
+// what feeds it — along with every player's appearances. index.html has read
+// that index for as long as it has had a blockers table.
+//
+// This page used to rebuild one half of it inside buildDiagram on every render,
+// and the other half inside currentSel on every selection and inside
+// buildSearchEntries on every keystroke. None of it ever depended on anything
+// but the rows, so none of it belonged there.
+//
+// The index speaks index.html's vocabulary, which is the one the unit tests are
+// written against; renaming six fields on the way in is cheaper than teaching
+// the index two of them, and the pass costs nothing — buildDiagram walked every
+// row to build byNum regardless.
+// ---------------------------------------------------------------------------
+
+// row rides along because the index has no use for it and this page does: the
+// table, the scheduled time and the scores are all read back off it later.
+const canonRow = (r) => ({
+  num: r.match_number, is_bye: r.is_bye, round: r.round, identifier: r.identifier,
+  p1: r.challenger1, p2: r.challenger2,
+  p1Won: r.challenger1_is_winner, p2Won: r.challenger2_is_winner,
+  winnerTo: r.winner_to_num, loserTo: r.loser_to_num,
+  winnerToPos: r.winner_to_pos, loserToPos: r.loser_to_pos,
+  s1: r.challenger1_score, s2: r.challenger2_score, status: r.status,
+  row: r,
+});
+
+// Stage first, then match number. Match numbers alone are not chronological
+// across the two sides — W2 is 33-48 but L1 is 49-64 — so a run sorted by
+// number alone would report a player's form in the wrong order.
+const runKey = (a) => stageOf(a.round) * 1000 + a.num;
+
+// What the search list and the stage cut want of a player, beyond the bare
+// appearances the index collected: their record in the order it was played, and
+// the stage their run ended in. A pass over players rather than over matches,
+// so it costs the same whether the draw holds sixty of them or four hundred.
+function buildPlayerView(idx) {
+  const list = [];
+  for (const k in idx.players) {
+    const p = idx.players[k];
+    const at = p.at.slice().sort((x, y) => runKey(x) - runKey(y));
+    const decided = at.filter(a => a.decided);
+    const form = decided.map(a => (a.won ? 'W' : 'L'));
+    // Where to move the cut to if this player is picked while hidden. The stage
+    // holding their last loss is the one that ended their run and the one worth
+    // landing on; a player still in the running has no loss to aim at, so their
+    // last match stands in for it.
+    const lost = decided.filter(a => !a.won);
+    const end = (lost.length ? lost : at).slice(-1)[0] || null;
+    list.push({
+      name: p.name, country: p.country, countryName: p.countryName,
+      at, form, won: form.filter(x => x === 'W').length, played: form.length,
+      endStage: end ? stageOf(end.round) : 0,
+    });
+  }
+  return list.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Countries represented in the loaded stage, biggest delegation first. A code
+// with no flag — WNT's 'unknown' — is not a country anyone can pick.
+function buildCountryView(players) {
+  const byCode = new Map();
+  for (const p of players) {
+    if (!p.country || !wntFlag(p.country)) continue;
+    if (!byCode.has(p.country)) {
+      byCode.set(p.country, {
+        code: p.country,
+        name: COUNTRY_NAME_OVERRIDE[p.country] || p.countryName || p.country,
+        players: [],
+      });
+    }
+    byCode.get(p.country).players.push(p);
+  }
+  return [...byCode.values()].sort((a, b) =>
+    b.players.length - a.players.length || a.name.localeCompare(b.name));
+}
+
+// One way in, so the index can never be a bracket behind.
+//
+// Every path that replaces the rows comes through here: a load, a WNT stage
+// switch, the sixty-second refresh. Building the index inside buildDiagram
+// would have been the obvious place and would have been wrong — refreshData
+// calls resolveSelection before it calls render, so once a minute that call
+// would have resolved a name against the previous bracket's roster.
+function setRows(rows) {
+  state.rows = rows || [];
+  state.index = state.rows.length ? buildBracketIndex(state.rows.map(canonRow)) : null;
+  state.players = state.index ? buildPlayerView(state.index) : [];
+  state.countries = buildCountryView(state.players);
+  state.playerBy = new Map(state.players.map(p => [p.name.toLowerCase(), p]));
+  state.keep = new Map();
+}
+
 function buildDiagram(rows, dir, fromStage) {
+  const idx = state.index;
   const byNum = new Map(rows.map(r => [r.match_number, r]));
   // Node width is the crowded dimension only in a top-down flow, where every
   // match in a round sits side by side and the diagram is as wide as the widest
@@ -853,39 +1023,19 @@ function buildDiagram(rows, dir, fromStage) {
     if (!pids.has(name)) pids.set(name, pids.size);
     return pids.get(name);
   };
-  const keep = keptMatches(rows, fromStage);
+  const keep = keepFor(fromStage);
   // No losers side anywhere means a straight knockout — WNT's stage 2. Two
   // things below are double-elimination habits that are wrong for one.
   const singleElim = !rows.some(r => r.round < 0);
   const rCount = roundCounts(rows);
   const rLabel = roundLabels(rows);
 
-  // Hop over byes so an edge lands on a real match.
-  const hop = (n) => {
-    for (let i = 0; i < 10 && n; i++) {
-      const d = byNum.get(n);
-      if (!d) return null;
-      if (!d.is_bye) return d.match_number;
-      n = d.winner_to_num;
-    }
-    return null;
-  };
-
-  // Which matches feed each match, for naming empty slots. Built over all rows
-  // regardless of the stage cut, so a kept match still names an off-graph feeder.
-  const feeders = new Map();
-  for (const r of rows) {
-    if (r.is_bye) continue;
-    for (const [dest, kind, pos] of [[r.winner_to_num, 'W', r.winner_to_pos],
-                                     [r.loser_to_num, 'L', r.loser_to_pos]]) {
-      const d = hop(dest);
-      if (!d) continue;
-      if (!feeders.has(d)) feeders.set(d, []);
-      // pos is dropped when the edge hopped a bye — the slot it named belonged
-      // to the bye, not to the match the edge now lands on.
-      feeders.get(d).push({ src: r, kind, pos: d === dest ? (pos || null) : null });
-    }
-  }
+  // Both directions come off the shared index. hop answers exactly what this
+  // page's own copy of it used to — the number of the first real match down a
+  // chain of byes — so every use below reads unchanged, and the feeder map it
+  // was half of is now idx.rev, built once when the rows arrived rather than
+  // here, once a render.
+  const hop = idx.hop;
 
   // Where each winners match sends its loser, from round 2 on. Rendered as a
   // footnote inside the match box, so no drop edge and no stub node is needed.
@@ -894,8 +1044,8 @@ function buildDiagram(rows, dir, fromStage) {
   const dropTo = new Map();
   for (const r of rows) {
     if (r.is_bye || !(r.round >= 2)) continue;
-    const d = hop(r.loser_to_num);
-    const dr = d != null ? byNum.get(d) : null;
+    const f = idx.fwd[r.match_number];
+    const dr = f && f.l != null ? byNum.get(f.l) : null;
     if (dr) dropTo.set(r.match_number, dr.identifier || ('#' + dr.match_number));
   }
 
@@ -996,7 +1146,7 @@ function buildDiagram(rows, dir, fromStage) {
       const label = rLabel.get(k) || roundName(k, rCount.get(k) || 0, singleElim);
       sgIds.push(id);
       lines.push(`${pad}subgraph ${id}["${label}"]`);
-      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, feeders, dropTo.get(r.match_number), wide, pid)}"]`);
+      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, idx, dropTo.get(r.match_number), wide, pid)}"]`);
       lines.push(`${pad}end`);
     }
     if (wrap) lines.push('  end');
@@ -1031,26 +1181,93 @@ function buildDiagram(rows, dir, fromStage) {
     cost: { links: links.length, drawn, ghosts: links.length - drawn } };
 }
 
+// What a match is still waiting on, all the way back.
+//
+// An empty slot can only name the one match that will fill it, which is what
+// "W of L6-1" says — and in a double elimination that is rarely the answer
+// anyone wants. L7-1 waits on L6-1, which waits on L5-1 and on a drop out of
+// W4-3, and none of those have been played either. The question a reader
+// actually has is which matches must happen before this one can, and which of
+// them could be played right now.
+//
+// So the walk keeps going back through every feeder that has not delivered yet,
+// and stops where a match already holds both its players. Those are the
+// frontier: nothing is owed to them, they are only waiting their turn, and the
+// whole subtree behind them is blocked on exactly those.
+//
+// Breadth-first over the index's reverse edges, with a seen set rather than
+// recursion: the depth is whatever the draw makes it, and a bracket that loops
+// back on itself must not take the page down with it.
+// A feeder that already has a winner has handed its player over and is holding
+// nothing up; only an undecided one is still owed. Which makes "nothing owed"
+// the same statement as "both players are known" — one test, used as the walk's
+// stopping condition, as the answer to whether a box is worth clicking, and as
+// the filter on what a node label calls pending.
+const owedTo = (idx, n) => (idx.rev[n] || []).filter((f) => {
+  const s = idx.byNum[f.num];
+  return s && !s.p1Won && !s.p2Won;
+});
+
+function waitingRoute(idx, from) {
+  const nodes = new Set(), edges = [], ready = new Set();
+  if (!idx || !idx.byNum[from]) return { nodes, edges, ready };
+  const seen = new Set([from]);
+  const queue = [from];
+  while (queue.length) {
+    const n = queue.shift();
+    nodes.add(n);
+    const owed = owedTo(idx, n);
+    if (!owed.length) { ready.add(n); continue; }
+    for (const f of owed) {
+      edges.push([f.num, n]);
+      if (seen.has(f.num)) continue;
+      seen.add(f.num);
+      queue.push(f.num);
+    }
+  }
+  return { nodes, edges, ready };
+}
+
 // What a selection lights up, and the runs through it. Pure computation over
 // the rows and the diagram's own keep/hop, so it costs nothing next to a
 // render — this is the whole reason selecting is now instant.
-function selectionRuns(rows, d, sel) {
-  const nodes = new Set(), runs = [];
-  if (!sel || !d) return { nodes, runs, focus: null };
-  for (const r of rows) {
-    if (r.is_bye || !d.keep.has(r.match_number)) continue;
-    const mine = [];
-    if (selHas(sel, r.challenger1)) mine.push(1);
-    if (selHas(sel, r.challenger2)) mine.push(2);
-    if (!mine.length) continue;
-    nodes.add(r.match_number);
-    if (!(r.challenger1_is_winner || r.challenger2_is_winner)) continue;
-    // Both sides can be selected at once — two of a delegation drawn against
-    // each other — and then the match sends one run on and one down.
-    for (const side of mine) {
-      const won = side === 1 ? r.challenger1_is_winner : r.challenger2_is_winner;
-      const next = d.hop(won ? r.winner_to_num : r.loser_to_num);
-      if (next != null && d.keep.has(next)) runs.push([r.match_number, next]);
+function selectionRuns(idx, d, sel) {
+  const nodes = new Set(), runs = [], ready = new Set();
+  if (!sel || !d || !idx) return { nodes, runs, ready, focus: null };
+
+  // A waiting route is a selection like any other, so that everything painted
+  // downstream — the lit nodes, the drawn edges, the dimming of everything
+  // else — works on it unchanged. All that differs is how the set was arrived
+  // at: backwards along the feeders instead of forwards along one player's
+  // results. No focus, because the reader just clicked the node in question and
+  // scrolling away from it would be perverse.
+  if (sel.kind === 'waiting') {
+    const r = waitingRoute(idx, sel.match);
+    for (const n of r.nodes) if (d.keep.has(n)) nodes.add(n);
+    for (const n of r.ready) if (d.keep.has(n)) ready.add(n);
+    for (const [a, b] of r.edges) if (d.keep.has(a) && d.keep.has(b)) runs.push([a, b]);
+    return { nodes, runs, ready, focus: null };
+  }
+
+  // Walked per selected player rather than per match. A delegation of thirty in
+  // a four-hundred-match stage is thirty short walks down a roster the index
+  // already collected, where this used to be four hundred tests of both sides
+  // of every match in the draw.
+  //
+  // Where two of them were drawn against each other the match is reached twice,
+  // once from each side, and that is exactly right: nodes is a set so it lights
+  // once, and the two runs out of it — one on up the winners side, one down to
+  // the losers — are both wanted.
+  for (const name of sel.names) {
+    const p = idx.players[name.toLowerCase()];
+    if (!p) continue;
+    for (const a of p.at) {
+      if (!d.keep.has(a.num)) continue;
+      nodes.add(a.num);
+      if (!a.decided) continue;
+      const f = idx.fwd[a.num];
+      const next = f ? (a.won ? f.w : f.l) : null;
+      if (next != null && d.keep.has(next)) runs.push([a.num, next]);
     }
   }
   // Where the selection enters the visible bracket — earliest stage wins, so it
@@ -1058,10 +1275,10 @@ function selectionRuns(rows, d, sel) {
   // round 1 is on screen. Match number only breaks ties within a stage.
   let focus = null;
   for (const n of nodes) {
-    const st = stageOf(d.byNum.get(n).round);
+    const st = stageOf(idx.byNum[n].round);
     if (!focus || st < focus.st || (st === focus.st && n < focus.n)) focus = { n, st };
   }
-  return { nodes, runs, focus: focus && focus.n };
+  return { nodes, runs, ready, focus: focus && focus.n };
 }
 
 // Paint a selection onto the SVG that is already on screen. Nothing here asks
@@ -1070,12 +1287,12 @@ function applySelection(sel, opts) {
   const root = $('graph');
   const d = state.diagram;
   if (!root.querySelector('svg') || !d) return;
-  const { nodes, runs, focus } = selectionRuns(state.rows, d, sel);
+  const { nodes, runs, ready, focus } = selectionRuns(state.index, d, sel);
 
   // Wipe the last selection first: classes off, and the paths we drew ourselves
   // removed outright, since a different selection needs different ones.
-  for (const el of root.querySelectorAll('.is-hi, .is-faint, .is-run')) {
-    el.classList.remove('is-hi', 'is-faint', 'is-run');
+  for (const el of root.querySelectorAll('.is-hi, .is-faint, .is-run, .is-next')) {
+    el.classList.remove('is-hi', 'is-faint', 'is-run', 'is-next');
   }
   for (const el of root.querySelectorAll('path.is-added')) el.remove();
 
@@ -1088,6 +1305,7 @@ function applySelection(sel, opts) {
     const n = +m[1].slice(1);
     gEl.classList.toggle('is-live', live.has(n));
     if (nodes.has(n)) gEl.classList.add('is-hi');
+    if (ready.has(n)) gEl.classList.add('is-next');
   }
 
   // One injected rule carries who is selected, rather than the label markup
@@ -1107,9 +1325,14 @@ function applySelection(sel, opts) {
   $('sel-style').textContent = css;
 
   drawRuns(runs, state.dir, !!sel);
-  $('counts').textContent = sel
-    ? `${sel.label}: ${nodes.size} match${nodes.size === 1 ? '' : 'es'} shown of ${d.nodes}`
-    : countsLine();
+  // A waiting route is counted by what it is blocked on rather than by how much
+  // of the bracket it covers, which is the only thing anyone wants to know
+  // about it — "seven matches, two of them playable now".
+  $('counts').textContent = !sel ? countsLine()
+    : sel.kind === 'waiting'
+      ? `${sel.label}: ${nodes.size} match${nodes.size === 1 ? '' : 'es'} back, ` +
+        `${ready.size} ready to play`
+      : `${sel.label}: ${nodes.size} match${nodes.size === 1 ? '' : 'es'} shown of ${d.nodes}`;
   if (opts && opts.centre && focus != null) {
     const el = findNodeEl('M' + focus);
     if (el) centerOn(el);
@@ -1146,60 +1369,7 @@ const COUNTRY_SEARCH_ALIASES = {
   ru: ['russia'],
 };
 
-// Every player is listed and every one is selectable — the stage cut moves to
-// them rather than the other way round, so there is nothing to grey out.
-function collectPlayers(rows) {
-  const byName = new Map();
-  for (const r of rows) {
-    for (const c of [r.challenger1, r.challenger2]) {
-      if (!c || !c.name) continue;
-      const k = c.name.toLowerCase();
-      if (!byName.has(k)) {
-        // country is absent on the DigitalPool side, which simply means no
-        // flags and no country rows there.
-        byName.set(k, {
-          name: c.name, country: c.country || null,
-          countryName: c.countryName || null, results: [],
-        });
-      }
-      if (r.is_bye) continue;
-      if (!(r.challenger1_is_winner || r.challenger2_is_winner)) continue;
-      const c1 = r.challenger1 && r.challenger1.name === c.name;
-      const won = (c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner);
-      // Stage first, then match number: match numbers alone are not
-      // chronological across the two sides (W2 is 33-48 but L1 is 49-64).
-      byName.get(k).results.push({ key: stageOf(r.round) * 1000 + r.match_number, won });
-    }
-  }
-  for (const e of byName.values()) {
-    e.results.sort((a, b) => a.key - b.key);
-    e.form = e.results.map(x => (x.won ? 'W' : 'L'));
-    e.won = e.form.filter(x => x === 'W').length;
-    e.played = e.form.length;
-  }
-  return [...byName.values()];
-}
-
 function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-// Countries represented in the loaded stage, biggest delegation first. A code
-// with no flag — WNT's 'unknown' — is not a country anyone can pick.
-function collectCountries(players) {
-  const byCode = new Map();
-  for (const p of players) {
-    if (!p.country || !wntFlag(p.country)) continue;
-    if (!byCode.has(p.country)) {
-      byCode.set(p.country, {
-        code: p.country,
-        name: COUNTRY_NAME_OVERRIDE[p.country] || p.countryName || p.country,
-        players: [],
-      });
-    }
-    byCode.get(p.country).players.push(p);
-  }
-  return [...byCode.values()].sort((a, b) =>
-    b.players.length - a.players.length || a.name.localeCompare(b.name));
-}
 
 // A country is a hit on a prefix of its name, of any word in its name, or of
 // any alias. Two characters is enough — "li" should reach Lithuania — but a
@@ -1219,11 +1389,11 @@ function countryMatchScore(c, q) {
   return best;
 }
 
-function rankCountries(query, players) {
+function rankCountries(query) {
   const q = query.toLowerCase().trim();
   if (!q) return [];
   const hits = [];
-  for (const c of collectCountries(players)) {
+  for (const c of state.countries) {
     const score = countryMatchScore(c, q);
     if (score >= 0) hits.push({ c, score });
   }
@@ -1232,7 +1402,7 @@ function rankCountries(query, players) {
 }
 
 function rankPlayers(query, players) {
-  players = players || collectPlayers(state.rows);
+  players = players || state.players;
   const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   if (!toks.length) return players.slice().sort((a, b) => a.name.localeCompare(b.name));
   const scored = [];
@@ -1281,8 +1451,8 @@ function searchFlagHtml(code, name, cls) {
 const COUNTRY_CAP = 4;
 
 function buildSearchEntries(query) {
-  const players = collectPlayers(state.rows);
-  const countries = rankCountries(query, players);
+  const players = state.players;
+  const countries = rankCountries(query);
   const entries = countries.slice(0, COUNTRY_CAP).map(c => ({ kind: 'country', country: c }));
   const named = rankPlayers(query, players);
   const listed = new Set(named.map(p => p.name));
@@ -1380,32 +1550,55 @@ function setCut(stage) {
 // is used instead.
 function ensureVisible(sel) {
   if (!sel) return;
-  const keep = keptMatches(state.rows, state.fromStage);
-  const mine = state.rows.filter(r => !r.is_bye && selIn(sel, r));
-  if (!mine.length || mine.some(r => keep.has(r.match_number))) return;
+  const keep = keepFor(state.fromStage);
+  // A waiting route runs backwards into earlier rounds, which is precisely what
+  // a stage cut takes away — so the cut gives way to it, or the answer sits off
+  // screen. Open up to the earliest stage the route reaches, and only when some
+  // of it is actually hidden.
+  if (sel.kind === 'waiting') {
+    const r = waitingRoute(state.index, sel.match);
+    if (!r.nodes.size) return;
+    let lo = Infinity, hidden = false;
+    for (const n of r.nodes) {
+      const row = state.index.byNum[n];
+      lo = Math.min(lo, stageOf(row ? row.round : null));
+      if (!keep.has(n)) hidden = true;
+    }
+    if (hidden) setCut(Number.isFinite(lo) ? Math.floor(lo) : 0);
+    return;
+  }
+  // Off the roster rather than out of a sweep: the question is only whether any
+  // of this selection's matches survived the cut, and the index already knows
+  // which matches those are.
+  let any = false, shown = false;
+  for (const name of sel.names) {
+    const p = state.playerBy.get(name.toLowerCase());
+    if (!p) continue;
+    for (const a of p.at) {
+      any = true;
+      if (keep.has(a.num)) { shown = true; break; }
+    }
+    if (shown) break;
+  }
+  if (!any || shown) return;
   // A delegation ends in as many places as it has players, so there is no one
   // match to aim at — show the whole bracket rather than pick for them.
   if (sel.names.size !== 1) { setCut(0); return; }
   const [only] = sel.names;
-
-  const lost = mine.filter(r => {
-    if (!(r.challenger1_is_winner || r.challenger2_is_winner)) return false;
-    const c1 = r.challenger1 && r.challenger1.name === only;
-    return !((c1 && r.challenger1_is_winner) || (!c1 && r.challenger2_is_winner));
-  });
-  const key = (r) => stageOf(r.round) * 1000 + r.match_number;
-  const target = (lost.length ? lost : mine).reduce((a, b) => (key(b) > key(a) ? b : a));
-
-  // Options are whole winners-anchored stages, so round down: a match at stage
-  // 3.5 is kept by the stage-3 cut, since the cut keeps everything at or past it.
-  setCut(Math.floor(stageOf(target.round)));
+  // endStage is the stage holding this player's last loss, worked out when the
+  // rows arrived. Options are whole winners-anchored stages, so round down: a
+  // match at stage 3.5 is kept by the stage-3 cut, since the cut keeps
+  // everything at or past it.
+  const p = state.playerBy.get(only.toLowerCase());
+  setCut(p ? Math.floor(p.endStage) : 0);
 }
 
 // A player and a country are two answers to the same question, so choosing
 // either drops the other. Pass nothing to clear.
-function select(player, country) {
+function select(player, country, waiting) {
   state.player = player || null;
   state.country = (!player && country) || null;
+  state.waiting = (!player && !country && waiting) || null;
   const sel = currentSel();
   const before = state.fromStage;
   ensureVisible(sel);
@@ -1776,19 +1969,36 @@ async function render(quiet) {
   $('counts').textContent = countsLine();
 
   try {
-    // Mermaid measures every label in a container of its own and blocks while
-    // it does, so a full stage 1 stalls the tab for a couple of seconds. Say so,
-    // and give the browser two frames to actually paint the message before
-    // handing it the work; otherwise the page just appears to lock up.
-    if (d.nodes > 150) {
-      setStatus('<span class="spinner"></span>Laying out ' + d.nodes + ' matches…');
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    // The sixty-second refresh redraws whether or not anything moved, and a
+    // full stage 1 is about two seconds of layout — so a bracket nobody is
+    // playing on costs two seconds a minute for as long as the tab is open.
+    //
+    // It does not have to. The source string carries every fact a node shows:
+    // the names, the scores, the winner's gold, the table, the scheduled time,
+    // and the identifier of whatever an empty slot is waiting on. Nothing about
+    // the picture is decided anywhere else — the selection is painted on
+    // afterwards, and the live ring is a class. So a byte-identical source
+    // means a diagram the reader could not tell apart, and the one already on
+    // screen will do. The moment any of those facts moves, the string differs
+    // and this falls through to a full render as before.
+    const reuse = d.src === state.src && !!$('graph').querySelector('svg');
+    let tMermaid = 0;
+    if (!reuse) {
+      // Mermaid measures every label in a container of its own and blocks while
+      // it does, so a full stage 1 stalls the tab for a couple of seconds. Say so,
+      // and give the browser two frames to actually paint the message before
+      // handing it the work; otherwise the page just appears to lock up.
+      if (d.nodes > 150) {
+        setStatus('<span class="spinner"></span>Laying out ' + d.nodes + ' matches…');
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
+      const t1 = performance.now();
+      const { svg } = await mermaid.render('bracket-' + Date.now(), d.src);
+      tMermaid = performance.now() - t1;
+      $('graph').innerHTML = svg;
+      state.src = d.src;
+      applyZoom();               // the diagram is new; the zoom is the reader's
     }
-    const t1 = performance.now();
-    const { svg } = await mermaid.render('bracket-' + Date.now(), d.src);
-    const tMermaid = performance.now() - t1;
-    $('graph').innerHTML = svg;
-    applyZoom();                 // the diagram is new; the zoom is the reader's
     setStatus('');
     // Straight away rather than on the next frame, so there is never a painted
     // frame without the selection on it. getBBox/getCTM force the layout they
@@ -1796,9 +2006,9 @@ async function render(quiet) {
     const t2 = performance.now();
     applySelection(currentSel(), { centre: !quiet });
     const tSel = performance.now() - t2;
-    console.log('[graph] %d nodes, %d links (%d drawn, %d ghost) · build %sms, mermaid %sms, select %sms',
+    console.log('[graph] %d nodes, %d links (%d drawn, %d ghost) · build %sms, mermaid %s, select %sms',
       d.nodes, d.cost.links, d.cost.drawn, d.cost.ghosts,
-      tBuild.toFixed(0), tMermaid.toFixed(0), tSel.toFixed(0));
+      tBuild.toFixed(0), reuse ? 'reused' : tMermaid.toFixed(0) + 'ms', tSel.toFixed(0));
     requestAnimationFrame(() => {
       // Second chance: the first pass runs before the SVG has been through a
       // layout, and on a cold render the boxes can still measure as nothing.
@@ -1836,14 +2046,18 @@ function parseTarget(raw) {
 // highlight nothing and look like a bug. A country code has to be one this
 // stage actually fields, for the same reason.
 function resolveSelection() {
-  const players = collectPlayers(state.rows);
   if (state.player) {
-    const want = state.player.toLowerCase();
-    const hit = players.find(p => p.name.toLowerCase() === want);
+    const hit = state.playerBy.get(state.player.toLowerCase());
     state.player = hit ? hit.name : null;
   }
-  if (state.country && !collectCountries(players).some(c => c.code === state.country)) {
+  if (state.country && !state.countries.some(c => c.code === state.country)) {
     state.country = null;
+  }
+  // Match numbers mean something different in every event and in every WNT
+  // stage, so a route carried in from the address bar has to name a match this
+  // bracket actually holds.
+  if (state.waiting && !(state.index && state.index.byNum[state.waiting])) {
+    state.waiting = null;
   }
   const sel = currentSel();
   // A link may name a player the `from` in the same link hides; move the cut
@@ -1894,6 +2108,8 @@ function syncUrl() {
   else url.searchParams.delete('player');
   if (state.country) url.searchParams.set('country', state.country);
   else url.searchParams.delete('country');
+  if (state.waiting) url.searchParams.set('waiting', String(state.waiting));
+  else url.searchParams.delete('waiting');
   history.replaceState(null, '', url);
 }
 
@@ -1902,8 +2118,12 @@ function syncUrl() {
 // its bracket under the new slug in the address bar.
 function clearLoaded() {
   stopRefresh();
-  state.rows = [];
+  setRows([]);
   state.diagram = null;
+  // The SVG goes below, so the source it was laid out from must go with it —
+  // otherwise the next load of the same bracket would match against a diagram
+  // that is no longer on the page and skip the render that puts it back.
+  state.src = null;
   $('sel-style').textContent = '';
   state.wntData = null;
   state.tournament = null;
@@ -1960,7 +2180,7 @@ async function load(source, slug) {
       const open = (pool.length ? pool : stages).slice(-1)[0].stage;
       if (!stages.some(s => s.stage === state.stage)) state.stage = open;
       populateStages(stages);
-      state.rows = wntRows(state.wntData, state.stage);
+      setRows(wntRows(state.wntData, state.stage));
       state.tournament = { name: state.wntData.name || slug };
       loaded = 'stage ' + state.stage + ', ' + state.rows.length + ' matches';
     } else {
@@ -1969,7 +2189,7 @@ async function load(source, slug) {
       populateStages([]);
       const data = await gql(QUERY, { s: slug });
       if (seq !== loadSeq) return;
-      state.rows = data.tournament_brackets || [];
+      setRows(data.tournament_brackets || []);
       state.tournament = (data.tournaments || [])[0] || null;
       loaded = state.rows.length + ' bracket rows';
     }
@@ -2138,7 +2358,7 @@ async function refreshData() {
       tournament = (data.tournaments || [])[0] || state.tournament;
     }
     if (!rows.length) return;
-    state.rows = rows;
+    setRows(rows);
     state.tournament = tournament;
     populateRounds(state.rows);
     resolveSelection();
@@ -2180,7 +2400,7 @@ $('round-from').addEventListener('change', (e) => {
 $('stage-sel').addEventListener('change', (e) => {
   state.stage = parseInt(e.target.value, 10) || 0;
   state.fromStage = 0;
-  state.rows = wntRows(state.wntData, state.stage);
+  setRows(wntRows(state.wntData, state.stage));
   populateRounds(state.rows);
   resolveSelection();
   syncUrl();
@@ -2218,16 +2438,28 @@ $('player-list').addEventListener('click', (e) => {
 // on re-render, never the element itself. Element.closest walks out of the
 // label's foreignObject into the SVG, so both lookups work from one event.
 $('graph').addEventListener('click', (e) => {
-  const span = e.target.closest('.pn1, .pn2');
-  if (!span) return;
-  const node = span.closest('g.node');
+  const node = e.target.closest('g.node');
   const m = node && (node.id || '').match(/[^A-Za-z0-9]M(\d+)(?![0-9])/);
   if (!m) return;
-  const row = state.rows.find(r => r.match_number === +m[1]);
-  if (!row) return;
-  const c = span.classList.contains('pn1') ? row.challenger1 : row.challenger2;
-  if (!c || !c.name) return;
-  select(state.player === c.name ? null : c.name, null);   // click again to clear
+  const num = +m[1];
+  // A name is a claim about one player, so it means that player.
+  const span = e.target.closest('.pn1, .pn2');
+  if (span) {
+    const row = state.rows.find(r => r.match_number === num);
+    const c = row && (span.classList.contains('pn1') ? row.challenger1 : row.challenger2);
+    if (c && c.name) {
+      select(state.player === c.name ? null : c.name, null);   // click again to clear
+      return;
+    }
+  }
+  // The number column and an empty slot are both about the match rather than
+  // about anyone in it, and what a match is waiting on is the only question it
+  // can answer on its own. Asked here rather than precomputed per node, because
+  // it is only ever asked of the one box that was actually clicked — the whole
+  // point of aiming at a target instead of at the box.
+  if (!e.target.closest('.nd-h, .nt-id, .pnd')) return;
+  if (!state.index || !owedTo(state.index, num).length) return;
+  select(null, null, state.waiting === num ? null : num);      // click again to clear
 });
 document.addEventListener('keydown', (e) => {
   // Escape closes the overlay from anywhere, including a click that moved focus
@@ -2259,11 +2491,23 @@ state.fromStage = Math.max(0, parseInt(params.get('from') || '0', 10) || 0);
 state.player = params.get('player') || null;
 state.country = (params.get('country') || '').toLowerCase() || null;
 state.stage = Math.max(0, parseInt(params.get('stage') || '0', 10) || 0);
+state.waiting = Math.max(0, parseInt(params.get('waiting') || '0', 10) || 0) || null;
 const wntSlug = params.get('wnt');
 state.source = wntSlug ? 'wnt' : 'digitalpool';
 const initial = wntSlug || params.get('digitalpool') || '';
 $('slug-input').value = initial;
-load(state.source, initial);
+// bracket-algo.js is this page's one dependency and it arrives as a plain
+// script, so nothing checks that it turned up. A browser holding an old copy of
+// it — which is easy to arrange, since a static server that sends no
+// Cache-Control leaves the freshness lifetime to the browser's imagination —
+// surfaces as "buildBracketIndex is not defined" thrown from inside a load,
+// naming neither the file nor the reason. Say it plainly instead.
+if (typeof buildBracketIndex !== 'function') {
+  setStatus('bracket-algo.js did not load, or the browser is holding an old copy. ' +
+    'Hard-reload the page (Cmd/Ctrl + Shift + R).', true);
+} else {
+  load(state.source, initial);
+}
 </script>
 </body>
 </html>
