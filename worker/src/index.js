@@ -359,7 +359,17 @@ export default {
       };
       if (env.WNT_SESSION) {
         const v = env.WNT_SESSION;
+        // A truncated digest of the secret, so a caller that holds a session
+        // can prove this Worker holds the SAME one. Length and prefix cannot:
+        // every session starts s%3A and two of them are often the same length,
+        // so a refresh that had not propagated yet would look identical to one
+        // that had — and since a just-replaced session is usually still valid,
+        // every other check here would pass on the old one too.
+        // Forty-eight bits identifies, and reverses to nothing.
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
         out.sessionShape = {
+          sha12: [...new Uint8Array(digest)].slice(0, 6)
+            .map((b) => b.toString(16).padStart(2, '0')).join(''),
           length: v.length,
           startsWith: v.slice(0, 4),
           looksUrlEncoded: v.includes('%3A'),

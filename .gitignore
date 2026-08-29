@@ -10,5 +10,7 @@ previews/gen/
 # once landed here as an untracked file, one `git add -A` from being published.
 .wnt-session*
 
-# wrangler's local state. Holds the Cloudflare account it last deployed to.
-worker/.wrangler/
+# wrangler's local state. Holds the Cloudflare account it last deployed to, and
+# it lands wherever wrangler was invoked from — worker/ usually, the repo root
+# when it was not — so match it anywhere rather than in the one place.
+.wrangler/
