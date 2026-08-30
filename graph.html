@@ -2578,10 +2578,21 @@ $('graph').addEventListener('click', (e) => {
   select(null, null, state.waiting === num ? null : num);      // click again to clear
 });
 document.addEventListener('keydown', (e) => {
-  // Escape closes the overlay from anywhere, including a click that moved focus
-  // off the input without closing it.
-  if (e.key === 'Escape' && $('search-overlay').classList.contains('open')) {
-    closeSearch();
+  // Escape backs out of whatever is on top: the search overlay first, then the
+  // highlight underneath it. Both from anywhere, including after a click has
+  // moved focus off the input.
+  if (e.key === 'Escape') {
+    if ($('search-overlay').classList.contains('open')) {
+      closeSearch();
+      return;
+    }
+    // Keyed off the clear button's own visibility rather than asking what is
+    // selected, so the key and the button can never disagree about whether
+    // there is anything to clear — and Escape stays inert when there is not.
+    if (!$('search-clear').hidden) {
+      select(null, null);
+      return;
+    }
     return;
   }
   // Same guard as index.html — "/" is a normal character while typing.
