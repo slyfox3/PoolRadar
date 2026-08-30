@@ -136,6 +136,7 @@ a:hover { text-decoration: underline; }
    A lighter blue than the app's usual #60a5fa on purpose: at 7px, next to
    #cbd5e1 text, a blue darker than its neighbours reads as grey. */
 #graph g.node .nd-tbl, #graph g.node .nt-tbl { color: #38bdf8 !important; }
+#graph g.node .nt-rt { color: #94a3b8 !important; }
 /* The scheduled time is the same blue turned down, and it used to get there
    with opacity: 0.75. Not on iOS Safari it did not. An element with an opacity
    below 1 gets its own stacking context, and WebKit composites a stacking
@@ -205,15 +206,22 @@ a:hover { text-decoration: underline; }
    the drop keep their own full-width rows and only the score is pulled out into
    a column of its own — which is all it takes to line the scores up down the
    node instead of letting each one float off the end of its name. */
-.nt { display: inline-grid; vertical-align: top; grid-template-columns: auto auto;
-  align-items: center; column-gap: 0; row-gap: 0; line-height: 1.25; text-align: left; }
-.nt-id { grid-column: 1 / -1; grid-row: 1; text-align: center; }
-.nt-p { grid-column: 1; white-space: nowrap; }
-.nt-s { grid-column: 2; text-align: right; white-space: nowrap; padding-left: 6px; }
-.nt-s:empty { padding-left: 0; }
-.nt-r1 { grid-row: 2; }
-.nt-r2 { grid-row: 3; }
-.nt-drop { grid-column: 1 / -1; grid-row: 4; text-align: center; }
+/* Flowing bottom to top the box is narrow and tall, so each fact takes a line
+   of its own: the number, the table or the time, a name, its rating, the score
+   between the two players, the other name, its rating, the drop. The box is
+   then as wide as the longest single name rather than as a name plus a score
+   sitting beside it.
+   One column in document order, so nothing is placed by hand and a row that is
+   not there simply does not appear — which is what the old grid needed a whole
+   second set of rules to fake whenever a table row pushed everything down. */
+.nt { display: inline-grid; vertical-align: top; grid-template-columns: auto;
+  justify-items: center; row-gap: 0; line-height: 1.25; text-align: center; }
+.nt-id { text-align: center; }
+.nt-p { white-space: nowrap; }
+/* A rating is a footnote to the name above it, not part of it. */
+.nt-rt { display: block; font-size: 0.85em; }
+.nt-sc { white-space: nowrap; }
+.nt-drop { text-align: center; }
 /* The table a match is being played on, under its number. In the stacked flow
    that is a row of its own, which pushes everything below it down one. */
 .nd-tbl, .nt-tbl { font-size: 0.9em; font-weight: 600; }
@@ -225,10 +233,7 @@ a:hover { text-decoration: underline; }
    the #graph block, which is where it had to move to. */
 .nd-tbl.tbl-when, .nt-tbl.tbl-when {
   font-size: 0.8em; font-weight: 400; white-space: nowrap; }
-.nt-tbl { grid-column: 1 / -1; grid-row: 2; text-align: center; }
-.nt.nt-t .nt-r1 { grid-row: 3; }
-.nt.nt-t .nt-r2 { grid-row: 4; }
-.nt.nt-t .nt-drop { grid-row: 5; }
+.nt-tbl { text-align: center; }
 /* Mermaid wraps the label in a <p>, whose default block margin would band the
    node top and bottom. Harmless for the stacked flow, which wants none either. */
 .nodeLabel p { margin: 0; }
@@ -301,7 +306,7 @@ a:hover { text-decoration: underline; }
     <select class="select-input" id="round-from"><option value="0">All stages</option></select>
   </span>
   <span class="tb-group"><span class="tb-label">Flow</span>
-    <button class="toggle-btn" data-dir="TB">&darr;</button>
+    <button class="toggle-btn" data-dir="BT">&uarr;</button>
     <button class="toggle-btn" data-dir="LR">&rarr;</button>
   </span>
   <span class="spacer"></span>
@@ -399,8 +404,11 @@ const QUERY = `query($s:String!){
 const $ = (id) => document.getElementById(id);
 const state = {
   // Left to right by default: a bracket is read along its rounds, and the
-  // columns leave room for full names.
-  dir: 'LR', fromStage: 0, player: null, waiting: null, rows: [], tournament: null,
+  // columns leave room for full names. Except on a phone, which is tall and
+  // narrow — the shape a stacked bracket wants and the opposite of what a
+  // left-to-right one needs, where every round costs another screen of
+  // sideways scrolling.
+  dir: window.innerWidth <= 768 ? 'BT' : 'LR', fromStage: 0, player: null, waiting: null, rows: [], tournament: null,
   source: 'digitalpool', slug: '',
   // WNT only. One event JSON holds every stage and one stage is drawn at a
   // time, so the fetch is kept and switching stages is just a re-render.
@@ -655,30 +663,6 @@ function mmEsc(s) {
     .replace(/[\[\]{}()<>|]/g, (c) => '#' + c.charCodeAt(0) + ';');
 }
 
-// First name where unique in the field, else first name + last initial.
-function buildShortNames(rows) {
-  const byFirst = new Map();
-  for (const r of rows) {
-    for (const c of [r.challenger1, r.challenger2]) {
-      if (!c) continue;
-      const first = c.name.trim().split(/\s+/)[0];
-      if (!byFirst.has(first)) byFirst.set(first, new Set());
-      byFirst.get(first).add(c.name);
-    }
-  }
-  const out = new Map();
-  for (const r of rows) {
-    for (const c of [r.challenger1, r.challenger2]) {
-      if (!c || out.has(c.name)) continue;
-      const parts = c.name.trim().split(/\s+/);
-      const first = parts[0], last = parts[parts.length - 1];
-      const shared = byFirst.get(first).size > 1;
-      out.set(c.name, shared && last !== first ? `${first} ${last.charAt(0)}.` : first);
-    }
-  }
-  return out;
-}
-
 // "Table 5" and "5" both read as T5; anything that is not a plain number is
 // left as the source wrote it, since it is a name rather than a number.
 function tableLabel(name) {
@@ -718,7 +702,7 @@ function timeLabel(r) {
 // a selection can be painted by injecting one stylesheet rule instead of
 // rebuilding the diagram — the label itself never mentions who is selected, and
 // that is what keeps the whole source selection-independent.
-function nodeLabel(r, short, idx, dropTo, wide, pid) {
+function nodeLabel(r, idx, dropTo, wide, pid) {
   const decided = !!(r.challenger1_is_winner || r.challenger2_is_winner);
   // An empty slot is waiting on a specific match, so name it rather than
   // printing TBD twice. Feeders that already have a winner have delivered
@@ -761,14 +745,23 @@ function nodeLabel(r, short, idx, dropTo, wide, pid) {
     // nothing at all on the DigitalPool side, which carries no country. It is
     // markup, so it is built outside mmEsc, which would escape it.
     const flag = flagHtml(c);
-    const nm = mmEsc(c.name + (c.skill_level ? ' (' + c.skill_level + ')' : ''));
+    // Left to right the rating rides on the name, because width is cheap in a
+    // column layout. Stacked it drops to a line of its own, which is the whole
+    // point of that shape: the box ends up as wide as the longest name and no
+    // wider. Kept inside the player's span either way, so a selection still
+    // paints all of it.
+    const rt = c.skill_level ? mmEsc('(' + c.skill_level + ')') : '';
+    const nm = mmEsc(c.name);
     const sc = score == null ? '' : ' ' + score;
     // The winner is always gold. What a selection changes is handled in CSS:
     // inside a lit node every bold name is muted back except the selected
     // player's, so the two can still never be confused, and a selected player
     // who lost is turned red by the same injected rule. how says which of those
     // a name is; pl-N says whose it is.
-    const body = won ? '<b>' + nm + '</b>' : nm;
+    const named = won ? '<b>' + nm + '</b>' : nm;
+    const body = wide
+      ? (rt ? (won ? '<b>' + nm + ' ' + rt + '</b>' : nm + ' ' + rt) : named)
+      : named + (rt ? "<span class='nt-rt'>" + rt + '</span>' : '');
     const how = won ? 'won' : (decided ? 'lost' : 'open');
     // Single-quoted attribute: the label itself is delimited by double quotes,
     // which is why mmEsc strips them from the text in the first place.
@@ -816,11 +809,17 @@ function nodeLabel(r, short, idx, dropTo, wide, pid) {
       "<span class='nd-p nd-r2'>" + p2.name + "</span><span class='nd-s nd-r2'>" + p2.score.trim() + '</span>' +
       '</span>';
   }
-  // nt-t shifts the player and drop rows down to make room for the table row.
-  return "<span class='nt" + (table ? ' nt-t' : '') + "'>" +
+  // One score line between the two names rather than a figure trailing each of
+  // them: stacked, the pair reads as a result — 3 : 0 — where two right-aligned
+  // numbers in a second column only widened the box to say the same thing.
+  const sc1 = r.challenger1_score, sc2 = r.challenger2_score;
+  const scoreLine = (sc1 != null || sc2 != null)
+    ? "<span class='nt-sc'>" + mmEsc((sc1 == null ? '' : sc1) + ' : ' + (sc2 == null ? '' : sc2)) + '</span>'
+    : '';
+  return "<span class='nt'>" +
     "<span class='nt-id'>" + id + '</span>' + table +
-    "<span class='nt-p nt-r1'>" + p1.name + "</span><span class='nt-s nt-r1'>" + p1.score.trim() + '</span>' +
-    "<span class='nt-p nt-r2'>" + p2.name + "</span><span class='nt-s nt-r2'>" + p2.score.trim() + '</span>' +
+    "<span class='nt-p'>" + p1.name + '</span>' + scoreLine +
+    "<span class='nt-p'>" + p2.name + '</span>' +
     (drop ? "<span class='nt-drop'>" + drop + '</span>' : '') +
     '</span>';
 }
@@ -1031,7 +1030,6 @@ function buildDiagram(rows, dir, fromStage) {
   // every name can be given in full — an empty map is the whole switch, since
   // the lookup already falls back to the full name.
   const wide = dir === 'LR' || dir === 'RL';
-  const short = wide ? new Map() : buildShortNames(rows);
   const pids = new Map();
   const pid = (name) => {
     if (!pids.has(name)) pids.set(name, pids.size);
@@ -1160,7 +1158,7 @@ function buildDiagram(rows, dir, fromStage) {
       const label = rLabel.get(k) || roundName(k, rCount.get(k) || 0, singleElim);
       sgIds.push(id);
       lines.push(`${pad}subgraph ${id}["${label}"]`);
-      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, short, idx, dropTo.get(r.match_number), wide, pid)}"]`);
+      for (const r of byRound.get(k) || []) lines.push(`${pad}  M${r.match_number}["${nodeLabel(r, idx, dropTo.get(r.match_number), wide, pid)}"]`);
       lines.push(`${pad}end`);
     }
     if (wrap) lines.push('  end');
@@ -1189,9 +1187,16 @@ function buildDiagram(rows, dir, fromStage) {
   for (const id of stageIds) lines.push(`  style ${id} fill:none,stroke:none`);
 
   const drawn = links.filter(l => !l.ghost).length;
+  // Which paths in the SVG are the invisible round-1 links. They exist only to
+  // give dagre something to rank against, and Mermaid draws them with no
+  // stroke — but a stroke is exactly what dimming adds, so without this a
+  // selection makes the alignment scaffolding appear as edges out of Winners
+  // R1 that the bracket deliberately never draws.
+  const ghostKeys = new Set(
+    links.filter(l => l.ghost).map(l => 'M' + l.from + '|M' + l.to));
   // keep and hop are handed out so applySelection can work out a run without
   // recomputing the cut or re-walking the byes.
-  return { src: lines.join('\n'), nodes: keep.size, keep, hop, byNum, pid: pids,
+  return { src: lines.join('\n'), nodes: keep.size, keep, hop, byNum, pid: pids, ghostKeys,
     cost: { links: links.length, drawn, ghosts: links.length - drawn } };
 }
 
@@ -1338,7 +1343,7 @@ function applySelection(sel, opts) {
   }
   $('sel-style').textContent = css;
 
-  drawRuns(runs, state.dir, !!sel);
+  drawRuns(runs, state.dir, !!sel, d.ghostKeys);
   // A waiting route is counted by what it is blocked on rather than by how much
   // of the bracket it covers, which is the only thing anyone wants to know
   // about it — "seven matches, two of them playable now".
@@ -1347,9 +1352,16 @@ function applySelection(sel, opts) {
       ? `${sel.label}: ${nodes.size} match${nodes.size === 1 ? '' : 'es'} back, ` +
         `${ready.size} ready to play`
       : `${sel.label}: ${nodes.size} match${nodes.size === 1 ? '' : 'es'} shown of ${d.nodes}`;
-  if (opts && opts.centre && focus != null) {
-    const el = findNodeEl('M' + focus);
-    if (el) centerOn(el);
+  if (opts && opts.centre) {
+    if (focus != null) {
+      const el = findNodeEl('M' + focus);
+      if (el) centerOn(el);
+    } else {
+      // Instant rather than smooth: this is where the page opens, and animating
+      // the first paint from the corner of a four-hundred-match bracket is a
+      // long slide past everything the reader did not ask to see.
+      centerOnNodes(actionNodes(), false);
+    }
   }
 }
 
@@ -1799,8 +1811,9 @@ function buried(sx, sy, dx, dy, lane, vert, boxes) {
 // selection never costs a relayout.
 //
 // dim says whether the rest of the diagram should fall back — it should when
-// something is selected, and not when the selection was just cleared.
-function drawRuns(runs, dir, dim) {
+// something is selected, and not when the selection was just cleared. ghosts
+// are the invisible round-1 links, which must be neither lit nor dimmed.
+function drawRuns(runs, dir, dim, ghosts) {
   try {
     const root = $('graph');
     const all = [...root.querySelectorAll('path[data-id]')];
@@ -1811,6 +1824,12 @@ function drawRuns(runs, dir, dim) {
     for (const p of all) {
       const m = (p.getAttribute('data-id') || '').match(EDGE_ID);
       const key = m ? m[1] + '|' + m[2] : null;
+      // A ghost is left strictly alone. Lighting one would draw a step the
+      // bracket omits on purpose, and dimming one hands a stroke to a link that
+      // is meant to have none — which is how selecting anything used to make
+      // the round-1 scaffolding appear as edges into Winners R2. A real run
+      // between the same two matches is still drawn, as a clone below.
+      if (key && ghosts && ghosts.has(key)) continue;
       if (key && want.has(key)) {
         p.classList.add('is-run');
         seen.add(key);
@@ -1852,6 +1871,9 @@ function drawRuns(runs, dir, dim) {
     }
 
     const vert = dir !== 'LR' && dir !== 'RL';
+    // Bottom to top: downstream is upwards, so every comparison below that
+    // assumes the destination sits lower has to be turned around.
+    const up = dir === 'BT';
     const face = (bx) => vert ? bx.x1 - bx.x0 : bx.y1 - bx.y0;
     // One selected player's run is a chain, so each face carries a single
     // highlighted edge and there is nothing to spread. A delegation is not: a
@@ -1900,7 +1922,12 @@ function drawRuns(runs, dir, dim) {
       if (vert) {
         sx = at(S.x0, S.x1, oi, og.length, dcx - scx);
         dx = at(D.x0, D.x1, ii, ig.length, scx - dcx);
-        sy = S.y1; dy = D.y0 - ARROWHEAD;
+        // Flowing upwards turns the construction over: the edge leaves the
+        // source's top face and arrives at the destination's bottom, and the
+        // arrowhead overhang is added rather than subtracted so the tip still
+        // lands on the border instead of inside the box.
+        sy = up ? S.y0 : S.y1;
+        dy = up ? D.y1 + ARROWHEAD : D.y0 - ARROWHEAD;
         lo = sy; hi = dy;
       } else {
         sy = at(S.y0, S.y1, oi, og.length, dcy - scy);
@@ -1911,7 +1938,9 @@ function drawRuns(runs, dir, dim) {
       // Not comfortably downstream — a same-rank or backwards edge is not the
       // case this was written for, so leave Mermaid's own path in place. One we
       // drew ourselves has no path to fall back on, so it gets a straight line.
-      if (![sx, sy, dx, dy].every(Number.isFinite) || !(hi - lo > 8)) {
+      // Distance rather than sign: flowing up, hi is above lo and the old
+      // test rejected every edge in the diagram.
+      if (![sx, sy, dx, dy].every(Number.isFinite) || !(Math.abs(hi - lo) > 8)) {
         if (p.classList.contains('is-added') && [sx, sy, dx, dy].every(Number.isFinite)) {
           p.setAttribute('d', `M${n(sx)},${n(sy)} L${n(dx)},${n(dy)}`);
           done++;
@@ -1963,6 +1992,52 @@ function centerOn(el) {
   const x = er.left + window.scrollX + er.width / 2 - window.innerWidth / 2;
   const y = er.top + window.scrollY + er.height / 2 - window.innerHeight / 2;
   window.scrollTo({ left: Math.max(0, x), top: Math.max(0, y), behavior: 'smooth' });
+}
+
+// Bring a whole set of matches into view rather than one, because what is being
+// played is usually several matches at once and centring on an arbitrary member
+// of a round puts the rest of it off screen. One pass over the nodes: looking
+// each up would be a scan of the diagram per match.
+function centerOnNodes(nums, smooth) {
+  const want = new Set(nums.map(n => 'M' + n));
+  if (!want.size) return false;
+  let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+  for (const g of $('graph').querySelectorAll('g.node')) {
+    const m = (g.id || '').match(NODE_ID);
+    if (!m || !want.has(m[1])) continue;
+    const q = g.getBoundingClientRect();
+    l = Math.min(l, q.left); t = Math.min(t, q.top);
+    r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+  }
+  if (!Number.isFinite(l)) return false;
+  window.scrollTo({
+    left: Math.max(0, l + window.scrollX + (r - l) / 2 - window.innerWidth / 2),
+    top: Math.max(0, t + window.scrollY + (b - t) / 2 - window.innerHeight / 2),
+    behavior: smooth ? 'smooth' : 'auto',
+  });
+  return true;
+}
+
+// Where the tournament actually is, for a reader who has selected nothing.
+// Opening at the top-left corner shows the end of the draw — flowing bottom to
+// top that is the final, of an event that may not have started. What is being
+// played is the answer; failing that the match due next; failing that the final,
+// because the event is over and that is the thing worth arriving at.
+function actionNodes() {
+  const d = state.diagram;
+  if (!d) return [];
+  const kept = state.rows.filter(r => !r.is_bye && d.keep.has(r.match_number));
+  const live = kept.filter(r => r.status === 'IN_PROGRESS');
+  if (live.length) return live.map(r => r.match_number);
+  const key = (r) => stageOf(r.round) * 1000 + r.match_number;
+  const todo = kept.filter(r => r.status !== 'COMPLETED');
+  if (todo.length) return [todo.reduce((a, b) => (key(b) < key(a) ? b : a)).match_number];
+  // Everything is played, so the end of the draw is what to arrive at — the
+  // deepest match by the same ordering a run uses. Not "the one with nowhere to
+  // send its winner": a qualifying stage has sixty-four of those, because its
+  // winners advance out of the stage rather than within it, and picking one of
+  // them lands you at an arbitrary corner of round four.
+  return kept.length ? [kept.reduce((a, b) => (key(b) > key(a) ? b : a)).match_number] : [];
 }
 
 // Lays the bracket out. This is the expensive one — Mermaid is about five
