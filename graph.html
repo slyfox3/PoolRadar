@@ -1227,6 +1227,23 @@ const owedTo = (idx, n) => (idx.rev[n] || []).filter((f) => {
   return s && !s.p1Won && !s.p2Won;
 });
 
+// What a match is actually still waiting for.
+//
+// Not the same as owedTo, because a draw can seat a player in a match before
+// the match that would send them there has been played: L3-1 of the Saturday
+// night bracket reads "Dunn v John Kim" while L2-2, which is John Kim against
+// Devon Epperson, has not started. Both slots are filled, so nothing is owed —
+// but its feeder is undecided, and asking the feeders alone would have traced
+// a route into a match that is ready to play and drawn an edge into a slot
+// that is not empty.
+//
+// Occupancy is the authority: two players means ready, whatever the feeders say.
+const awaiting = (idx, n) => {
+  const r = idx.byNum[n];
+  if (!r || (r.p1 && r.p2)) return [];
+  return owedTo(idx, n);
+};
+
 function waitingRoute(idx, from) {
   const nodes = new Set(), edges = [], ready = new Set();
   if (!idx || !idx.byNum[from]) return { nodes, edges, ready };
@@ -1235,7 +1252,7 @@ function waitingRoute(idx, from) {
   while (queue.length) {
     const n = queue.shift();
     nodes.add(n);
-    const owed = owedTo(idx, n);
+    const owed = awaiting(idx, n);
     if (!owed.length) { ready.add(n); continue; }
     for (const f of owed) {
       edges.push([f.num, n]);
@@ -1840,7 +1857,17 @@ function drawRuns(runs, dir, dim, ghosts) {
     }
     // Whatever is left has no path of its own. Clone one so the arrow marker
     // and the layer come with it, then give it our own shape below.
-    const proto = all[0];
+    //
+    // Never clone a ghost. A ~~~ link is drawn without a marker-end, so a clone
+    // of one arrives with no arrowhead — and ghosts are emitted before the real
+    // edges, which made all[0] reliably the one path in the diagram that could
+    // not lend an arrow. That is why the drop from W3-1 to L4-1 had none.
+    const isGhost = (p) => {
+      const m = (p.getAttribute('data-id') || '').match(EDGE_ID);
+      return !!(m && ghosts && ghosts.has(m[1] + '|' + m[2]));
+    };
+    const proto = all.find(p => !isGhost(p) && p.getAttribute('marker-end'))
+      || all.find(p => !isGhost(p)) || all[0];
     for (const [key, [a, b]] of want) {
       if (seen.has(key)) continue;
       const p = proto.cloneNode(false);
@@ -2547,7 +2574,7 @@ $('graph').addEventListener('click', (e) => {
   // it is only ever asked of the one box that was actually clicked — the whole
   // point of aiming at a target instead of at the box.
   if (!e.target.closest('.nd-h, .nt-id, .pnd')) return;
-  if (!state.index || !owedTo(state.index, num).length) return;
+  if (!state.index || !awaiting(state.index, num).length) return;
   select(null, null, state.waiting === num ? null : num);      // click again to clear
 });
 document.addEventListener('keydown', (e) => {
