@@ -136,7 +136,11 @@ a:hover { text-decoration: underline; }
    A lighter blue than the app's usual #60a5fa on purpose: at 7px, next to
    #cbd5e1 text, a blue darker than its neighbours reads as grey. */
 #graph g.node .nd-tbl, #graph g.node .nt-tbl { color: #38bdf8 !important; }
-#graph g.node .nt-rt { color: #94a3b8 !important; }
+/* The quiet grey a rating reads in when nothing has singled it out. It sits on
+   the rating span, so the <b> a winner's rating is wrapped in is untouched and
+   the gold rules below still reach it — and the selection rule, which carries
+   more specificity than this, still turns a picked loser's rating red. */
+#graph g.node .nt-rt, #graph g.node .nt-rtsep { color: #94a3b8 !important; }
 /* The scheduled time is the same blue turned down, and it used to get there
    with opacity: 0.75. Not on iOS Safari it did not. An element with an opacity
    below 1 gets its own stacking context, and WebKit composites a stacking
@@ -202,26 +206,37 @@ a:hover { text-decoration: underline; }
 .nd-r1 { grid-row: 1; }
 .nd-r2 { grid-row: 2; }
 
-/* Flowing top to bottom the box stays tall and narrow, so the match number and
-   the drop keep their own full-width rows and only the score is pulled out into
-   a column of its own — which is all it takes to line the scores up down the
-   node instead of letting each one float off the end of its name. */
-/* Flowing bottom to top the box is narrow and tall, so each fact takes a line
-   of its own: the number, the table or the time, a name, its rating, the score
-   between the two players, the other name, its rating, the drop. The box is
-   then as wide as the longest single name rather than as a name plus a score
-   sitting beside it.
-   One column in document order, so nothing is placed by hand and a row that is
-   not there simply does not appear — which is what the old grid needed a whole
-   second set of rules to fake whenever a table row pushed everything down. */
-.nt { display: inline-grid; vertical-align: top; grid-template-columns: auto;
-  justify-items: center; row-gap: 0; line-height: 1.25; text-align: center; }
-.nt-id { text-align: center; }
-.nt-p { white-space: nowrap; }
-/* A rating is a footnote to the name above it, not part of it. */
-.nt-rt { display: block; font-size: 0.85em; }
-.nt-sc { white-space: nowrap; }
-.nt-drop { text-align: center; }
+/* Flowing top to bottom or bottom to top the box is narrow and tall, so most of
+   what a match has to say takes a full-width row of its own: the number, the
+   table or the time, the pair of ratings, the drop. Two things do not. The
+   score goes in a column beside the name, which is what lines both scores up
+   down the right-hand side instead of leaving each to float off the end of a
+   name of its own length; and the two ratings share one row between the names,
+   which is a row saved and reads as the matchup it describes.
+   Two tracks, everything full-width spanning both, and the player rows placed
+   by ordinary auto-flow — so a row that is not there simply does not appear,
+   which is what the old grid needed a second set of rules to fake whenever a
+   table row pushed everything down. */
+.nt { display: inline-grid; vertical-align: top;
+  grid-template-columns: auto auto; align-items: center;
+  row-gap: 0; column-gap: 0; line-height: 1.25; text-align: left; }
+.nt-id, .nt-tbl, .nt-rts, .nt-drop { grid-column: 1 / -1; }
+.nt-id, .nt-tbl, .nt-drop { text-align: center; }
+.nt-p { grid-column: 1; white-space: nowrap; }
+/* Emitted even when empty, so the second player's name and score cannot slide
+   up into the first one's row. The gutter is padding on the cell rather than
+   the grid's column-gap, which charges for the track whether or not there is
+   anything in it — that would leave every undecided match with a dead strip
+   down its right-hand edge. */
+.nt-s { grid-column: 2; text-align: right; white-space: nowrap; padding-left: 10px; }
+.nt-s:empty { padding-left: 0; }
+/* Both ratings on the one line, in the order the names are stacked: left is the
+   player above it, right the player below. Each half carries its own player's
+   classes rather than the row carrying one set for both, which is what lets the
+   winner's gold and a selection's colours land on a rating exactly when they
+   land on that player's name — and on that half of the line alone. */
+.nt-rts { white-space: nowrap; }
+.nt-rt, .nt-rtsep { font-size: 0.85em; }
 /* The table a match is being played on, under its number. In the stacked flow
    that is a row of its own, which pushes everything below it down one. */
 .nd-tbl, .nt-tbl { font-size: 0.9em; font-weight: 600; }
@@ -233,7 +248,6 @@ a:hover { text-decoration: underline; }
    the #graph block, which is where it had to move to. */
 .nd-tbl.tbl-when, .nt-tbl.tbl-when {
   font-size: 0.8em; font-weight: 400; white-space: nowrap; }
-.nt-tbl { text-align: center; }
 /* Mermaid wraps the label in a <p>, whose default block margin would band the
    node top and bottom. Harmless for the stacked flow, which wants none either. */
 .nodeLabel p { margin: 0; }
@@ -730,8 +744,9 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
     return f;
   };
   // slot is 1 or 2 — the wrapper is what lets a delegated click tell which of
-  // the two players in a node was clicked. Name and score come back apart, so
-  // the two flows can put them on one line or in two columns.
+  // the two players in a node was clicked. Name, score and rating come back
+  // apart, so the two flows can put them on one line, in two columns, or — the
+  // ratings — on a shared row of their own.
   const line = (c, score, won, slot) => {
     if (!c) {
       const f = takeFeeder(slot);
@@ -742,7 +757,7 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
       // walk rather than being inert.
       const t = !f ? "<i class='pnd'>TBD</i>"
         : "<i class='pnd'>" + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.num)) + '</i>';
-      return { name: t, score: '' };
+      return { name: t, score: '', rating: '' };
     }
     // A flag on every name, in both flows — an international field reads by
     // nationality as much as by name. Costs about a character of node width and
@@ -750,10 +765,9 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
     // markup, so it is built outside mmEsc, which would escape it.
     const flag = flagHtml(c);
     // Left to right the rating rides on the name, because width is cheap in a
-    // column layout. Stacked it drops to a line of its own, which is the whole
-    // point of that shape: the box ends up as wide as the longest name and no
-    // wider. Kept inside the player's span either way, so a selection still
-    // paints all of it.
+    // column layout. Stacked it leaves the name entirely and goes on the shared
+    // ratings row, which is the whole point of that shape: the box ends up as
+    // wide as the longest name and no wider.
     const rt = c.skill_level ? mmEsc('(' + c.skill_level + ')') : '';
     const nm = mmEsc(c.name);
     const sc = score == null ? '' : ' ' + score;
@@ -765,13 +779,22 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
     const named = won ? '<b>' + nm + '</b>' : nm;
     const body = wide
       ? (rt ? (won ? '<b>' + nm + ' ' + rt + '</b>' : nm + ' ' + rt) : named)
-      : named + (rt ? "<span class='nt-rt'>" + rt + '</span>' : '');
+      : named;
     const how = won ? 'won' : (decided ? 'lost' : 'open');
     // Single-quoted attribute: the label itself is delimited by double quotes,
     // which is why mmEsc strips them from the text in the first place.
+    const own = 'pn' + slot + ' ' + how + ' pl-' + pid(c.name);
+    // The rating gets the player's own classes, not the ratings row's — that is
+    // what makes it colour with the name it belongs to and not with the other
+    // half of the line. Wrapped in <b> when they won for the same reason the
+    // name is: gold is a rule on <b>, so the two arrive at it the same way, and
+    // the mute-inside-a-lit-node and selected-player rules follow for free.
     return {
-      name: "<span class='pn" + slot + ' ' + how + ' pl-' + pid(c.name) + "'>" + flag + body + '</span>',
+      name: "<span class='" + own + "'>" + flag + body + '</span>',
       score: sc,
+      rating: rt
+        ? "<span class='" + own + " nt-rt'>" + (won ? '<b>' + rt + '</b>' : rt) + '</span>'
+        : '',
     };
   };
   const id = mmEsc(r.identifier || ('#' + r.match_number));
@@ -813,17 +836,27 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
       "<span class='nd-p nd-r2'>" + p2.name + "</span><span class='nd-s nd-r2'>" + p2.score.trim() + '</span>' +
       '</span>';
   }
-  // One score line between the two names rather than a figure trailing each of
-  // them: stacked, the pair reads as a result — 3 : 0 — where two right-aligned
-  // numbers in a second column only widened the box to say the same thing.
-  const sc1 = r.challenger1_score, sc2 = r.challenger2_score;
-  const scoreLine = (sc1 != null || sc2 != null)
-    ? "<span class='nt-sc'>" + mmEsc((sc1 == null ? '' : sc1) + ' : ' + (sc2 == null ? '' : sc2)) + '</span>'
+  // The two ratings on one row between the names. Only drawn when at least one
+  // player has a rating, and the missing half of a pair keeps its place as a
+  // dash — the row's whole claim is that the left figure belongs to the name
+  // above and the right one to the name below, and a single unlabelled number
+  // floating there would say neither.
+  // A literal en dash rather than an entity: Mermaid reads "#nnn;" inside a
+  // label as a character code of its own, so "&#8211;" would come out as an
+  // ampersand followed by the dash.
+  const dash = "<span class='nt-rt'>–</span>";
+  const rts = (p1.rating || p2.rating)
+    ? "<span class='nt-rts'>" + (p1.rating || dash) +
+      "<span class='nt-rtsep'> / </span>" + (p2.rating || dash) + '</span>'
     : '';
+  // The score cells are emitted whether or not there is a number in them: they
+  // are what holds the second column open, and an omitted one would let the
+  // next name auto-place into the row above.
   return "<span class='nt'>" +
     "<span class='nt-id'>" + id + '</span>' + table +
-    "<span class='nt-p'>" + p1.name + '</span>' + scoreLine +
-    "<span class='nt-p'>" + p2.name + '</span>' +
+    "<span class='nt-p'>" + p1.name + "</span><span class='nt-s'>" + p1.score.trim() + '</span>' +
+    rts +
+    "<span class='nt-p'>" + p2.name + "</span><span class='nt-s'>" + p2.score.trim() + '</span>' +
     (drop ? "<span class='nt-drop'>" + drop + '</span>' : '') +
     '</span>';
 }
