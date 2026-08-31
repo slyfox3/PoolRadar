@@ -2103,23 +2103,32 @@ function drawRuns(runs, dir, dim, ghosts, split) {
     // that travels far enough sideways to want it.
     let allBoxes = null;
 
-    // A drop out of a LATER winners round is, in split view, the one edge that
-    // does not advance the flow. Round one's drop is a step to the rank below
-    // and is drawn like anything else; a drop out of W3 has to get back across
-    // round one and the whole of the losers side above its target, so drawn
-    // along the flow axis it is a line straight through the middle. Routed on
-    // the orthogonal axis instead — out of one face, around the outside, back
-    // into the SAME face at the other end — it reads as the aside it is and
-    // crosses nothing.
+    // In split view the two sides grow apart, so any edge crossing between them
+    // has to come back across everything in between. Drawn along the flow axis
+    // that is a line straight through the middle of the diagram. Routed on the
+    // orthogonal axis instead — out of one face, around the outside, back into
+    // the SAME face at the other end — it reads as the aside it is and crosses
+    // nothing.
+    //
+    // Two kinds cross: a drop out of a later winners round, W3 down to L4, and
+    // the losers champion's promotion back up into the grand final, L6-1 to
+    // W5-1. Neither is emitted, so both arrive here as clones on a highlighted
+    // run; both have to get past round one and most of one column to land.
+    //
+    // Round one's own drop is the exception and is drawn like anything else. It
+    // is a step to the adjacent rank — it IS the join between the two sides,
+    // not a detour around them.
     //
     // Only in split view. In the plain flows the losers side climbs alongside
-    // the winners, so that drop advances like any other edge and the lane
-    // search below already handles it.
+    // the winners, so these advance like any other edge and the lane search
+    // below already handles them.
     const rowOf = (id) => state.index && state.index.byNum[parseInt(id.slice(1), 10)];
     const aside = (a, b) => {
       if (!split) return false;
       const S2 = rowOf(a), D2 = rowOf(b);
-      return !!(S2 && D2 && S2.round > 1 && D2.round < 0);
+      if (!S2 || !D2) return false;
+      const crosses = (S2.round > 0) !== (D2.round > 0);
+      return crosses && S2.round !== 1;
     };
 
     const n = (v) => Math.round(v * 100) / 100;
