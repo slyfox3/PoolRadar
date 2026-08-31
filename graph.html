@@ -1857,7 +1857,14 @@ function findNodeEl(mid) {
 // Mermaid's pointEnd marker is 8 user units wide with its reference point in
 // the middle, so its tip overhangs the path's last point by 4. Stopping that
 // far short puts the tip on the border instead of inside the box.
-const ARROWHEAD = 4;
+// Nothing, now that seatArrowheads() re-anchors every marker on its own apex:
+// a path that stops on the border puts its tip on the border. It was 4 — the
+// distance Mermaid's own anchoring throws the apex past the end of the path —
+// and the runs drawn below stopped that far short to compensate. Kept as a
+// named constant rather than deleted, because it is the one number that has to
+// agree with the refX values over there, and a bare 0 in six expressions would
+// not say so.
+const ARROWHEAD = 0;
 // How far outside everything it crosses a sidelong drop is routed, in split
 // view. Big enough to read as a deliberate detour rather than a line grazing
 // the boxes.
@@ -1931,6 +1938,32 @@ function buried(sx, sy, dx, dy, lane, vert, boxes) {
 // correct node, with nothing drawn by hand and no dependency on how the theme
 // colours it. The original is kept on the element because drawRuns redraws a
 // highlighted run source-to-destination and has to put the marker back.
+// Mermaid anchors an arrowhead at the middle of its marker box: pointEnd's apex
+// sits at the far edge of a 10-wide viewBox but refX is 5, so the tip is thrown
+// four user units past the end of the path — which is to say four units inside
+// the node the edge arrives at. Nodes paint after edges, so what survives is
+// about half an arrowhead, and on a box with a solid fill that reads as an edge
+// that stops short rather than one that arrives.
+//
+// Re-anchoring each marker on its own apex — refX 10 for the end marker, whose
+// apex is at x=10, refX 0 for the start marker, whose apex is at x=0 — puts the
+// tip exactly on the border with the whole head outside it. Both of them, so a
+// backwards-emitted edge and an ordinary one meet a box the same way.
+//
+// The markers are per-diagram (Mermaid prefixes their ids with the diagram id)
+// and the SVG is rebuilt on every render, so editing them in place cannot leak
+// into anything else. The -margin variants are left alone: nothing here uses
+// them, and they are anchored for a different job.
+function seatArrowheads(root) {
+  let n = 0;
+  for (const m of root.querySelectorAll('marker')) {
+    const id = m.getAttribute('id') || '';
+    if (/-pointEnd$/.test(id)) { m.setAttribute('refX', '10'); n++; }
+    else if (/-pointStart$/.test(id)) { m.setAttribute('refX', '0'); n++; }
+  }
+  return n;
+}
+
 function fixFlippedArrows(root, flipKeys) {
   if (!flipKeys || !flipKeys.size) return 0;
   let n = 0;
@@ -2315,6 +2348,7 @@ async function render(quiet) {
       $('graph').innerHTML = svg;
       // Before anything measures or paints: the swap is per-path and the
       // selection layer below reads these same elements.
+      seatArrowheads($('graph'));
       fixFlippedArrows($('graph'), d.flipKeys);
       state.src = d.src;
       applyZoom();               // the diagram is new; the zoom is the reader's
