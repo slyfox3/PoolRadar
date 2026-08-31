@@ -306,8 +306,10 @@ a:hover { text-decoration: underline; }
     <select class="select-input" id="round-from"><option value="0">All stages</option></select>
   </span>
   <span class="tb-group"><span class="tb-label">Flow</span>
-    <button class="toggle-btn" data-dir="BT">&uarr;</button>
-    <button class="toggle-btn" data-dir="LR">&rarr;</button>
+    <button class="toggle-btn" data-dir="BT" data-split="1" title="Split, bottom to top">&varr;</button>
+    <button class="toggle-btn" data-dir="LR" data-split="1" title="Split, left to right">&harr;</button>
+    <button class="toggle-btn" data-dir="BT" data-split="0" title="Bottom to top">&uarr;</button>
+    <button class="toggle-btn" data-dir="LR" data-split="0" title="Left to right">&rarr;</button>
   </span>
   <span class="spacer"></span>
   <span class="sub" id="counts"></span>
@@ -408,7 +410,9 @@ const state = {
   // narrow — the shape a stacked bracket wants and the opposite of what a
   // left-to-right one needs, where every round costs another screen of
   // sideways scrolling.
-  dir: window.innerWidth <= 768 ? 'BT' : 'LR', fromStage: 0, player: null, waiting: null, rows: [], tournament: null,
+  // Split is the default on both: it is the shape a printed wall chart has,
+  // and the plain flows are kept for reading one side on its own.
+  dir: window.innerWidth <= 768 ? 'BT' : 'LR', split: true, fromStage: 0, player: null, waiting: null, rows: [], tournament: null,
   source: 'digitalpool', slug: '',
   // WNT only. One event JSON holds every stage and one stage is drawn at a
   // time, so the fetch is kept and switching stages is just a re-render.
@@ -1021,7 +1025,7 @@ function setRows(rows) {
   state.keep = new Map();
 }
 
-function buildDiagram(rows, dir, fromStage) {
+function buildDiagram(rows, dir, fromStage, split) {
   const idx = state.index;
   const byNum = new Map(rows.map(r => [r.match_number, r]));
   // Node width is the crowded dimension only in a top-down flow, where every
@@ -1069,12 +1073,28 @@ function buildDiagram(rows, dir, fromStage) {
   // the clearest part of the diagram rather than noise, and needs no ghosts.
   const edges = [];
   for (const r of rows) {
-    if (!keep.has(r.match_number) || (!singleElim && r.round === 1)) continue;
+    if (!keep.has(r.match_number)) continue;
+    // Split view draws round one's own edges, so it does not need the ghosts
+    // that stood in for them and must not be skipped here.
+    if (!split && !singleElim && r.round === 1) continue;
     for (const [dest, kind] of [[r.winner_to_num, 'W'], [r.loser_to_num, 'L']]) {
-      if (kind === 'L' && r.round > 0) continue; // shown as a label footnote
+      // Split view keeps round one's drop: it is the only honest way to tie the
+      // two sides of the draw together at the bottom, which is what a wall
+      // chart does. Later drops stay footnotes in both views, because those
+      // cross the whole diagram.
+      if (kind === 'L' && r.round > (split ? 1 : 0)) continue;
       const d = hop(dest);
       if (!d || !keep.has(d)) continue;
-      edges.push({ from: r, to: byNum.get(d), kind });
+      const to = byNum.get(d);
+      // Split view also cuts the losers final's promotion into the grand final,
+      // the one edge joining the two columns at the top. Cut it and each side
+      // runs straight up its own column the way a printed chart does; they meet
+      // at the bottom instead, through round one, which is where the draw
+      // actually splits. Nothing is lost from the reading — the grand final
+      // still names what it is waiting on, and that comes from the index rather
+      // than from the edges that happen to be drawn.
+      if (split && kind === 'W' && r.round < 0 && to.round > 0) continue;
+      edges.push({ from: r, to, kind });
     }
   }
 
@@ -1089,7 +1109,48 @@ function buildDiagram(rows, dir, fromStage) {
   // drawn, so it only has to hold the layout.
   const asc = (a, b) => a.match_number - b.match_number;
   const ghosts = [];
-  if (!singleElim) {
+  if (split) {
+    // Split view needs none of the above: round one draws its own edges, so
+    // dagre ranks those nodes and the structure decides the sides by itself.
+    //
+    // It has one problem of its own though. Round one is the ONLY thing joining
+    // the two sides — its drops are the only edges crossing between winners and
+    // losers, since later drops are footnotes and the losers final's promotion
+    // is cut. Ask for ?from=2 or higher and round one goes, and the diagram
+    // falls into two components that dagre ranks independently, each starting
+    // from zero. The winners column then sinks to the bottom and sits beside the
+    // DEEPEST losers round rather than above the shallowest: W2 next to L10.
+    //
+    // So re-make the join between the lowest surviving round on each side. It
+    // has to be an edge. The fault is a rank offset — W2 belongs ten ranks up,
+    // not beside L10 — and an edge is the only thing that states one. A subgraph
+    // holding both rounds keeps them adjacent without lifting either, which
+    // leaves them side by side on one rank and loses the split.
+    const joined = edges.some(e => (e.from.round > 0) !== (e.to.round > 0));
+    if (!joined) {
+      const kw = [], kl = [];
+      for (const r of rows) {
+        if (r.is_bye || !keep.has(r.match_number) || r.round == null) continue;
+        (r.round > 0 ? kw : kl).push(r);
+      }
+      if (kw.length && kl.length) {
+        const lowW = Math.min(...kw.map(r => r.round));
+        const lowL = Math.max(...kl.map(r => r.round));  // -1 is nearer the centre than -10
+        const W = kw.filter(r => r.round === lowW).sort(asc);
+        const L = kl.filter(r => r.round === lowL).sort(asc);
+        // Spread the smaller round across the larger instead of pairing off the
+        // front: once the draw is cut the two are rarely the same size — W3 holds
+        // eight matches where L2 holds sixteen — and taking the first eight would
+        // drag the winners column over to one end of the losers one.
+        const [few, many] = W.length <= L.length ? [W, L] : [L, W];
+        for (let i = 0; i < few.length; i++) {
+          const m = many[Math.floor((i + 0.5) * many.length / few.length)];
+          // Losers end first, so the winners end is the one that ranks above.
+          ghosts.push(few === L ? [few[i], m] : [m, few[i]]);
+        }
+      }
+    }
+  } else if (!singleElim) {
     const r1 = [], r2 = [], rl1 = [];
     for (const r of rows) {
       if (r.is_bye || !keep.has(r.match_number)) continue;
@@ -1146,7 +1207,10 @@ function buildDiagram(rows, dir, fromStage) {
     // in its stage, so wrapping it would add nesting that groups nothing.
     // Blank title + no stroke/fill: the wrapper exists to constrain layout,
     // not to draw a labelled box. Halved ids keep 3.5 out of the identifier.
-    const wrap = inStage.length > 1;
+    // Never in split view: the wrapper holds a winners round and the losers
+    // round beside it together, which is exactly what stops the two columns
+    // separating.
+    const wrap = !split && inStage.length > 1;
     if (wrap) {
       const stId = 'ST' + Math.round(st * 2);
       stageIds.push(stId);
@@ -1181,7 +1245,26 @@ function buildDiagram(rows, dir, fromStage) {
   // lay anything out again — at five milliseconds a node that was two seconds
   // a click on a full stage 1. Everything a selection changes is painted onto
   // the rendered SVG afterwards by applySelection().
-  links.forEach((l) => lines.push(`  M${l.from} ${l.ghost ? '~~~' : '-->'} M${l.to}`));
+  // Split view grows the losers side AWAY from round one rather than alongside
+  // the winners. Which end of an edge sits further along the flow is decided by
+  // which way that edge points, so every link landing on a losers round is
+  // emitted backwards: dagre then places its destination one rank behind its
+  // source instead of one ahead. Round one settles on the centre line with the
+  // winners advancing off one side of it and the losers off the other.
+  //
+  // Nothing here reads `dir`, and nothing should. The reversal is stated in
+  // ranks, and a rank is whatever the flow direction says it is — so the one
+  // emitted source gives winners-up/losers-down in BT and the same picture
+  // turned a quarter turn, winners-right/losers-left, in LR.
+  //
+  // The arrowhead lands at the wrong end of a reversed edge, because Mermaid
+  // marks whichever target it was handed. drawRuns repaints a highlighted run
+  // source-to-destination and so gets it right; the faint base layer does not.
+  links.forEach((l) => {
+    const dest = split && !l.ghost ? byNum.get(l.to) : null;
+    const [a, b] = dest && dest.round < 0 ? [l.to, l.from] : [l.from, l.to];
+    lines.push(`  M${a} ${l.ghost ? '~~~' : '-->'} M${b}`);
+  });
 
   for (const id of sgIds) lines.push(`  style ${id} fill:none,stroke:#334155,color:#64748b`);
   for (const id of stageIds) lines.push(`  style ${id} fill:none,stroke:none`);
@@ -1360,7 +1443,7 @@ function applySelection(sel, opts) {
   }
   $('sel-style').textContent = css;
 
-  drawRuns(runs, state.dir, !!sel, d.ghostKeys);
+  drawRuns(runs, state.dir, !!sel, d.ghostKeys, state.split);
   // A waiting route is counted by what it is blocked on rather than by how much
   // of the bracket it covers, which is the only thing anyone wants to know
   // about it — "seven matches, two of them playable now".
@@ -1772,6 +1855,10 @@ function findNodeEl(mid) {
 // the middle, so its tip overhangs the path's last point by 4. Stopping that
 // far short puts the tip on the border instead of inside the box.
 const ARROWHEAD = 4;
+// How far outside everything it crosses a sidelong drop is routed, in split
+// view. Big enough to read as a deliberate detour rather than a line grazing
+// the boxes.
+const ASIDE_GUTTER = 22;
 
 // Mermaid names an edge path after the two nodes it joins ("L_M107_M113_0",
 // carried on the path as data-id), and repeats a node's own id inside its
@@ -1830,12 +1917,21 @@ function buried(sx, sy, dx, dy, lane, vert, boxes) {
 // dim says whether the rest of the diagram should fall back — it should when
 // something is selected, and not when the selection was just cleared. ghosts
 // are the invisible round-1 links, which must be neither lit nor dimmed.
-function drawRuns(runs, dir, dim, ghosts) {
+function drawRuns(runs, dir, dim, ghosts, split) {
   try {
     const root = $('graph');
     const all = [...root.querySelectorAll('path[data-id]')];
     if (!all.length) return -1;
-    const want = new Map(runs.map(([a, b]) => ['M' + a + '|M' + b, [a, b]]));
+    // In split view a link into the losers side was emitted backwards, so its
+    // data-id reads destination-first and has to be keyed both ways. The value
+    // stays the run's own direction either way, so the geometry below draws
+    // source to destination and the arrow lands where the player actually goes:
+    // the reversal is a ranking trick and must not leak into the drawing.
+    const want = new Map();
+    for (const [a, b] of runs) {
+      want.set('M' + a + '|M' + b, [a, b]);
+      if (split) want.set('M' + b + '|M' + a, [a, b]);
+    }
     const paths = [];
     const seen = new Set();
     for (const p of all) {
@@ -1848,9 +1944,10 @@ function drawRuns(runs, dir, dim, ghosts) {
       // between the same two matches is still drawn, as a clone below.
       if (key && ghosts && ghosts.has(key)) continue;
       if (key && want.has(key)) {
+        const [ra, rb] = want.get(key);
         p.classList.add('is-run');
-        seen.add(key);
-        paths.push({ p, a: m[1], b: m[2] });
+        seen.add('M' + ra + '|M' + rb);
+        paths.push({ p, a: 'M' + ra, b: 'M' + rb });
       } else if (dim) {
         p.classList.add('is-faint');
       }
@@ -1868,8 +1965,10 @@ function drawRuns(runs, dir, dim, ghosts) {
     };
     const proto = all.find(p => !isGhost(p) && p.getAttribute('marker-end'))
       || all.find(p => !isGhost(p)) || all[0];
-    for (const [key, [a, b]] of want) {
-      if (seen.has(key)) continue;
+    // over runs, not want: in split view want holds every run under both keys,
+    // and iterating it would clone each missing edge a second time.
+    for (const [a, b] of runs) {
+      if (seen.has('M' + a + '|M' + b)) continue;
       const p = proto.cloneNode(false);
       // Add to the cloned classes, never replace them: Mermaid's own
       // .flowchart-link is what carries `fill: none`, and a curve with a fill
@@ -1900,7 +1999,14 @@ function drawRuns(runs, dir, dim, ghosts) {
     const vert = dir !== 'LR' && dir !== 'RL';
     // Bottom to top: downstream is upwards, so every comparison below that
     // assumes the destination sits lower has to be turned around.
-    const up = dir === 'BT';
+    // Which faces an edge uses is read off the boxes rather than off `dir`. In
+    // split view a round-one match sends one run on up the winners side and one
+    // down to the losers, so a single node has edges leaving opposite faces and
+    // no one answer per diagram is right. Measuring makes that fall out of the
+    // same arithmetic as everything else instead of being a case, and in the
+    // plain flows it agrees with `dir` because there every destination is
+    // downstream. It holds in LR unchanged, where the two runs leave the left
+    // and right faces rather than the top and bottom.
     const face = (bx) => vert ? bx.x1 - bx.x0 : bx.y1 - bx.y0;
     // One selected player's run is a chain, so each face carries a single
     // highlighted edge and there is nothing to spread. A delegation is not: a
@@ -1934,6 +2040,25 @@ function drawRuns(runs, dir, dim, ghosts) {
     // that travels far enough sideways to want it.
     let allBoxes = null;
 
+    // A drop out of a LATER winners round is, in split view, the one edge that
+    // does not advance the flow. Round one's drop is a step to the rank below
+    // and is drawn like anything else; a drop out of W3 has to get back across
+    // round one and the whole of the losers side above its target, so drawn
+    // along the flow axis it is a line straight through the middle. Routed on
+    // the orthogonal axis instead — out of one face, around the outside, back
+    // into the SAME face at the other end — it reads as the aside it is and
+    // crosses nothing.
+    //
+    // Only in split view. In the plain flows the losers side climbs alongside
+    // the winners, so that drop advances like any other edge and the lane
+    // search below already handles it.
+    const rowOf = (id) => state.index && state.index.byNum[parseInt(id.slice(1), 10)];
+    const aside = (a, b) => {
+      if (!split) return false;
+      const S2 = rowOf(a), D2 = rowOf(b);
+      return !!(S2 && D2 && S2.round > 1 && D2.round < 0);
+    };
+
     const n = (v) => Math.round(v * 100) / 100;
     let done = 0;
 
@@ -1946,6 +2071,36 @@ function drawRuns(runs, dir, dim, ghosts) {
       const og = out.get(a) || [], ig = into.get(b) || [];
       const oi = og.indexOf(paths[pi]), ii = ig.indexOf(paths[pi]);
       let sx, sy, dx, dy, lo, hi;
+      if (aside(a, b)) {
+        // Bulge past everything lying between the two ends along the flow axis,
+        // rather than out to the edge of the diagram: it clears the same boxes
+        // and keeps the detour as short as the obstruction makes it. The two
+        // ends are in the max as well, so a drop with nothing in the way still
+        // leaves and arrives clear of its own boxes.
+        if (!allBoxes) allBoxes = [...box.values()];
+        const f0 = Math.min(vert ? scy : scx, vert ? dcy : dcx);
+        const f1 = Math.max(vert ? scy : scx, vert ? dcy : dcx);
+        let out2 = vert ? Math.max(S.x1, D.x1) : Math.max(S.y1, D.y1);
+        for (const bx of allBoxes) {
+          const b0 = vert ? bx.y0 : bx.x0, b1 = vert ? bx.y1 : bx.x1;
+          if (b1 < f0 - 2 || b0 > f1 + 2) continue;      // not between the ends
+          out2 = Math.max(out2, vert ? bx.x1 : bx.y1);
+        }
+        const lane2 = out2 + ASIDE_GUTTER;
+        // Same face at both ends — right and right in BT, bottom and bottom in
+        // LR — and the arrowhead overhang points back INTO that face, so the tip
+        // lands on the border it is arriving at rather than inside the box.
+        if (vert) { sx = S.x1; sy = scy; dx = D.x1 + ARROWHEAD; dy = dcy; }
+        else      { sy = S.y1; sx = scx; dy = D.y1 + ARROWHEAD; dx = dcx; }
+        if (![sx, sy, dx, dy, lane2].every(Number.isFinite)) continue;
+        // The bulge is on the axis the flow is NOT on, so the two curve forms
+        // below are used the other way round from every other edge.
+        p.setAttribute('d', vert
+          ? `M${n(sx)},${n(sy)} C${n(lane2)},${n(sy)} ${n(lane2)},${n(dy)} ${n(dx)},${n(dy)}`
+          : `M${n(sx)},${n(sy)} C${n(sx)},${n(lane2)} ${n(dx)},${n(lane2)} ${n(dx)},${n(dy)}`);
+        done++;
+        continue;
+      }
       if (vert) {
         sx = at(S.x0, S.x1, oi, og.length, dcx - scx);
         dx = at(D.x0, D.x1, ii, ig.length, scx - dcx);
@@ -1953,13 +2108,16 @@ function drawRuns(runs, dir, dim, ghosts) {
         // source's top face and arrives at the destination's bottom, and the
         // arrowhead overhang is added rather than subtracted so the tip still
         // lands on the border instead of inside the box.
-        sy = up ? S.y0 : S.y1;
-        dy = up ? D.y1 + ARROWHEAD : D.y0 - ARROWHEAD;
+        const climbs = dcy < scy;
+        sy = climbs ? S.y0 : S.y1;
+        dy = climbs ? D.y1 + ARROWHEAD : D.y0 - ARROWHEAD;
         lo = sy; hi = dy;
       } else {
         sy = at(S.y0, S.y1, oi, og.length, dcy - scy);
         dy = at(D.y0, D.y1, ii, ig.length, scy - dcy);
-        sx = S.x1; dx = D.x0 - ARROWHEAD;
+        const rightward = dcx > scx;
+        sx = rightward ? S.x1 : S.x0;
+        dx = rightward ? D.x0 - ARROWHEAD : D.x1 + ARROWHEAD;
         lo = sx; hi = dx;
       }
       // Not comfortably downstream — a same-rank or backwards edge is not the
@@ -2079,7 +2237,7 @@ async function render(quiet) {
   if (!state.rows.length) return;
   const hold = quiet ? { x: window.scrollX, y: window.scrollY } : null;
   const t0 = performance.now();
-  const d = buildDiagram(state.rows, state.dir, state.fromStage);
+  const d = buildDiagram(state.rows, state.dir, state.fromStage, state.split);
   const tBuild = performance.now() - t0;
   state.diagram = d;
   $('counts').textContent = countsLine();
@@ -2141,7 +2299,8 @@ async function render(quiet) {
 
 function syncButtons() {
   document.querySelectorAll('[data-dir]').forEach(b =>
-    b.classList.toggle('active', b.dataset.dir === state.dir));
+    b.classList.toggle('active',
+      b.dataset.dir === state.dir && (b.dataset.split === '1') === state.split));
 }
 
 function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
@@ -2499,7 +2658,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => {
-  state.dir = b.dataset.dir; syncButtons(); render();
+  state.dir = b.dataset.dir;
+  state.split = b.dataset.split === '1';
+  syncButtons(); render();
 }));
 $('round-from').addEventListener('change', (e) => {
   state.fromStage = parseInt(e.target.value, 10) || 0;
