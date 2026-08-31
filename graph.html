@@ -1260,9 +1260,12 @@ function buildDiagram(rows, dir, fromStage, split) {
   // The arrowhead lands at the wrong end of a reversed edge, because Mermaid
   // marks whichever target it was handed. drawRuns repaints a highlighted run
   // source-to-destination and so gets it right; the faint base layer does not.
+  const flipKeys = new Set();
   links.forEach((l) => {
     const dest = split && !l.ghost ? byNum.get(l.to) : null;
-    const [a, b] = dest && dest.round < 0 ? [l.to, l.from] : [l.from, l.to];
+    const flip = !!(dest && dest.round < 0);
+    const [a, b] = flip ? [l.to, l.from] : [l.from, l.to];
+    if (flip) flipKeys.add('M' + a + '|M' + b);
     lines.push(`  M${a} ${l.ghost ? '~~~' : '-->'} M${b}`);
   });
 
@@ -1279,7 +1282,7 @@ function buildDiagram(rows, dir, fromStage, split) {
     links.filter(l => l.ghost).map(l => 'M' + l.from + '|M' + l.to));
   // keep and hop are handed out so applySelection can work out a run without
   // recomputing the cut or re-walking the byes.
-  return { src: lines.join('\n'), nodes: keep.size, keep, hop, byNum, pid: pids, ghostKeys,
+  return { src: lines.join('\n'), nodes: keep.size, keep, hop, byNum, pid: pids, ghostKeys, flipKeys,
     cost: { links: links.length, drawn, ghosts: links.length - drawn } };
 }
 
@@ -1917,6 +1920,33 @@ function buried(sx, sy, dx, dy, lane, vert, boxes) {
 // dim says whether the rest of the diagram should fall back — it should when
 // something is selected, and not when the selection was just cleared. ghosts
 // are the invisible round-1 links, which must be neither lit nor dimmed.
+// A link into the losers side is emitted backwards so that dagre ranks it the
+// way the split view needs, which leaves Mermaid marking the wrong end of it:
+// the drop out of Winners R1 arrived pointing back at the winner, and every
+// losers hop pointed at the round it came from.
+//
+// Mermaid defines a pointStart marker beside every pointEnd — same size, same
+// class, apex pointing back down the path instead of along it — so moving the
+// reference from one attribute to the other puts an identical arrowhead on the
+// correct node, with nothing drawn by hand and no dependency on how the theme
+// colours it. The original is kept on the element because drawRuns redraws a
+// highlighted run source-to-destination and has to put the marker back.
+function fixFlippedArrows(root, flipKeys) {
+  if (!flipKeys || !flipKeys.size) return 0;
+  let n = 0;
+  for (const p of root.querySelectorAll('path[data-id]')) {
+    const m = (p.getAttribute('data-id') || '').match(EDGE_ID);
+    if (!m || !flipKeys.has(m[1] + '|' + m[2])) continue;
+    const end = p.getAttribute('marker-end');
+    if (!end || end.indexOf('pointEnd') < 0) continue;
+    p.dataset.mEnd = end;
+    p.setAttribute('marker-start', end.replace('pointEnd', 'pointStart'));
+    p.removeAttribute('marker-end');
+    n++;
+  }
+  return n;
+}
+
 function drawRuns(runs, dir, dim, ghosts, split) {
   try {
     const root = $('graph');
@@ -2060,6 +2090,19 @@ function drawRuns(runs, dir, dim, ghosts, split) {
     };
 
     const n = (v) => Math.round(v * 100) / 100;
+    // Everything below draws source to destination, whichever way the link was
+    // emitted, so a path we rewrite wants its arrowhead back at the end. Undoes
+    // the start-marker swap fixFlippedArrows made for the backwards edges, and
+    // is a no-op on every other path.
+    const setD = (p, d2) => {
+      p.setAttribute('d', d2);
+      const end = p.dataset.mEnd;
+      if (end) {
+        p.setAttribute('marker-end', end);
+        p.removeAttribute('marker-start');
+        delete p.dataset.mEnd;
+      }
+    };
     let done = 0;
 
     for (let pi = 0; pi < paths.length; pi++) {
@@ -2095,7 +2138,7 @@ function drawRuns(runs, dir, dim, ghosts, split) {
         if (![sx, sy, dx, dy, lane2].every(Number.isFinite)) continue;
         // The bulge is on the axis the flow is NOT on, so the two curve forms
         // below are used the other way round from every other edge.
-        p.setAttribute('d', vert
+        setD(p, vert
           ? `M${n(sx)},${n(sy)} C${n(lane2)},${n(sy)} ${n(lane2)},${n(dy)} ${n(dx)},${n(dy)}`
           : `M${n(sx)},${n(sy)} C${n(sx)},${n(lane2)} ${n(dx)},${n(lane2)} ${n(dx)},${n(dy)}`);
         done++;
@@ -2127,7 +2170,7 @@ function drawRuns(runs, dir, dim, ghosts, split) {
       // test rejected every edge in the diagram.
       if (![sx, sy, dx, dy].every(Number.isFinite) || !(Math.abs(hi - lo) > 8)) {
         if (p.classList.contains('is-added') && [sx, sy, dx, dy].every(Number.isFinite)) {
-          p.setAttribute('d', `M${n(sx)},${n(sy)} L${n(dx)},${n(dy)}`);
+          setD(p, `M${n(sx)},${n(sy)} L${n(dx)},${n(dy)}`);
           done++;
         }
         continue;
@@ -2156,7 +2199,7 @@ function drawRuns(runs, dir, dim, ghosts, split) {
         if (best) lane = best.cand;
       }
 
-      p.setAttribute('d', vert
+      setD(p, vert
         ? `M${n(sx)},${n(sy)} C${n(sx)},${n(lane)} ${n(dx)},${n(lane)} ${n(dx)},${n(dy)}`
         : `M${n(sx)},${n(sy)} C${n(lane)},${n(sy)} ${n(lane)},${n(dy)} ${n(dx)},${n(dy)}`);
       done++;
@@ -2270,6 +2313,9 @@ async function render(quiet) {
       const { svg } = await mermaid.render('bracket-' + Date.now(), d.src);
       tMermaid = performance.now() - t1;
       $('graph').innerHTML = svg;
+      // Before anything measures or paints: the swap is per-path and the
+      // selection layer below reads these same elements.
+      fixFlippedArrows($('graph'), d.flipKeys);
       state.src = d.src;
       applyZoom();               // the diagram is new; the zoom is the reader's
     }
