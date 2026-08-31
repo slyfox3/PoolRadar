@@ -1350,6 +1350,53 @@ function waitingRoute(idx, from) {
   return { nodes, edges, ready };
 }
 
+const seats = (r, key) => !!r &&
+  [r.p1, r.p2].some((c) => c && c.name && c.name.toLowerCase() === key);
+
+// Did one of the other roads into that match already put this player there?
+//
+// rev holds every real match landing on a destination with the byes hopped
+// through, so this is the rest of the ways in — and a decided one answers
+// plainly, since its winner went one way and its loser the other. An undecided
+// feeder has delivered nobody and explains nothing.
+const explained = (idx, dest, from, key) => (idx.rev[dest] || []).some((f) => {
+  if (f.num === from) return false;
+  const s = idx.byNum[f.num];
+  if (!s || (!s.p1Won && !s.p2Won)) return false;
+  const sent = f.kind === 'W' ? (s.p1Won ? s.p1 : s.p2) : (s.p1Won ? s.p2 : s.p1);
+  return !!(sent && sent.name && sent.name.toLowerCase() === key);
+});
+
+// Where a player went on to from a match.
+//
+// Usually the result says so: the winner goes one way and the loser the other.
+// Except when there is no result to ask. L2-2 of the Saturday night bracket is
+// John Kim against Devon Epperson — NOT_STARTED, no score, both sides marked
+// not-a-winner — in a tournament that has since finished; and John Kim played
+// L3-1, which is where L2-2 sends its winner, and won it. He advanced. The
+// sheet just never said so.
+//
+// Same authority as awaiting(), pointed the other way: occupancy beats
+// bookkeeping. A player sitting in one of this match's two destinations is
+// evidence they played it, whatever the result column does or does not say.
+//
+// Evidence, not proof, because a destination has more than one road in and the
+// seat only implicates this match if none of the others accounts for it. In a
+// bracket already odd enough to be here that is not hypothetical: W5-1 of a
+// Sunday nine-ball draw is unplayed with Elijah Trujillo in it, and he is also
+// sitting in L8-1, which is where W5-1 drops its loser — but he is there for
+// winning L7-1, the other feeder, and W5-1 has genuinely not been played. So
+// discount every seat another feeder has already claimed, and answer only when
+// exactly one of the two destinations is left holding him.
+const wentOn = (idx, a, key) => {
+  const f = idx.fwd[a.num];
+  if (!f) return null;
+  if (a.decided) return a.won ? f.w : f.l;
+  const sat = [f.w, f.l].filter((n) =>
+    n != null && seats(idx.byNum[n], key) && !explained(idx, n, a.num, key));
+  return sat.length === 1 ? sat[0] : null;
+};
+
 // What a selection lights up, and the runs through it. Pure computation over
 // the rows and the diagram's own keep/hop, so it costs nothing next to a
 // render — this is the whole reason selecting is now instant.
@@ -1383,12 +1430,13 @@ function selectionRuns(idx, d, sel) {
   for (const name of sel.names) {
     const p = idx.players[name.toLowerCase()];
     if (!p) continue;
+    // p.name rather than name: the roster is keyed lowercase but the seats hold
+    // whatever casing the wire sent, and wentOn compares against those.
+    const key = p.name.toLowerCase();
     for (const a of p.at) {
       if (!d.keep.has(a.num)) continue;
       nodes.add(a.num);
-      if (!a.decided) continue;
-      const f = idx.fwd[a.num];
-      const next = f ? (a.won ? f.w : f.l) : null;
+      const next = wentOn(idx, a, key);
       if (next != null && d.keep.has(next)) runs.push([a.num, next]);
     }
   }
