@@ -1447,6 +1447,10 @@ function applySelection(sel, opts) {
   $('sel-style').textContent = css;
 
   drawRuns(runs, state.dir, !!sel, d.ghostKeys, state.split);
+  // Only after the runs are drawn: an aside is the one thing in the diagram
+  // that goes further out than any node, and it is drawn here rather than by
+  // Mermaid, so nothing before this point knows the picture got bigger.
+  if (growCanvasToFit($('graph'))) applyZoom();
   // A waiting route is counted by what it is blocked on rather than by how much
   // of the bracket it covers, which is the only thing anyone wants to know
   // about it — "seven matches, two of them playable now".
@@ -1959,6 +1963,51 @@ function buried(sx, sy, dx, dy, lane, vert, boxes) {
 // and the SVG is rebuilt on every render, so editing them in place cannot leak
 // into anything else. The -margin variants are left alone: nothing here uses
 // them, and they are anchored for a different job.
+// Mermaid sizes the SVG to its nodes, and with useMaxWidth off that size is
+// literal: the viewport is the picture. An aside deliberately bows out past
+// every node — that is what makes it clear them — so the widest of them ran off
+// the edge and was cut exactly where it bowed furthest, which reads as the
+// curve stopping in mid-air.
+//
+// Grow the canvas to hold whatever is now in it, rather than padding by a fixed
+// proportion: on a four-hundred-node bracket a flat margin is a lot of empty
+// scrolling, and it would be added on every side when only one of them ever
+// overflows. Asides always bow towards increasing x (BT) or y (LR), so this
+// only ever extends the far edge and nothing on screen moves.
+//
+// viewBox and the width/height attributes together. Moving the box on its own
+// would rescale the diagram to fit the old viewport instead of revealing more
+// of it. Idempotent: growing the box does not move the content, so a second
+// call finds the bbox already inside and changes nothing.
+function growCanvasToFit(root) {
+  const svg = root.querySelector('svg');
+  if (!svg) return false;
+  const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  if (vb.length !== 4 || vb.some(v => !Number.isFinite(v))) return false;
+  let bb;
+  try { bb = svg.getBBox(); } catch (e) { return false; }
+  if (!bb || !Number.isFinite(bb.width) || !Number.isFinite(bb.height) || !bb.width) return false;
+  // Each edge is padded only if that edge is the one overflowing. Padding all
+  // four unconditionally moves the origin, which slides the whole diagram
+  // sideways under the reader for the sake of six pixels of margin on a side
+  // nothing was reaching anyway.
+  const PAD = 6;
+  const vx1 = vb[0] + vb[2], vy1 = vb[1] + vb[3];
+  const bx1 = bb.x + bb.width, by1 = bb.y + bb.height;
+  const x0 = bb.x < vb[0] ? bb.x - PAD : vb[0];
+  const y0 = bb.y < vb[1] ? bb.y - PAD : vb[1];
+  const x1 = bx1 > vx1 ? bx1 + PAD : vx1;
+  const y1 = by1 > vy1 ? by1 + PAD : vy1;
+  const w = x1 - x0, h = y1 - y0;
+  if (Math.abs(x0 - vb[0]) < 0.5 && Math.abs(y0 - vb[1]) < 0.5 &&
+      Math.abs(w - vb[2]) < 0.5 && Math.abs(h - vb[3]) < 0.5) return false;
+  const r2 = (v) => Math.round(v * 100) / 100;
+  svg.setAttribute('viewBox', `${r2(x0)} ${r2(y0)} ${r2(w)} ${r2(h)}`);
+  svg.setAttribute('width', Math.ceil(w));
+  svg.setAttribute('height', Math.ceil(h));
+  return true;
+}
+
 function seatArrowheads(root) {
   let n = 0;
   for (const m of root.querySelectorAll('marker')) {
