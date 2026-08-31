@@ -1869,6 +1869,11 @@ const ARROWHEAD = 0;
 // view. Big enough to read as a deliberate detour rather than a line grazing
 // the boxes.
 const ASIDE_GUTTER = 22;
+// How far apart two asides on the same run are held. A drop out of the winners
+// side and the losers champion's promotion back both span nearly the whole
+// diagram, so they clear the same obstruction and work out the same lane —
+// drawn on top of each other, which reads as one edge.
+const ASIDE_STEP = 26;
 
 // Mermaid names an edge path after the two nodes it joins ("L_M107_M113_0",
 // carried on the path as data-id), and repeats a node's own id inside its
@@ -2147,6 +2152,23 @@ function drawRuns(runs, dir, dim, ghosts, split) {
     };
     let done = 0;
 
+    // Widest span furthest out, so a shorter detour nests inside a longer one
+    // rather than crossing it. Worked out before anything is drawn, because a
+    // lane has to know about the other asides and the draw loop only ever sees
+    // one edge at a time.
+    const asideLane = new Map();
+    {
+      const mid2 = (bx) => vert ? (bx.y0 + bx.y1) / 2 : (bx.x0 + bx.x1) / 2;
+      const list = [];
+      for (const q of paths) {
+        if (!aside(q.a, q.b)) continue;
+        const S2 = box.get(q.a), D2 = box.get(q.b);
+        if (S2 && D2) list.push({ q, span: Math.abs(mid2(D2) - mid2(S2)) });
+      }
+      list.sort((x, y) => y.span - x.span);
+      list.forEach((e, i) => asideLane.set(e.q, i));
+    }
+
     for (let pi = 0; pi < paths.length; pi++) {
       const { p, a, b } = paths[pi];
       const S = box.get(a), D = box.get(b);
@@ -2171,18 +2193,56 @@ function drawRuns(runs, dir, dim, ghosts, split) {
           if (b1 < f0 - 2 || b0 > f1 + 2) continue;      // not between the ends
           out2 = Math.max(out2, vert ? bx.x1 : bx.y1);
         }
-        const lane2 = out2 + ASIDE_GUTTER;
+        const lane2 = out2 + ASIDE_GUTTER
+          + (asideLane.get(paths[pi]) || 0) * ASIDE_STEP;
         // Same face at both ends — right and right in BT, bottom and bottom in
         // LR — and the arrowhead overhang points back INTO that face, so the tip
         // lands on the border it is arriving at rather than inside the box.
         if (vert) { sx = S.x1; sy = scy; dx = D.x1 + ARROWHEAD; dy = dcy; }
         else      { sy = S.y1; sx = scx; dy = D.y1 + ARROWHEAD; dx = dcx; }
         if (![sx, sy, dx, dy, lane2].every(Number.isFinite)) continue;
-        // The bulge is on the axis the flow is NOT on, so the two curve forms
-        // below are used the other way round from every other edge.
+        // One smooth cubic, not an elbow. A flat run along the lane reads as
+        // another rank of the diagram, and two of them at the same depth sit on
+        // top of each other; a bow reads as the detour it is.
+        //
+        // The control points go further out than the lane, because a cubic
+        // never reaches its own controls: with both of them at x it tops out at
+        // (sx + dx + 6x)/8. Putting them ON the lane left the curve about a
+        // quarter of the detour short — far enough, on a real bracket, to end
+        // up INSIDE the thing it was routed around, so the clearance worked out
+        // above was never the clearance drawn. Solving that expression for the
+        // lane is what makes the two agree.
+        // Where a cubic turns is not its midpoint unless its two ends are
+        // level, and the two faces here rarely are — a drop leaves a narrow box
+        // high up and lands on a wide one low down. Taking the midpoint on
+        // faith overshot by fifteen units on a realistic pair, so the turning
+        // point is solved for (x'(t) = 0 is a quadratic in t) and the guess
+        // corrected against it. Three passes; it converges on the first,
+        // because the curve's extreme moves at very nearly three quarters of
+        // whatever the control point does.
+        const bow = (e0, e1, target) => {
+          let c = (target - (e0 + e1) / 8) * 4 / 3;
+          for (let i = 0; i < 3; i++) {
+            const A = e1 - e0, B = 2 * (e0 - c), C = c - e0;
+            let t = 0.5;
+            if (Math.abs(A) > 1e-9) {
+              const disc = B * B - 4 * A * C;
+              if (disc >= 0) {
+                const q = Math.sqrt(disc);
+                for (const root of [(-B + q) / (2 * A), (-B - q) / (2 * A)]) {
+                  if (root > 0 && root < 1) t = root;
+                }
+              }
+            }
+            const u = 1 - t;
+            c += (target - (u * u * u * e0 + 3 * c * u * t + t * t * t * e1)) * 4 / 3;
+          }
+          return c;
+        };
+        const c2 = vert ? bow(sx, dx, lane2) : bow(sy, dy, lane2);
         setD(p, vert
-          ? `M${n(sx)},${n(sy)} C${n(lane2)},${n(sy)} ${n(lane2)},${n(dy)} ${n(dx)},${n(dy)}`
-          : `M${n(sx)},${n(sy)} C${n(sx)},${n(lane2)} ${n(dx)},${n(lane2)} ${n(dx)},${n(dy)}`);
+          ? `M${n(sx)},${n(sy)} C${n(c2)},${n(sy)} ${n(c2)},${n(dy)} ${n(dx)},${n(dy)}`
+          : `M${n(sx)},${n(sy)} C${n(sx)},${n(c2)} ${n(dx)},${n(c2)} ${n(dx)},${n(dy)}`);
         done++;
         continue;
       }
