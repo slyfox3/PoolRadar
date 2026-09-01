@@ -488,10 +488,16 @@ button { font-family: inherit; font-size: inherit; }
   }
   function mergeVideos(existing, newVids) {
     var seen = {};
-    for (var i = 0; i < existing.length; i++) seen[existing[i].videoId] = true;
+    for (var i = 0; i < existing.length; i++) seen[existing[i].videoId] = i;
     var merged = existing.slice();
     for (var j = 0; j < newVids.length; j++) {
-      if (!seen[newVids[j].videoId]) { merged.push(newVids[j]); seen[newVids[j].videoId] = true; }
+      var id = newVids[j].videoId;
+      if (Object.prototype.hasOwnProperty.call(seen, id)) {
+        Object.assign(merged[seen[id]], newVids[j]);
+      } else {
+        seen[id] = merged.length;
+        merged.push(newVids[j]);
+      }
     }
     return merged;
   }
@@ -649,10 +655,13 @@ button { font-family: inherit; font-size: inherit; }
       for (var vi = 0; vi < videos.length; vi++) {
         var v = videos[vi];
         if (!v.matchTime) continue;
-        var videoTable = extractTableNum(v.title);
+        var videoTable = v.tableNum ? String(v.tableNum) : extractTableNum(v.title);
         if (videoTable !== matchTable) continue;
 
-        var videoVenue = extractVenueFromTitle(v.title).toLowerCase();
+        // Some venue-operated channels omit the venue from the stream title.
+        // Include channelTitle so "Skinny Bob's Billiards" can identify its
+        // own tournament streams without weakening the table/time checks.
+        var videoVenue = (extractVenueFromTitle(v.title) + ' ' + (v.channelTitle || '')).toLowerCase();
         var venueHit = false;
         for (var ti = 0; ti < venueTokens.length; ti++) {
           if (videoVenue.indexOf(venueTokens[ti]) !== -1) { venueHit = true; break; }
@@ -661,7 +670,7 @@ button { font-family: inherit; font-size: inherit; }
 
         var offsetSec = Math.round((matchMs - v.matchTime) / 1000);
         // Accept: match started after stream start (or up to 5min before for clock skew)
-        // and within 8 hours of stream start
+        // and within 12 hours of stream start
         if (offsetSec >= -300 && offsetSec <= 43200 && Math.abs(offsetSec) < bestOffset) {
           bestOffset = Math.abs(offsetSec);
           bestVideo = { videoId: v.videoId, offset: Math.max(0, offsetSec) };
@@ -816,7 +825,7 @@ button { font-family: inherit; font-size: inherit; }
       var v = videos[vi];
       if (!v.matchTime || assignedVideoIds[v.videoId]) continue;
       if (v.matchTime < minMs - RANGE_PAD_BEFORE || v.matchTime > maxMs + RANGE_PAD_AFTER) continue;
-      var videoVenue = extractVenueFromTitle(v.title).toLowerCase();
+      var videoVenue = (extractVenueFromTitle(v.title) + ' ' + (v.channelTitle || '')).toLowerCase();
       var venueHit = false;
       for (var ti = 0; ti < venueTokens.length; ti++) {
         if (videoVenue.indexOf(venueTokens[ti]) !== -1) { venueHit = true; break; }
@@ -850,12 +859,16 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   // Google Apps Script web app — remote video store
   // =====================================================
+  // Bump when the remote index gains a source so previously covered date
+  // ranges are queried once more. The video list itself remains reusable.
+  var VIDEO_RANGE_CACHE_KEY = 'poolradar_yt_ranges_v4';
+
   function loadFetchedRanges() {
-    try { return JSON.parse(localStorage.getItem('poolradar_yt_ranges')) || []; }
+    try { return JSON.parse(localStorage.getItem(VIDEO_RANGE_CACHE_KEY)) || []; }
     catch(e) { return []; }
   }
   function saveFetchedRanges(ranges) {
-    localStorage.setItem('poolradar_yt_ranges', JSON.stringify(ranges));
+    localStorage.setItem(VIDEO_RANGE_CACHE_KEY, JSON.stringify(ranges));
   }
 
   function isRangeCovered(from, to) {
@@ -934,7 +947,9 @@ button { font-family: inherit; font-size: inherit; }
     return { from: new Date(minMs).toISOString(), to: new Date(maxMs).toISOString() };
   }
 
-  var RANGE_PAD_BEFORE = 2 * 3600000;
+  // Match the livestream matcher window: venue streams may begin hours before
+  // the first recorded DigitalPool match (for example, a pre-event broadcast).
+  var RANGE_PAD_BEFORE = 12 * 3600000;
   var RANGE_PAD_AFTER = 30 * 60000;
 
   function ensureVideosForMatches(matches, tournament) {
