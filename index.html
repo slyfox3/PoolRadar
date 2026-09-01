@@ -644,10 +644,11 @@ button { font-family: inherit; font-size: inherit; }
     var found = 0;
     for (var mi = 0; mi < matches.length; mi++) {
       var m = matches[mi];
-      if (m.videoUrl || !m.startTime || !m.tableName) continue;
+      var matchTime = m.startTime || m.scheduledTime;
+      if (m.videoUrl || !matchTime || !m.tableName) continue;
       var matchTable = extractTableNum(m.tableName);
       if (!matchTable) continue;
-      var matchMs = new Date(m.startTime).getTime();
+      var matchMs = new Date(matchTime).getTime();
 
       var bestVideo = null;
       var bestOffset = Infinity;
