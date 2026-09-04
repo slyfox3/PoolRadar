@@ -280,6 +280,14 @@ a:hover { text-decoration: underline; }
    itself; is-added is a step Mermaid never drew, which we draw ourselves. */
 #graph path.is-faint { stroke: #1e293b !important; stroke-width: 1px !important; }
 #graph path.is-run { stroke: #60a5fa !important; stroke-width: 3px !important; }
+/* Returning from the losers bracket is a promotion, not an ordinary round-to-
+   round progression. Keep its direction arrow, but render the long elbow as
+   dashes so it does not visually fuse with the solid drop beside it. */
+#graph path.is-run.is-promotion {
+  stroke-width: 2.5px !important;
+  stroke-dasharray: 8 6 !important;
+  stroke-linecap: butt;
+}
 /* A step we drew ourselves. fill:none belongs to Mermaid's .flowchart-link,
    which the clone inherits — this is the belt to that braces. */
 #graph path.is-added { fill: none !important; }
@@ -1505,8 +1513,8 @@ function applySelection(sel, opts) {
 
   // Wipe the last selection first: classes off, and the paths we drew ourselves
   // removed outright, since a different selection needs different ones.
-  for (const el of root.querySelectorAll('.is-hi, .is-faint, .is-run, .is-next')) {
-    el.classList.remove('is-hi', 'is-faint', 'is-run', 'is-next');
+  for (const el of root.querySelectorAll('.is-hi, .is-faint, .is-run, .is-next, .is-promotion')) {
+    el.classList.remove('is-hi', 'is-faint', 'is-run', 'is-next', 'is-promotion');
   }
   for (const el of root.querySelectorAll('path.is-added')) el.remove();
 
@@ -2191,6 +2199,14 @@ function drawRuns(runs, dir, dim, ghosts, split) {
       proto.parentNode.appendChild(p);
       paths.push({ p, a: 'M' + a, b: 'M' + b });
     }
+    // A selected edge whose source is on the losers side and destination is
+    // back on the winners side is the bracket's promotion edge. Mark it once
+    // here so styling and routing use the same semantic distinction.
+    for (const q of paths) {
+      const sr = state.index && state.index.byNum[parseInt(q.a.slice(1), 10)];
+      const dr = state.index && state.index.byNum[parseInt(q.b.slice(1), 10)];
+      if (sr && dr && sr.round < 0 && dr.round > 0) q.p.classList.add('is-promotion');
+    }
     if (!paths.length) return 0;
 
     // Every edge path is a direct child of the same <g>, with no transform of
@@ -2380,10 +2396,21 @@ function drawRuns(runs, dir, dim, ghosts, split) {
           }
           return c;
         };
-        const c2 = vert ? bow(sx, dx, lane2) : bow(sy, dy, lane2);
-        setD(p, vert
-          ? `M${n(sx)},${n(sy)} C${n(c2)},${n(sy)} ${n(c2)},${n(dy)} ${n(dx)},${n(dy)}`
-          : `M${n(sx)},${n(sy)} C${n(sx)},${n(c2)} ${n(dx)},${n(c2)} ${n(dx)},${n(dy)}`);
+        const sr = rowOf(a), dr = rowOf(b);
+        const promotion = sr && dr && sr.round < 0 && dr.round > 0;
+        if (promotion && vert) {
+          setD(p, `M${n(sx)},${n(sy)} L${n(lane2)},${n(sy)}` +
+            ` L${n(lane2)},${n(dy)} L${n(dx)},${n(dy)}`);
+        } else if (promotion) {
+          setD(p, `M${n(sx)},${n(sy)} L${n(sx)},${n(lane2)}` +
+            ` L${n(dx)},${n(lane2)} L${n(dx)},${n(dy)}`);
+        } else {
+          // Winners-to-losers drops retain their smooth bow.
+          const c2 = vert ? bow(sx, dx, lane2) : bow(sy, dy, lane2);
+          setD(p, vert
+            ? `M${n(sx)},${n(sy)} C${n(c2)},${n(sy)} ${n(c2)},${n(dy)} ${n(dx)},${n(dy)}`
+            : `M${n(sx)},${n(sy)} C${n(sx)},${n(c2)} ${n(dx)},${n(c2)} ${n(dx)},${n(dy)}`);
+        }
         done++;
         continue;
       }
