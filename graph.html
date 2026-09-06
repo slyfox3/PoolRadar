@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- minimum-scale under 1 is what lets a pinch go below the default zoom; no
-     maximum-scale so zooming in keeps the browser's own generous ceiling. -->
-<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.2">
+<!-- Keep the page itself at a constant scale so fixed controls remain usable.
+     Pinching #viewport zooms only the Mermaid canvas (down to 15%) below. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>PoolRadar &mdash; Bracket Graph</title>
 <style>
 * { box-sizing: border-box; }
@@ -31,9 +31,9 @@ a:hover { text-decoration: underline; }
 /* .tb-group sets display, which would otherwise beat the UA rule for [hidden] */
 [hidden] { display: none !important; }
 
-/* Floating search, as index.html does it. The page itself is the scroll
-   container for the bracket, so anything in the toolbar is gone the moment you
-   pan into the diagram — which is exactly when you want to look someone up. */
+/* Floating search, as index.html does it. It is a sibling of #graph rather than
+   a descendant, so the Mermaid scale transform can never resize its 48px tap
+   target. The fixed page scale above protects it from browser zoom as well. */
 .gs-fab { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
   width: 48px; height: 48px; border-radius: 50%; background: #2563eb; border: none; color: #fff;
   display: none; align-items: center; justify-content: center; cursor: pointer; z-index: 998;
@@ -48,6 +48,24 @@ a:hover { text-decoration: underline; }
   justify-content: center; cursor: pointer; z-index: 998; box-shadow: 0 3px 10px rgba(0,0,0,0.45);
   -webkit-tap-highlight-color: transparent; }
 .gs-clear:hover { border-color: #60a5fa; color: #f8fafc; }
+
+/* The previous graph focus, modelled on index.html's player-nav pill. It sits
+   above the clear/search controls so all three remain easy thumb targets. */
+.focus-back-pill { position: fixed; right: 20px;
+  bottom: calc(124px + env(safe-area-inset-bottom)); max-width: min(320px, calc(100vw - 40px));
+  min-height: 44px; display: none; align-items: center; background: #1e293b;
+  border: 1px solid #334155; border-radius: 22px; color: #60a5fa; z-index: 998;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4); overflow: hidden; }
+.focus-back-pill.visible { display: flex; }
+.focus-back-target { min-width: 0; min-height: 42px; display: flex; align-items: center; gap: 6px;
+  padding: 8px 8px 8px 14px; background: none; border: none; color: inherit;
+  font-family: inherit; font-size: 13px; line-height: 1.2; cursor: pointer; }
+.focus-back-target:hover { background: #334155; }
+.focus-back-target svg { width: 14px; height: 14px; flex-shrink: 0; }
+#focus-back-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-back-dismiss { align-self: stretch; background: none; border: none; color: #64748b;
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 0 12px 1px 8px; }
+.focus-back-dismiss:hover { color: #e2e8f0; background: #334155; }
 
 .gs-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.94); z-index: 1001; display: none;
   padding: max(12px, env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
@@ -291,13 +309,14 @@ a:hover { text-decoration: underline; }
 /* A step we drew ourselves. fill:none belongs to Mermaid's .flowchart-link,
    which the clone inherits — this is the belt to that braces. */
 #graph path.is-added { fill: none !important; }
+/* Edges are presentation, never controls. In particular, newly highlighted
+   runs must not steal a mobile tap from the match or name underneath them. */
+#graph path.flowchart-link { pointer-events: none; }
+#graph g.node.is-waiting { cursor: pointer; }
 #graph .pn1, #graph .pn2 { cursor: pointer; }
 #graph .pn1:hover, #graph .pn2:hover { text-decoration: underline; }
-/* The number column is the match itself rather than either player in it, which
-   is what makes it the thing to click to ask what the match is waiting on. A
-   bigger and less ambiguous target than the number alone — flowing left to
-   right it is the whole left-hand edge of the box — and an empty slot answers
-   the same question from where the reader is already looking anyway.
+/* The whole waiting node is clickable, but the number column and empty slots
+   are the visible affordances for asking what the match is waiting on.
    Colour and underline only: a rule in here cannot change a label's size, or
    Mermaid would have measured the box before it applied. */
 #graph .nd-h, #graph .nt-id, #graph .pnd { cursor: pointer; }
@@ -340,7 +359,7 @@ a:hover { text-decoration: underline; }
 </div>
 
 <div class="legend">
-  <span>click a name to highlight that player &middot; click again to clear</span>
+  <span>click a name to highlight that player</span>
   <span>click a match number or a <i class="lg-drop">TBD</i> to trace what it is waiting on</span>
   <span class="lg-break"></span>
   <span>press <kbd>/</kbd> or the magnifier to find a player by name or by country</span>
@@ -357,6 +376,15 @@ a:hover { text-decoration: underline; }
        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
 </button>
 <button class="gs-clear" id="search-clear" hidden aria-label="Clear the highlight">&times;</button>
+
+<div class="focus-back-pill" id="focus-back-pill">
+  <button class="focus-back-target" id="focus-back-target" type="button" aria-label="Return to previous focus">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+    <span id="focus-back-name"></span>
+  </button>
+  <button class="focus-back-dismiss" id="focus-back-dismiss" type="button" aria-label="Dismiss focus history">&times;</button>
+</div>
 
 <div class="gs-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-label="Find a player or a country">
   <div class="gs-box">
@@ -449,6 +477,8 @@ const state = {
   // depends on the reader — the stage cut — so it is a cache, not a value.
   index: null, players: [], countries: [], playerBy: new Map(), keep: new Map(),
 };
+const FOCUS_HISTORY_MAX = 20;
+let focusHistory = [];
 
 function setStatus(msg, isError) {
   const el = $('status');
@@ -758,11 +788,10 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
   const line = (c, score, won, slot) => {
     if (!c) {
       const f = takeFeeder(slot);
-      // Clickable, because an empty slot is the one thing in a node worth
-      // clicking when there is no name in it yet — it is the way into the
-      // waiting route. A bare TBD names no feeder of its own but still belongs
-      // to a match that may have one on its other side, so it opens the same
-      // walk rather than being inert.
+      // An empty slot is the clearest affordance for opening the waiting route.
+      // A bare TBD names no feeder of its own but still belongs to a match that
+      // may have one on its other side, so it opens the same walk rather than
+      // being inert.
       const t = !f ? "<i class='pnd'>TBD</i>"
         : "<i class='pnd'>" + f.kind + ' of ' + mmEsc(f.src.identifier || ('#' + f.src.num)) + '</i>';
       return { name: t, score: '', rating: '' };
@@ -936,6 +965,59 @@ function currentSel() {
     label: c ? c.name : state.country.toUpperCase(),
     names: new Set(c ? c.players.map(p => p.name) : []),
   };
+}
+
+// A lightweight snapshot is enough to restore a focus. Keep the label too so
+// the Back pill does not have to rediscover presentation text later.
+function currentFocus() {
+  const sel = currentSel();
+  if (!sel) return null;
+  return {
+    player: state.player || null,
+    country: state.country || null,
+    waiting: state.waiting || null,
+    label: sel.label,
+  };
+}
+
+function sameFocus(a, b) {
+  return (!a && !b) || (!!a && !!b && a.player === b.player &&
+    a.country === b.country && a.waiting === b.waiting);
+}
+
+function updateFocusHistory() {
+  const pill = $('focus-back-pill');
+  const entry = focusHistory[focusHistory.length - 1];
+  pill.classList.toggle('visible', !!entry);
+  const name = $('focus-back-name');
+  name.textContent = entry ? entry.label : '';
+  name.title = entry ? entry.label : '';
+  $('focus-back-target').setAttribute('aria-label',
+    entry ? 'Return to ' + entry.label : 'Return to previous focus');
+}
+
+function clearFocusHistory() {
+  focusHistory = [];
+  updateFocusHistory();
+}
+
+function focusExists(entry) {
+  if (entry.player) return state.playerBy.has(entry.player.toLowerCase());
+  if (entry.country) return state.countries.some(c => c.code === entry.country);
+  if (entry.waiting) return !!(state.index && state.index.byNum[entry.waiting]);
+  return false;
+}
+
+function focusBack() {
+  let entry = null;
+  while (focusHistory.length && !entry) {
+    const candidate = focusHistory.pop();
+    if (focusExists(candidate)) entry = candidate;
+  }
+  updateFocusHistory();
+  if (entry) {
+    select(entry.player, entry.country, entry.waiting, { remember: false, centre: true });
+  }
 }
 
 // Which matches survive the stage cut. Shared with the player search so the
@@ -1526,6 +1608,7 @@ function applySelection(sel, opts) {
     if (!m) continue;
     const n = +m[1].slice(1);
     gEl.classList.toggle('is-live', live.has(n));
+    gEl.classList.toggle('is-waiting', !!(state.index && awaiting(state.index, n).length));
     if (nodes.has(n)) gEl.classList.add('is-hi');
     if (ready.has(n)) gEl.classList.add('is-next');
   }
@@ -1764,8 +1847,8 @@ function moveCursor(delta) {
 
 function activateEntry(e) {
   if (!e) return;
-  if (e.kind === 'country') select(null, e.country.code);
-  else select(e.player.name, null);
+  if (e.kind === 'country') select(null, e.country.code, null, { remember: true });
+  else select(e.player.name, null, null, { remember: true });
 }
 
 function setCut(stage) {
@@ -1826,13 +1909,23 @@ function ensureVisible(sel) {
   setCut(p ? Math.floor(p.endStage) : 0);
 }
 
-// A player and a country are two answers to the same question, so choosing
-// either drops the other. Pass nothing to clear.
-function select(player, country, waiting) {
+// A player, country and waiting route are answers to the same question, so
+// choosing one drops the others. Pass nothing to clear. Graph-node clicks opt
+// out of centring: the thing under the pointer must stay under the pointer.
+function select(player, country, waiting, opts) {
+  opts = opts || {};
+  const previous = currentFocus();
   state.player = player || null;
   state.country = (!player && country) || null;
   state.waiting = (!player && !country && waiting) || null;
   const sel = currentSel();
+  const next = currentFocus();
+  if (opts.remember && previous && !sameFocus(previous, next)) {
+    const last = focusHistory[focusHistory.length - 1];
+    if (!sameFocus(last, previous)) focusHistory.push(previous);
+    if (focusHistory.length > FOCUS_HISTORY_MAX) focusHistory.shift();
+  }
+  updateFocusHistory();
   const before = state.fromStage;
   ensureVisible(sel);
   pickPlayerUI(sel);
@@ -1840,8 +1933,9 @@ function select(player, country, waiting) {
   syncUrl();
   // Only a moved cut changes the bracket, and only that needs Mermaid. Picking
   // someone is painted straight onto the diagram already on screen.
-  if (state.fromStage !== before) render();
-  else applySelection(sel, { centre: true });
+  const centre = opts.centre !== false;
+  if (state.fromStage !== before) render(!centre);
+  else applySelection(sel, { centre });
 }
 
 // Options are stages, built from the rounds the bracket actually has, so each
@@ -2710,6 +2804,7 @@ function syncUrl() {
 // its bracket under the new slug in the address bar.
 function clearLoaded() {
   stopRefresh();
+  clearFocusHistory();
   setRows([]);
   state.diagram = null;
   // The SVG goes below, so the source it was laid out from must go with it —
@@ -2747,6 +2842,7 @@ async function load(source, slug) {
     return;
   }
   const seq = ++loadSeq;
+  if (state.slug && (state.source !== source || state.slug !== slug)) clearFocusHistory();
   state.source = source === 'wnt' ? 'wnt' : 'digitalpool';
   state.slug = slug;
   $('slug-input').value = slug;
@@ -2992,6 +3088,7 @@ $('round-from').addEventListener('change', (e) => {
 // resolveSelection keeps the selection if it survives into the new stage,
 // which the 64 who came through stage 1, and their countries, all do.
 $('stage-sel').addEventListener('change', (e) => {
+  clearFocusHistory();
   state.stage = parseInt(e.target.value, 10) || 0;
   state.fromStage = 0;
   setRows(wntRows(state.wntData, state.stage));
@@ -3004,6 +3101,8 @@ $('stage-sel').addEventListener('change', (e) => {
 $('search-fab').addEventListener('click', openSearch);
 $('search-close').addEventListener('click', closeSearch);
 $('search-clear').addEventListener('click', () => select(null, null));
+$('focus-back-target').addEventListener('click', focusBack);
+$('focus-back-dismiss').addEventListener('click', clearFocusHistory);
 // Only the backdrop closes; a click inside the box is aimed at something.
 $('search-overlay').addEventListener('click', (e) => {
   if (e.target === $('search-overlay')) closeSearch();
@@ -3024,8 +3123,8 @@ $('player-input').addEventListener('keydown', (e) => {
 $('player-list').addEventListener('click', (e) => {
   const item = e.target.closest('.pse-item');
   if (!item) return;
-  if (item.dataset.country) select(null, item.dataset.country);
-  else select(item.dataset.name, null);
+  if (item.dataset.country) select(null, item.dataset.country, null, { remember: true });
+  else select(item.dataset.name, null, null, { remember: true });
 });
 
 // One delegated listener, attached once — only #graph's contents are replaced
@@ -3042,18 +3141,15 @@ $('graph').addEventListener('click', (e) => {
     const row = state.rows.find(r => r.match_number === num);
     const c = row && (span.classList.contains('pn1') ? row.challenger1 : row.challenger2);
     if (c && c.name) {
-      select(state.player === c.name ? null : c.name, null);   // click again to clear
+      select(c.name, null, null, { remember: true, centre: false });
       return;
     }
   }
-  // The number column and an empty slot are both about the match rather than
-  // about anyone in it, and what a match is waiting on is the only question it
-  // can answer on its own. Asked here rather than precomputed per node, because
-  // it is only ever asked of the one box that was actually clicked — the whole
-  // point of aiming at a target instead of at the box.
-  if (!e.target.closest('.nd-h, .nt-id, .pnd')) return;
+  // Everything in a waiting match except a player name is a match-sized target.
+  // This is deliberately broader than the old number/TBD-only hit area: after
+  // searching on a phone, an empty box must be selectable with one ordinary tap.
   if (!state.index || !awaiting(state.index, num).length) return;
-  select(null, null, state.waiting === num ? null : num);      // click again to clear
+  select(null, null, num, { remember: true, centre: false });
 });
 document.addEventListener('keydown', (e) => {
   // Escape backs out of whatever is on top: the search overlay first, then the
@@ -3075,6 +3171,11 @@ document.addEventListener('keydown', (e) => {
   }
   // Same guard as index.html — "/" is a normal character while typing.
   if (e.target.closest('input, textarea, [contenteditable]')) return;
+  if (e.key === ',' && focusHistory.length) {
+    e.preventDefault();
+    focusBack();
+    return;
+  }
   if (e.key !== '/' || !state.rows.length) return;
   e.preventDefault();
   openSearch();
