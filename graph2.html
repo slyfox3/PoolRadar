@@ -6,7 +6,7 @@
      low minimum keeps Safari from turning a zoom-out immediately into its tab
      overview gesture. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.2">
-<title>PoolRadar &mdash; Bracket Graph</title>
+<title>PoolRadar &mdash; Bracket Graph 2</title>
 <style>
 * { box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; font-size: 14px; }
@@ -337,7 +337,7 @@ a:hover { text-decoration: underline; }
 <body>
 
 <div class="header">
-  <h1>Bracket Graph</h1>
+  <h1>Bracket Graph 2</h1>
   <input class="url-input" id="slug-input" placeholder="digitalpool.com or wntlivescores.com URL">
   <button class="toggle-btn" id="load-btn">Load</button>
   <span class="spacer"></span>
@@ -2831,7 +2831,7 @@ function clearLoaded() {
   closeSearch();
   pickPlayerUI(null);
   // The tab and the back link named the tournament that is no longer on screen.
-  document.title = 'PoolRadar — Bracket Graph';
+  document.title = 'PoolRadar — Bracket Graph 2';
   $('back-link').href = 'index.html';
   $('back-link').textContent = '← PoolRadar';
 }
@@ -2894,7 +2894,7 @@ async function load(source, slug) {
       return;
     }
     const name = state.tournament ? state.tournament.name : slug;
-    document.title = name + ' — Bracket Graph';
+    document.title = name + ' — Bracket Graph 2';
     $('back-link').href = 'index.html?' + (state.source === 'wnt' ? 'wnt=' : 'digitalpool=') +
       encodeURIComponent(slug);
     $('back-link').textContent = '← ' + name;
