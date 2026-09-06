@@ -238,8 +238,7 @@ button { font-family: inherit; font-size: inherit; }
 .flat-match .fm-num { color: #64748b; font-size: 11px; text-align: right; padding-right: 6px; }
 .flat-match > * { border-bottom: 1px solid #334155; padding: 5px 0; }
 .flat-match .fm-p1, .flat-match .fm-p2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flat-match .fm-p1.is-fav, .flat-match .fm-p2.is-fav { color: #fbbf24; }
-.flat-match .fm-winner { font-weight: 700; color: #f8fafc; }
+.flat-match .fm-winner { font-weight: 700; color: #fbbf24; }
 .flat-match .fm-add { }
 .flat-match .fm-rating { color: #64748b; font-size: 11px; }
 .flat-match .fm-status { text-align: center; font-size: 11px; white-space: nowrap; padding-right: 4px; }
@@ -447,6 +446,7 @@ button { font-family: inherit; font-size: inherit; }
 </div>
 
 <script src="bracket-algo.js"></script>
+<script src="stream-mappings.js"></script>
 <script>
 (function() {
   'use strict';
@@ -634,6 +634,32 @@ button { font-family: inherit; font-size: inherit; }
 
   var GENERIC_VENUE_WORDS = ['bar', 'grill', 'billiards', 'billiard', 'pool', 'hall', 'lounge', 'pub', 'tavern', 'sports', 'club', 'room', 'house', 'table', 'the', 'and', 'pizza', 'kitchen', 'cafe', 'restaurant', 'saloon'];
 
+  function getKnownVenueStream(tournament, video) {
+    var venueId = tournament && tournament.venue && tournament.venue.id;
+    if (venueId == null) return null;
+    var stream = KNOWN_VENUE_STREAMS[String(venueId)];
+    if (!stream) return null;
+    if (stream.channelId && stream.channelId !== video.channelId) return null;
+    return stream;
+  }
+
+  function isOpeningStreamMatchWithoutStart(match, matches, tableNum, videoStartMs) {
+    if (match.status !== 'COMPLETED' || !match.updatedAt) return false;
+    var completedMs = new Date(match.updatedAt).getTime();
+    if (completedMs < videoStartMs - 300000 || completedMs > videoStartMs + 43200000) return false;
+
+    // If another match on this table started before this one was completed,
+    // this cannot safely be treated as the opening match in the broadcast.
+    for (var i = 0; i < matches.length; i++) {
+      if (matches[i] === match || extractTableNum(matches[i].tableName) !== tableNum) continue;
+      var otherTime = matches[i].startTime || matches[i].scheduledTime;
+      if (!otherTime) continue;
+      var otherMs = new Date(otherTime).getTime();
+      if (otherMs >= videoStartMs - 300000 && otherMs < completedMs) return false;
+    }
+    return true;
+  }
+
   function matchLivestreamsToMatches(matches, videos, tournament) {
     var venueName = (tournament && tournament.venue && tournament.venue.name) || '';
     var venueTokens = venueName.toLowerCase().split(/\s+/).filter(function(t) {
@@ -645,10 +671,10 @@ button { font-family: inherit; font-size: inherit; }
     for (var mi = 0; mi < matches.length; mi++) {
       var m = matches[mi];
       var matchTime = m.startTime || m.scheduledTime;
-      if (m.videoUrl || !matchTime || !m.tableName) continue;
+      if (m.videoUrl || !m.tableName) continue;
       var matchTable = extractTableNum(m.tableName);
       if (!matchTable) continue;
-      var matchMs = new Date(matchTime).getTime();
+      var matchMs = matchTime ? new Date(matchTime).getTime() : null;
 
       var bestVideo = null;
       var bestOffset = Infinity;
@@ -656,20 +682,31 @@ button { font-family: inherit; font-size: inherit; }
       for (var vi = 0; vi < videos.length; vi++) {
         var v = videos[vi];
         if (!v.matchTime) continue;
+        var knownStream = getKnownVenueStream(tournament, v);
         var videoTable = v.tableNum ? String(v.tableNum) : extractTableNum(v.title);
+        if (!videoTable && knownStream) videoTable = knownStream.tableNum;
         if (videoTable !== matchTable) continue;
 
         // Some venue-operated channels omit the venue from the stream title.
         // Include channelTitle so "Skinny Bob's Billiards" can identify its
         // own tournament streams without weakening the table/time checks.
         var videoVenue = (extractVenueFromTitle(v.title) + ' ' + (v.channelTitle || '')).toLowerCase();
-        var venueHit = false;
+        var venueHit = !!knownStream;
         for (var ti = 0; ti < venueTokens.length; ti++) {
           if (videoVenue.indexOf(venueTokens[ti]) !== -1) { venueHit = true; break; }
         }
         if (!venueHit) continue;
 
-        var offsetSec = Math.round((matchMs - v.matchTime) / 1000);
+        var offsetSec;
+        if (matchMs != null) {
+          offsetSec = Math.round((matchMs - v.matchTime) / 1000);
+        } else if (knownStream && isOpeningStreamMatchWithoutStart(m, matches, matchTable, v.matchTime)) {
+          // YouTube treats t=0 like no timestamp on an active livestream and
+          // jumps to the live edge. One second reliably seeks to the start.
+          offsetSec = 1;
+        } else {
+          continue;
+        }
         // Accept: match started after stream start (or up to 5min before for clock skew)
         // and within 12 hours of stream start
         if (offsetSec >= -300 && offsetSec <= 43200 && Math.abs(offsetSec) < bestOffset) {
@@ -827,7 +864,7 @@ button { font-family: inherit; font-size: inherit; }
       if (!v.matchTime || assignedVideoIds[v.videoId]) continue;
       if (v.matchTime < minMs - RANGE_PAD_BEFORE || v.matchTime > maxMs + RANGE_PAD_AFTER) continue;
       var videoVenue = (extractVenueFromTitle(v.title) + ' ' + (v.channelTitle || '')).toLowerCase();
-      var venueHit = false;
+      var venueHit = !!getKnownVenueStream(tournament, v);
       for (var ti = 0; ti < venueTokens.length; ti++) {
         if (videoVenue.indexOf(venueTokens[ti]) !== -1) { venueHit = true; break; }
       }

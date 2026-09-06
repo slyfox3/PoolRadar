@@ -1,7 +1,8 @@
 var SHEET_NAME = 'videos';
 var CHANNELS = [
   { id: 'UCTlcpma6Dx7uIZN0dFJJl9w', title: 'EvoSports Streaming' },
-  { id: 'UCs4kXOaBLowAWGNBcARjtgw', title: "Skinny Bob's Billiards" }
+  { id: 'UCs4kXOaBLowAWGNBcARjtgw', title: "Skinny Bob's Billiards" },
+  { id: 'UCOKrmdnCIee9WYvQJFsmRpA', title: 'Excessive English' }
 ];
 
 // EvoSports descriptions use venue local time with no timezone indicator.
