@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Keep the page itself at a constant scale so fixed controls remain usable.
-     Pinching #viewport zooms only the Mermaid canvas (down to 15%) below. -->
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- minimum-scale under 1 lets Safari zoom out over the page as a fallback for
+     the Mermaid-only pinch handler; no maximum-scale keeps native zoom usable. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.2">
 <title>PoolRadar &mdash; Bracket Graph</title>
 <style>
 * { box-sizing: border-box; }
@@ -33,7 +33,7 @@ a:hover { text-decoration: underline; }
 
 /* Floating search, as index.html does it. It is a sibling of #graph rather than
    a descendant, so the Mermaid scale transform can never resize its 48px tap
-   target. The fixed page scale above protects it from browser zoom as well. */
+   target. Native page zoom intentionally scales the whole page, including it. */
 .gs-fab { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom));
   width: 48px; height: 48px; border-radius: 50%; background: #2563eb; border: none; color: #fff;
   display: none; align-items: center; justify-content: center; cursor: pointer; z-index: 998;
