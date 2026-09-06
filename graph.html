@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- minimum-scale under 1 lets Safari zoom out over the page as a fallback for
-     the Mermaid-only pinch handler; no maximum-scale keeps native zoom usable. -->
-<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=0.2">
+<!-- Native page zoom remains available outside the graph. Inside it, Safari's
+     gesture events zoom only the Mermaid canvas. Do not let page zoom shrink
+     below 1, because that also shrinks every fixed tap target. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
 <title>PoolRadar &mdash; Bracket Graph</title>
 <style>
 * { box-sizing: border-box; }
@@ -326,6 +327,9 @@ a:hover { text-decoration: underline; }
 @media (max-width: 768px) {
   .header h1 { font-size: 16px; }
   .url-input { max-width: none; flex-basis: 100%; }
+  /* iOS Safari auto-zooms focused form controls below 16px and can preserve
+     that visual-viewport scale after blur. Keep every top control at 16px. */
+  .url-input, .select-input { font-size: 16px; }
 }
 </style>
 </head>
@@ -2956,20 +2960,74 @@ $('viewport').addEventListener('wheel', (e) => {
 }, { passive: false });
 
 const pinchSpan = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-let pinch = null;
-$('viewport').addEventListener('touchstart', (e) => {
-  if (e.touches.length !== 2) { pinch = null; return; }
-  pinch = { span: pinchSpan(e.touches) || 1, zoom };
-}, { passive: true });
-$('viewport').addEventListener('touchmove', (e) => {
-  if (!pinch || e.touches.length !== 2) return;
-  e.preventDefault();
-  zoomAt(pinch.zoom * pinchSpan(e.touches) / pinch.span,
-    (e.touches[0].clientX + e.touches[1].clientX) / 2,
-    (e.touches[0].clientY + e.touches[1].clientY) / 2);
-}, { passive: false });
-for (const ev of ['touchend', 'touchcancel']) {
-  $('viewport').addEventListener(ev, () => { pinch = null; });
+const pinchPoint = (t) => ({
+  x: (t[0].clientX + t[1].clientX) / 2,
+  y: (t[0].clientY + t[1].clientY) / 2,
+});
+const viewport = $('viewport');
+const hasSafariGesture = 'ongesturestart' in window;
+
+if (hasSafariGesture) {
+  // Mobile Safari can commit the first finger to native scrolling before a
+  // second touch arrives, which makes a touchmove-based pinch unreliable.
+  // Its GestureEvent stream starts exactly when the second finger turns the
+  // interaction into a pinch, so use that as the sole scaling authority.
+  let gesture = null;
+  let gesturePoint = null;
+  let pendingGesture = null;
+  let gestureFrame = 0;
+
+  const rememberGesturePoint = (e) => {
+    if (e.touches.length >= 2) gesturePoint = pinchPoint(e.touches);
+  };
+  viewport.addEventListener('touchstart', rememberGesturePoint, { passive: true });
+  viewport.addEventListener('touchmove', rememberGesturePoint, { passive: true });
+
+  viewport.addEventListener('gesturestart', (e) => {
+    if (e.cancelable) e.preventDefault();
+    gesture = { zoom };
+    pendingGesture = null;
+  }, { passive: false });
+
+  viewport.addEventListener('gesturechange', (e) => {
+    if (!gesture || !(e.scale > 0)) return;
+    if (e.cancelable) e.preventDefault();
+    const point = gesturePoint || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    pendingGesture = { zoom: gesture.zoom * e.scale, x: point.x, y: point.y };
+    if (gestureFrame) return;
+    gestureFrame = requestAnimationFrame(() => {
+      gestureFrame = 0;
+      const next = pendingGesture;
+      pendingGesture = null;
+      if (next) zoomAt(next.zoom, next.x, next.y);
+    });
+  }, { passive: false });
+
+  const endGesture = (e) => {
+    if (gesture && e.cancelable) e.preventDefault();
+    gesture = null;
+    gesturePoint = null;
+  };
+  viewport.addEventListener('gestureend', endGesture, { passive: false });
+  viewport.addEventListener('gesturecancel', endGesture, { passive: false });
+} else {
+  // Chromium/Firefox fallback. Prevent from the two-finger start rather than
+  // waiting for the first move, so the browser never claims this pinch first.
+  let pinch = null;
+  viewport.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 2) { pinch = null; return; }
+    e.preventDefault();
+    pinch = { span: pinchSpan(e.touches) || 1, zoom };
+  }, { passive: false });
+  viewport.addEventListener('touchmove', (e) => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const point = pinchPoint(e.touches);
+    zoomAt(pinch.zoom * pinchSpan(e.touches) / pinch.span, point.x, point.y);
+  }, { passive: false });
+  for (const ev of ['touchend', 'touchcancel']) {
+    viewport.addEventListener(ev, () => { pinch = null; });
+  }
 }
 $('zoom-reset').addEventListener('click', () => {
   zoom = 1;
