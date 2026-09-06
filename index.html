@@ -643,6 +643,11 @@ button { font-family: inherit; font-size: inherit; }
     return stream;
   }
 
+  // YouTube only archives the first 11h55m of streams that run past its
+  // advertised 12-hour auto-archive limit. Do not create timestamps in the
+  // unarchived tail, even while the livestream itself is still running.
+  var MAX_ARCHIVED_LIVESTREAM_OFFSET_SEC = 11 * 3600 + 55 * 60;
+
   function isOpeningStreamMatchWithoutStart(match, matches, tableNum, videoStartMs) {
     if (match.status !== 'COMPLETED' || !match.updatedAt) return false;
     var completedMs = new Date(match.updatedAt).getTime();
@@ -708,8 +713,8 @@ button { font-family: inherit; font-size: inherit; }
           continue;
         }
         // Accept: match started after stream start (or up to 5min before for clock skew)
-        // and within 12 hours of stream start
-        if (offsetSec >= -300 && offsetSec <= 43200 && Math.abs(offsetSec) < bestOffset) {
+        // and before YouTube's effective archive cutoff.
+        if (offsetSec >= -300 && offsetSec < MAX_ARCHIVED_LIVESTREAM_OFFSET_SEC && Math.abs(offsetSec) < bestOffset) {
           bestOffset = Math.abs(offsetSec);
           bestVideo = { videoId: v.videoId, offset: Math.max(0, offsetSec) };
         }
@@ -814,7 +819,7 @@ button { font-family: inherit; font-size: inherit; }
       if (hasOverlap) continue;
 
       var offsetSec = Math.round((w.start - video.matchTime) / 1000);
-      if (offsetSec >= -300 && offsetSec <= 43200) {
+      if (offsetSec >= -300 && offsetSec < MAX_ARCHIVED_LIVESTREAM_OFFSET_SEC) {
         var url = 'https://www.youtube.com/watch?v=' + video.videoId + '&t=' + Math.max(0, offsetSec);
         if (finalNums.indexOf(w.num) !== -1) {
           matches[w.idx].videoUrl = url;
