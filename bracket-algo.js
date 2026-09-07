@@ -2,6 +2,63 @@
 // next-plays logic that reads it.
 // Extracted from index.html to enable unit testing.
 
+// A winners round and the losers round fed by the preceding winners round are
+// one visual stage in graph.html. Keep this here, beside defaultFromStage, so
+// the automatic cut and the renderer cannot drift into two ideas of where a
+// stage begins.
+function stageOf(round) {
+  if (round == null) return 0;
+  if (round > 0) return round;
+  var n = Math.abs(round);
+  if (n === 1) return 2;
+  if (n % 2 === 0) return n / 2 + 2;
+  return (n - 1) / 2 + 2.5;
+}
+
+// Pick a useful first view of a bracket in progress. Each side contributes its
+// latest wholly decided round, and a double-elimination draw starts at the
+// earlier of those two points. That leaves one completed round of context on
+// both sides without letting the faster side hide unfinished work on the
+// slower one. A half-stage losers round rounds down because the picker only
+// offers winners-anchored, whole-stage cut points.
+//
+// Rows use the canonical shape buildBracketIndex consumes. A COMPLETED status
+// is accepted as well as winner flags because the two upstream sources do not
+// always publish those fields in the same response.
+function defaultFromStage(rows) {
+  var byRound = {}, hasLosers = false;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (r.is_bye || r.round == null || r.round === 0) continue;
+    var key = String(r.round);
+    if (!byRound[key]) byRound[key] = [];
+    byRound[key].push(r);
+    if (r.round < 0) hasLosers = true;
+  }
+
+  var latestW = -Infinity, latestL = -Infinity;
+  for (var key in byRound) {
+    var round = Number(key), matches = byRound[key], complete = true;
+    for (var j = 0; j < matches.length; j++) {
+      var m = matches[j];
+      if (!(m.p1Won || m.p2Won || m.status === 'COMPLETED')) {
+        complete = false;
+        break;
+      }
+    }
+    if (!complete) continue;
+    if (round > 0) latestW = Math.max(latestW, stageOf(round));
+    else latestL = Math.max(latestL, stageOf(round));
+  }
+
+  var cut = hasLosers ? Math.min(latestW, latestL) : latestW;
+  if (!isFinite(cut)) return 0;
+  cut = Math.floor(cut);
+  // W1 has no useful cut of its own, and the graph picker intentionally starts
+  // at stage 2.
+  return cut >= 2 ? cut : 0;
+}
+
 // Follow forward through byes to find the real destination match number.
 //
 // Cycle-safe by remembering where it has been rather than by counting steps.
@@ -254,6 +311,7 @@ function getNextPlaysInfo(bracketByNum, matchNum, idx) {
 // same name shadows the global silently, with no error anywhere. Nothing here
 // may be renamed to something graph.html already declares at its top level.
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { followNum, followTo, buildBracketIndex, buildBlockerMap,
-                     getBlockersForPlayer, getNextPlaysInfo };
+  module.exports = { stageOf, defaultFromStage, followNum, followTo,
+                     buildBracketIndex, buildBlockerMap, getBlockersForPlayer,
+                     getNextPlaysInfo };
 }

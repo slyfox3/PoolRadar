@@ -461,6 +461,7 @@ const QUERY = `query($s:String!){
 }`;
 
 const $ = (id) => document.getElementById(id);
+const isMobileViewport = () => window.innerWidth <= 768;
 const state = {
   // Left to right by default: a bracket is read along its rounds, and the
   // columns leave room for full names. Except on a phone, which is tall and
@@ -469,7 +470,8 @@ const state = {
   // sideways scrolling.
   // Split is the default on both: it is the shape a printed wall chart has,
   // and the plain flows are kept for reading one side on its own.
-  dir: window.innerWidth <= 768 ? 'BT' : 'LR', split: true, fromStage: 0, player: null, waiting: null, rows: [], tournament: null,
+  dir: isMobileViewport() ? 'BT' : 'LR', split: true, fromStage: 0,
+  autoFromPending: false, player: null, waiting: null, rows: [], tournament: null,
   source: 'digitalpool', slug: '',
   // WNT only. One event JSON holds every stage and one stage is drawn at a
   // time, so the fetch is kept and switching stages is just a re-render.
@@ -905,28 +907,9 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
     '</span>';
 }
 
-// A stage is the pair named by a winners match's two outgoing edges: W3-1 goes
-// to W4-1 or drops to L4-4, so W4 and L4 belong together. That gives
-// W2/L1, W3/L2, W4/L4, W5/L6, W6/L8, W7/L10 — Wk with L(2k-4), and W2/L1 as
-// the exception since there is no L0. W1 stands alone; nothing has dropped yet.
-//
-// The minor losers rounds (L3, L5, L7, L9) take no drop-downs, so no winners
-// round names them. They stay on their own, ordered on the half step between
-// the pairs that bracket them: L3 sits at 3.5, between W3/L2 and W4/L4.
-//
-// The returned number doubles as the group key — rounds sharing a stage share
-// a value, and every stage has a distinct one.
-function stageOf(round) {
-  if (round == null) return 0;
-  if (round > 0) return round;
-  const n = Math.abs(round);
-  if (n === 1) return 2;
-  if (n % 2 === 0) return n / 2 + 2;
-  return (n - 1) / 2 + 2.5;
-}
-
 // The rounds a stage contains, e.g. 4 -> ['W4','L4']. Derived from
-// stageOf so the dropdown can never disagree with the grouping.
+// stageOf in bracket-algo.js so the dropdown, grouping and automatic default
+// can never disagree.
 function stageRounds(stage, haveW, haveL) {
   const out = [];
   if (haveW.has(stage)) out.push('W' + stage);
@@ -2900,6 +2883,14 @@ async function load(source, slug) {
     $('back-link').textContent = '← ' + name;
     setStatus('Loaded ' + loaded + ' in ' + Math.round(performance.now() - t0) + ' ms');
     populateRounds(state.rows);
+    // An explicit query parameter is a shareable instruction and always wins.
+    // On mobile, with no instruction, open near the live edge while retaining
+    // one wholly completed round on both sides for context. Do this only for a
+    // new load; an auto-refresh must not move a bracket someone is reading.
+    if (state.autoFromPending) {
+      setCut(defaultFromStage(state.index.rows));
+      state.autoFromPending = false;
+    }
     resolveSelection();
     syncUrl();
     await render();
@@ -3090,6 +3081,7 @@ document.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click',
   syncButtons(); render();
 }));
 $('round-from').addEventListener('change', (e) => {
+  state.autoFromPending = false;
   state.fromStage = parseInt(e.target.value, 10) || 0;
   e.target.classList.toggle('filtered', state.fromStage > 0);
   // Deliberately no ensureVisible here — choosing a cut by hand should stick,
@@ -3199,7 +3191,11 @@ document.addEventListener('keydown', (e) => {
 // the new event's latest. Retyping the current slug to refresh keeps the stage.
 const loadTyped = () => {
   const t = parseTarget($('slug-input').value);
-  if (t.source !== state.source || t.slug !== state.slug) state.stage = 0;
+  if (t.source !== state.source || t.slug !== state.slug) {
+    state.stage = 0;
+    state.fromStage = 0;
+    state.autoFromPending = isMobileViewport();
+  }
   load(t.source, t.slug);
 };
 $('load-btn').addEventListener('click', loadTyped);
@@ -3208,6 +3204,7 @@ $('slug-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') load
 syncButtons();
 const params = new URLSearchParams(location.search);
 state.fromStage = Math.max(0, parseInt(params.get('from') || '0', 10) || 0);
+state.autoFromPending = isMobileViewport() && !params.has('from');
 state.player = params.get('player') || null;
 state.country = (params.get('country') || '').toLowerCase() || null;
 state.stage = Math.max(0, parseInt(params.get('stage') || '0', 10) || 0);
@@ -3222,7 +3219,8 @@ $('slug-input').value = initial;
 // Cache-Control leaves the freshness lifetime to the browser's imagination —
 // surfaces as "buildBracketIndex is not defined" thrown from inside a load,
 // naming neither the file nor the reason. Say it plainly instead.
-if (typeof buildBracketIndex !== 'function') {
+if (typeof buildBracketIndex !== 'function' || typeof stageOf !== 'function' ||
+    typeof defaultFromStage !== 'function') {
   setStatus('bracket-algo.js did not load, or the browser is holding an old copy. ' +
     'Hard-reload the page (Cmd/Ctrl + Shift + R).', true);
 } else {

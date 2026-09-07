@@ -6,6 +6,8 @@ if (typeof console === 'undefined') {
 }
 if (typeof require === 'function') {
   var algo = require('./bracket-algo.js');
+  var stageOf = algo.stageOf;
+  var defaultFromStage = algo.defaultFromStage;
   var followTo = algo.followTo;
   var buildBracketIndex = algo.buildBracketIndex;
   var buildBlockerMap = algo.buildBlockerMap;
@@ -32,7 +34,7 @@ function M(num, p1, p2, opts) {
     s1: opts.s1 || null, s2: opts.s2 || null,
     p1Won: !!opts.p1Won, p2Won: !!opts.p2Won,
     winnerTo: opts.wTo || null, loserTo: opts.lTo || null,
-    status: opts.status || 'NOT_STARTED',
+    status: opts.status || 'NOT_STARTED', round: opts.round == null ? null : opts.round,
   };
 }
 
@@ -631,6 +633,43 @@ function resolveFeeder(destNum, excludeNum, bMap) {
   var bMap = buildBlockerMap(toObj(list));
   assert(bMap.blockedMatches[11][0].num === 10, 'and the blocker list agrees');
   assert(resolveFeeder(11, null, bMap).num === 10, 'so the TBD cell names 10, every time');
+})();
+
+// ═══════════════════════════════════════════════
+// I1: Automatic graph cut follows the slower bracket side
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('I1: Automatic graph cut keeps one completed round per side');
+  var rows = [
+    M(1, 'A', 'B', { round: 5, p1Won: true }),
+    M(2, 'C', 'D', { round: 6, p1Won: true }),
+    M(3, 'E', 'F', { round: 7, p1Won: true }),
+    M(4, 'G', 'H', { round: -7, p1Won: true }),
+    M(5, 'I', 'J', { round: -8, status: 'COMPLETED' }),
+    M(6, 'K', 'L', { round: -9, p1Won: true }),
+    M(7, 'M', 'N', { round: -9 }),
+  ];
+  assert(stageOf(-8) === 6 && stageOf(-9) === 6.5, 'losers rounds map to graph stages');
+  assert(defaultFromStage(rows) === 6, 'the faster winners side does not hide losers-side context');
+})();
+
+// ═══════════════════════════════════════════════
+// I2: Incomplete and single-elimination defaults
+// ═══════════════════════════════════════════════
+(function() {
+  console.log('I2: Automatic graph cut handles incomplete and single elimination draws');
+  var earlyDouble = [
+    M(1, 'A', 'B', { round: 2, p1Won: true }),
+    M(2, 'C', 'D', { round: -1 }),
+  ];
+  assert(defaultFromStage(earlyDouble) === 0, 'no cut until both bracket sides finish a round');
+
+  var knockout = [
+    M(3, 'A', 'B', { round: 2, p1Won: true }),
+    M(4, 'C', 'D', { round: 2, status: 'COMPLETED' }),
+    M(5, 'A', 'C', { round: 3 }),
+  ];
+  assert(defaultFromStage(knockout) === 2, 'single elimination keeps its latest complete round');
 })();
 
 // ═══════════════════════════════════════════════
