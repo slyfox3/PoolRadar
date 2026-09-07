@@ -1564,13 +1564,19 @@ function selectionRuns(idx, d, sel) {
       if (next != null && d.keep.has(next)) runs.push([a.num, next]);
     }
   }
-  // Where the selection enters the visible bracket — earliest stage wins, so it
-  // works whichever side that is, and it follows the cut rather than assuming
-  // round 1 is on screen. Match number only breaks ties within a stage.
+  // A player search is about where that player is now (or where their run
+  // ended), so focus their latest visible match. Countries still focus where
+  // the delegation enters the visible bracket: there is no single player's
+  // latest match to privilege. Match number breaks ties within a stage in the
+  // same direction.
   let focus = null;
+  const latest = sel.kind === 'player';
   for (const n of nodes) {
     const st = stageOf(idx.byNum[n].round);
-    if (!focus || st < focus.st || (st === focus.st && n < focus.n)) focus = { n, st };
+    if (!focus || (latest ? st > focus.st : st < focus.st) ||
+        (st === focus.st && (latest ? n > focus.n : n < focus.n))) {
+      focus = { n, st };
+    }
   }
   return { nodes, runs, ready, focus: focus && focus.n };
 }
