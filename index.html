@@ -1286,6 +1286,16 @@ button { font-family: inherit; font-size: inherit; }
     });
   }
 
+  // Tour calendars are useful for what is happening now and next, but unlike
+  // favourite matches they should not fill the landing page months ahead.
+  // Keep the caller's earlier boundary when it is already narrower.
+  function tourFeedEnd(to) {
+    var cap = new Date();
+    cap.setHours(23, 59, 59, 999);
+    cap.setDate(cap.getDate() + 14);
+    return to < cap ? to : cap;
+  }
+
   // WNT events as feed rows, in the shape the table already renders.
   //
   // They come in whatever the favourites are. The tour's events are the ones
@@ -1299,6 +1309,7 @@ button { font-family: inherit; font-size: inherit; }
   // want on screen, and on a phone the window opens two days ago, which would
   // have hidden the US Open on its fifth day.
   function fetchWntFeedRows(from, to) {
+    to = tourFeedEnd(to);
     return fetchWntEvents().then(function(list) {
       var rows = [], now = new Date();
       for (var i = 0; i < list.length; i++) {
@@ -1638,6 +1649,7 @@ button { font-family: inherit; font-size: inherit; }
   }
 
   function fetchPbsFeedRows(from, to) {
+    to = tourFeedEnd(to);
     return fetchPbsEvents().then(function(list) {
       var rows = [], now = new Date();
       for (var i = 0; i < list.length; i++) {
