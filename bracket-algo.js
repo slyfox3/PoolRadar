@@ -196,7 +196,7 @@ function buildBracketIndex(src) {
 
   // A country is a set of names, which is the only thing a selection ever needs
   // of it. Resolving it here rather than testing a code against every
-  // challenger is also what keeps the two sources apart: DigitalPool carries no
+  // challenger is also what keeps the sources apart: DigitalPool carries no
   // country at all, so its players simply never land in one.
   var countries = Object.create(null);
   for (key in players) {

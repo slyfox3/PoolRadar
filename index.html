@@ -6,7 +6,7 @@
 <title>PoolRadar</title>
 <meta property="og:type" content="website">
 <meta property="og:title" content="PoolRadar">
-<meta property="og:description" content="Track your favorite pool players, venues, and tournament directors across DigitalPool tournaments.">
+<meta property="og:description" content="Track pool players and match results across DigitalPool, WNT, and Pro Billiard Series tournaments.">
 <meta property="og:url" content="https://slyfox3.github.io/PoolRadar/">
 <meta property="og:site_name" content="PoolRadar">
 <meta property="og:image" content="https://slyfox3.github.io/PoolRadar/previews/preview.png">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="PoolRadar">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="PoolRadar">
-<meta name="twitter:description" content="Track your favorite pool players, venues, and tournament directors across DigitalPool tournaments.">
+<meta name="twitter:description" content="Track pool players and match results across DigitalPool, WNT, and Pro Billiard Series tournaments.">
 <meta name="twitter:image" content="https://slyfox3.github.io/PoolRadar/previews/preview.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><clipPath id='b'><circle cx='16' cy='16' r='14'/></clipPath></defs><circle cx='16' cy='16' r='14' fill='%23ffffff'/><rect x='0' y='9' width='32' height='14' fill='%23fbbf24' clip-path='url(%23b)'/><ellipse cx='16' cy='16' rx='7' ry='6' fill='%23ffffff'/><text x='16' y='20' text-anchor='middle' font-size='12' font-weight='700' font-family='Arial,sans-serif' fill='%23000000'>9</text><circle cx='16' cy='16' r='14' fill='none' stroke='%2394a3b8' stroke-width='0.4'/></svg>">
 <script>
@@ -120,6 +120,13 @@ button { font-family: inherit; font-size: inherit; }
 .wnt-mark { display: inline-block; width: 3.18em; height: 1.2em; margin-right: 6px;
   vertical-align: -0.265em; background-repeat: no-repeat; background-position: left center;
   background-size: contain; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 146.5 55.31'%3E%3Cdefs%3E%3Cstyle%3E .cls-1 { fill: %23fff; } .cls-2 { fill: %23ee342a; } %3C/style%3E%3C/defs%3E%3Cg%3E%3Cg%3E%3Cpolygon class='cls-1' points='56.27 15.35 44.05 40.84 39.08 15.35 28.21 15.35 15.52 40.84 10.95 15.35 0 15.35 7.81 55.31 18.44 55.31 31.37 29.89 36.75 55.31 47.3 55.31 67.14 15.35 56.27 15.35'/%3E%3Cpath class='cls-1' d='M91.32,14.55c-2.29,0-4.45.47-6.47,1.4-2.02.93-3.79,2.22-5.3,3.88l.63-4.48h-10.87l-5.62,39.96h10.95l3.07-21.82c.47-3.36,1.56-5.8,3.27-7.31,1.7-1.52,3.6-2.28,5.67-2.28,2.45,0,4.19.73,5.21,2.2,1.02,1.47,1.34,3.56.96,6.27l-3.22,22.94h11.11l3.43-24.38c.73-5.17-.04-9.19-2.3-12.07-2.26-2.88-5.76-4.32-10.5-4.32Z'/%3E%3Cpolygon class='cls-1' points='69.31 15.35 69.31 15.35 69.31 15.34 69.31 15.35'/%3E%3Cpath class='cls-1' d='M127.98,0l-11.79,5.99-1.31,9.35h-10.24c.54.49,1.04,1.03,1.51,1.62,1.74,2.21,2.78,4.93,3.1,8.12l.06.09h4.19l-1.8,12.79c-.46,3.25-.56,5.98-.31,8.19.25,2.21.94,4,2.09,5.36,1.14,1.36,2.74,2.33,4.79,2.92,2.05.59,4.67.88,7.87.88h1.6l1.44-10.23c-1.71,0-3.04-.08-4-.24-.96-.16-1.66-.49-2.1-1-.44-.51-.67-1.24-.69-2.2-.02-.96.07-2.21.29-3.76l1.79-12.71h7.51l1.38-9.83h-7.51l2.16-15.35Z'/%3E%3Cpath class='cls-2' d='M144.91,45.46c-1.06-1.06-2.44-1.59-4.14-1.59s-3.07.53-4.1,1.59c-1.04,1.06-1.55,2.44-1.55,4.14s.52,3.07,1.55,4.1c1.04,1.04,2.4,1.55,4.1,1.55s3.08-.52,4.14-1.55c1.06-1.04,1.59-2.4,1.59-4.1s-.53-3.08-1.59-4.14Z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+/* Font-only approximation of Predator's custom wordmark. DIN Condensed Bold
+   was the closest of 52 built-in Latin faces against the supplied reference. */
+.pbs-mark { display: inline-block; width: 5.5em; height: 1.2em; margin-right: 6px;
+  vertical-align: -0.265em; color: #f3c81a; white-space: nowrap; }
+.pbs-mark > span { display: inline-block; font-family: "DIN Condensed", "Arial Narrow", Impact, Arial, sans-serif;
+  font-size: 1em; font-weight: 700; line-height: 1.2; letter-spacing: -0.030cm;
+  transform: skewX(-14deg) scaleX(1.67); transform-origin: left center; }
 .feed-section-collapsed { display: none; }
 .slug-loading #feed-section { display: none; }
 .back-to-list { background: none; border: none; color: #64748b; cursor: pointer; font-size: 12px; padding: 0 0 8px 0; font-family: inherit; }
@@ -350,15 +357,15 @@ button { font-family: inherit; font-size: inherit; }
   <a class="gh-icon" href="https://github.com/slyfox3/PoolRadar" target="_blank" title="GitHub">
     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
   </a>
-  <input type="text" class="url-input" id="url-input" placeholder="Paste DigitalPool tournament URL..." />
+  <input type="text" class="url-input" id="url-input" placeholder="Paste tournament URL..." />
 </div>
 
 <div id="help-modal" class="modal-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
   <div class="modal">
     <button class="modal-close" onclick="document.getElementById('help-modal').classList.add('hidden')">&times;</button>
     <h2>PoolRadar</h2>
-    <p>Track your favorite pool players, venues, and tournament directors across DigitalPool tournaments.</p>
-    <p><strong>Getting started:</strong> Paste a DigitalPool tournament URL in the top bar. Click any player name to add them as a favorite. Click the venue or TD buttons to save those too.</p>
+    <p>Track your favorite pool players, venues, and tournament directors across DigitalPool, WNT, and Pro Billiard Series tournaments.</p>
+    <p><strong>Getting started:</strong> Paste a DigitalPool, WNT Live Scores, or Pro Billiard Series tournament URL in the top bar. Click any player name to add them as a favorite. Click the venue or TD buttons to save those too.</p>
     <p><strong>Favorites feed:</strong> Once you have favorites, the tournament feed auto-populates with recent tournaments (+/- 3 days) involving your favorites.</p>
     <p><strong>Duplicate accounts:</strong> PoolRadar automatically detects and groups duplicate DigitalPool accounts by matching Fargo ID and name slug variations.</p>
     <p><strong>Live updates:</strong> Match detail auto-refreshes every 60 seconds for in-progress tournaments.</p>
@@ -455,9 +462,12 @@ button { font-family: inherit; font-size: inherit; }
   var YT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwxMM4X-AGKCIOUTaahuXUwt-Qqgs3kYFTWhO5qfNnNHSnvaGRDN_YN9M11QwdjnB3h/exec';
   // Deployed wnt-proxy Worker. Empty until deployed; wnt-dev-proxy.py serves
   // the same routes off our own origin when running locally.
-  var WNT_PROXY_REMOTE = 'https://wnt-proxy.slyfox3.workers.dev';
+  var DATA_PROXY_REMOTE = 'https://wnt-proxy.slyfox3.workers.dev';
   var WNT_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-    ? '/wnt' : (WNT_PROXY_REMOTE ? WNT_PROXY_REMOTE + '/wnt' : '');
+    ? '/wnt' : (DATA_PROXY_REMOTE ? DATA_PROXY_REMOTE + '/wnt' : '');
+  var PBS_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? '/pbs' : (DATA_PROXY_REMOTE ? DATA_PROXY_REMOTE + '/pbs' : '');
+  var CUESCORE_API = 'https://api.cuescore.com';
 
   // =====================================================
   // LocalStorage helpers
@@ -1179,7 +1189,7 @@ button { font-family: inherit; font-size: inherit; }
 
   function fetchWntMatches(slug) {
     if (!WNT_PROXY) {
-      return Promise.reject(new Error('No WNT proxy configured. Run wnt-dev-proxy.py, or set WNT_PROXY_REMOTE.'));
+      return Promise.reject(new Error('No WNT proxy configured. Run wnt-dev-proxy.py, or set DATA_PROXY_REMOTE.'));
     }
     return fetch(WNT_PROXY + '/event/' + encodeURIComponent(slug))
       .then(function(r) {
@@ -1424,6 +1434,230 @@ button { font-family: inherit; font-size: inherit; }
     };
 
     return { matches: matches, tournament: tournament, bracketByNum: bByNum };
+  }
+
+  // =====================================================
+  // Pro Billiard Series / CueScore — third data source
+  // =====================================================
+  // PBS match pages embed a CueScore tournament id. The proxy resolves that
+  // id because the PBS site itself is protected by a browser challenge; the
+  // browser then reads CueScore's public, CORS-enabled JSON. Normalize it to
+  // the same contract as DigitalPool and WNT so all downstream code is shared.
+  var CUESCORE_WALKOVER_PLAYER = 1000615;
+  var CUESCORE_WALKOVER_TEAM = 1104541;
+  var PBS_STATUS = { 0: 'NOT_STARTED', 1: 'IN_PROGRESS', 2: 'COMPLETED' };
+
+  function pbsParticipantId(p) {
+    return p && (p.playerId || p.teamId) || 0;
+  }
+
+  function pbsIsWalkover(p) {
+    var id = pbsParticipantId(p);
+    return id === CUESCORE_WALKOVER_PLAYER || id === CUESCORE_WALKOVER_TEAM;
+  }
+
+  function pbsCountry(p) {
+    var country = p && p.country;
+    if (!country || Object.prototype.toString.call(country) !== '[object Object]') return null;
+    if (/chinese\s+taipei/i.test(country.name || '')) return 'tw';
+    var m = String(country.image || '').match(/\/([a-z]{2})\.png(?:\?|$)/i);
+    return m ? m[1].toLowerCase() : null;
+  }
+
+  function pbsPlayer(p) {
+    var id = pbsParticipantId(p);
+    if (!p || !id || pbsIsWalkover(p)) return null;
+    var country = pbsCountry(p);
+    return {
+      // Namespace CueScore ids so they cannot accidentally collide with a
+      // DigitalPool account id. Name-based favorites still work across sites.
+      id: 'cuescore:' + id,
+      name: p.name || ((p.firstname || '') + ' ' + (p.lastname || '')).trim(),
+      playerId: null,
+      rating: null,
+      place: null,
+      country: country,
+      countryName: countryDisplayName(country, p.country && p.country.name),
+    };
+  }
+
+  function pbsWinnerSide(m, status) {
+    if (status !== 'COMPLETED') return 0;
+    var penalty = Number(m.penalty) || 0;
+    var aLost = !!(penalty & (1 | 4 | 16));
+    var bLost = !!(penalty & (2 | 8 | 32));
+    if (aLost !== bLost) return aLost ? 2 : 1;
+    if (pbsIsWalkover(m.playerA) !== pbsIsWalkover(m.playerB)) {
+      return pbsIsWalkover(m.playerA) ? 2 : 1;
+    }
+    if (m.scoreA === m.scoreB) return 0;
+    return Number(m.scoreA) > Number(m.scoreB) ? 1 : 2;
+  }
+
+  function fetchPbsMatches(path) {
+    if (!PBS_PROXY) return Promise.reject(new Error('No PBS proxy configured.'));
+    return fetch(PBS_PROXY + '/event?path=' + encodeURIComponent(path))
+      .then(function(r) {
+        return r.json().then(function(data) {
+          if (!r.ok) throw new Error(data.message || data.error || ('HTTP ' + r.status));
+          return data;
+        });
+      })
+      .then(function(locator) {
+        if (!locator.tournamentId) {
+          return {
+            matches: [], name: path.split('/').pop().replace(/-/g, ' '), statusCode: 0,
+            pbsPath: locator.pbsPath || path, pbsUrl: locator.pbsUrl,
+          };
+        }
+        return fetch(CUESCORE_API + '/tournament/?lang=en&id=' + encodeURIComponent(locator.tournamentId))
+          .then(function(r) {
+            if (!r.ok) throw new Error('CueScore returned HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function(data) {
+            if (!data || Object.prototype.toString.call(data.matches) !== '[object Array]') {
+              throw new Error('CueScore returned an unrecognised tournament response.');
+            }
+            data.pbsPath = locator.pbsPath;
+            data.pbsUrl = locator.pbsUrl;
+            return data;
+          });
+      })
+      .then(function(data) { return pbsBuildResult(path, data); });
+  }
+
+  function pbsBuildResult(path, data) {
+    var matches = [];
+    var bByNum = {};
+    var rawMatches = data.matches || [];
+    for (var i = 0; i < rawMatches.length; i++) {
+      var m = rawMatches[i];
+      var status = PBS_STATUS[m.matchstatusCode] || 'NOT_STARTED';
+      var p1 = pbsPlayer(m.playerA);
+      var p2 = pbsPlayer(m.playerB);
+      var winner = pbsWinnerSide(m, status);
+      var waiting = status === 'NOT_STARTED';
+      var tableName = m.table && !Array.isArray(m.table) ? m.table.name || null : null;
+      var started = waiting ? null : (m.starttime || null);
+      var scheduled = waiting ? (m.starttime || null) : null;
+      var lastNote = m.notes && m.notes.length ? m.notes[m.notes.length - 1] : null;
+
+      bByNum[m.matchno] = {
+        num: m.matchno, status: status, is_bye: pbsIsWalkover(m.playerA) || pbsIsWalkover(m.playerB),
+        identifier: m.roundName || null, round: m.round == null ? null : m.round,
+        p1: p1, p2: p2,
+        s1: waiting ? null : m.scoreA, s2: waiting ? null : m.scoreB,
+        p1Won: winner === 1, p2Won: winner === 2,
+        winnerTo: m.winnerNext || null, loserTo: m.loserNext || null,
+        scheduledTime: scheduled, startTime: started,
+      };
+
+      if (pbsIsWalkover(m.playerA) || pbsIsWalkover(m.playerB)) {
+        var byePlayer = p1 || p2;
+        if (byePlayer) {
+          matches.push({
+            num: m.matchno, p1: byePlayer, p2: null,
+            s1: null, s2: null, p1Won: false, p2Won: false,
+            status: status, videoUrl: null, tableName: tableName,
+            startTime: started, scheduledTime: scheduled,
+            updatedAt: m.stoptime || (lastNote && lastNote.time) || null,
+            round: m.round == null ? null : m.round, identifier: m.roundName || null,
+            isForfeit: false, isBye: true,
+          });
+        }
+        continue;
+      }
+
+      // playerId 0 is CueScore's "Winner of #…" / "Loser of #…" placeholder.
+      // Keep it in bracketByNum as an empty slot, but not as a player card.
+      if (!p1 || !p2) continue;
+      matches.push({
+        num: m.matchno, p1: p1, p2: p2,
+        s1: waiting ? null : m.scoreA, s2: waiting ? null : m.scoreB,
+        p1Won: winner === 1, p2Won: winner === 2,
+        status: status,
+        videoUrl: m.videoLink || null,
+        tableName: tableName,
+        startTime: started,
+        scheduledTime: scheduled,
+        updatedAt: m.stoptime || (lastNote && lastNote.time) || null,
+        round: m.round == null ? null : m.round,
+        identifier: m.roundName || null,
+        isForfeit: !!m.penalty,
+        raceTo: m.raceTo || null,
+      });
+    }
+
+    var venue = data.venues && data.venues[0];
+    var tournament = {
+      name: data.name || path.split('/').pop().replace(/-/g, ' '),
+      date: data.starttime || null,
+      status: PBS_STATUS[data.statusCode] || 'NOT_STARTED',
+      venue: venue ? { id: null, name: venue.name, city: venue.placename, region: venue.country && venue.country.name } : null,
+      organizer: null,
+      director: null,
+      slug: path,
+      source: 'pbs',
+      dates: data.displayDate || null,
+      sourceUrl: data.pbsUrl || ('https://probilliardseries.com/' + path + '/'),
+      cueScoreUrl: data.url || null,
+    };
+    return { matches: matches, tournament: tournament, bracketByNum: bByNum };
+  }
+
+  var pbsEventsCache = null;
+  function fetchPbsEvents() {
+    if (!PBS_PROXY) return Promise.resolve([]);
+    if (pbsEventsCache) return Promise.resolve(pbsEventsCache);
+    return fetch(PBS_PROXY + '/events')
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .then(function(list) {
+        pbsEventsCache = Object.prototype.toString.call(list) === '[object Array]' ? list : [];
+        return pbsEventsCache;
+      })
+      .catch(function() { return []; });
+  }
+
+  var PBS_MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+                     Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  function pbsEventDates(s) {
+    var m = /^(\d{1,2})\s+([A-Z][a-z]{2})\s*-\s*(\d{1,2})\s+([A-Z][a-z]{2}),\s*(\d{4})$/.exec(s || '');
+    if (!m) return null;
+    var sm = PBS_MONTHS[m[2]], em = PBS_MONTHS[m[4]];
+    if (sm == null || em == null) return null;
+    var year = parseInt(m[5], 10);
+    return {
+      start: new Date(em < sm ? year - 1 : year, sm, parseInt(m[1], 10)),
+      end: new Date(year, em, parseInt(m[3], 10), 23, 59, 59),
+    };
+  }
+
+  function pbsSeriesVenue(series) {
+    return String(series || '').replace(/,\s*\d{4}\s*$/, '').replace(/^\d{4}\s+/, '');
+  }
+
+  function fetchPbsFeedRows(from, to) {
+    return fetchPbsEvents().then(function(list) {
+      var rows = [], now = new Date();
+      for (var i = 0; i < list.length; i++) {
+        var e = list[i];
+        var d = pbsEventDates(e.dates);
+        var seriesRange = pbsEventDates(e.seriesDates) || d;
+        if (!d || !seriesRange || seriesRange.end < from || seriesRange.start > to) continue;
+        var venueName = pbsSeriesVenue(e.series);
+        rows.push({
+          id: 'pbs:' + e.path, source: 'pbs', slug: e.path, name: e.name,
+          date: d.start.toISOString(),
+          status: d.end < now ? 'COMPLETED' : (d.start > now ? 'NOT_STARTED' : 'IN_PROGRESS'),
+          progress: null,
+          venue: venueName ? { id: null, name: venueName, city: null, region: null } : null,
+          organizer: null, director: null,
+          favNames: [], favPlayerNames: [], favPlayerPlaces: {},
+        });
+      }
+      return rows;
+    });
   }
 
   // =====================================================
@@ -1712,6 +1946,7 @@ button { font-family: inherit; font-size: inherit; }
   // Kept apart from feedData because both the first load and "load more"
   // rebuild that from the DigitalPool map and would otherwise drop these.
   var wntFeedRows = [];
+  var pbsFeedRows = [];
   var feedSort = { col: 'date', asc: false };
   var feedLoading = false;
   var feedTruncated = { players: false, venues: false, tds: false };
@@ -1743,8 +1978,8 @@ button { font-family: inherit; font-size: inherit; }
 
   function loadFeed() {
     feedLoaded = true;
-    // No early return for an empty favourites list any more: the WNT calendar
-    // is in the feed whether or not anything has been favourited, so there is
+    // No early return for an empty favourites list any more: the tour calendars
+    // are in the feed whether or not anything has been favourited, so there is
     // always something to go and fetch.
     feedLoading = true;
     renderFeed();
@@ -1789,14 +2024,15 @@ button { font-family: inherit; font-size: inherit; }
     var vars = { pids: allPlayerIds, pnames: allPlayerNames, vids: allVenueIds, tids: allTdIds, from: fromStr, to: toStr };
 
     // With nothing favourited there is nothing for the query to match, so it is
-    // skipped rather than sent — but the WNT half still runs, and the two are
+    // skipped rather than sent — but the tour calendars still run, and all are
     // waited on together so the table is drawn once.
     var haveFavs = favs.players.length > 0 || favs.venues.length > 0 || favs.tds.length > 0;
     var dpPending = haveFavs ? gql(query, vars) : Promise.resolve({ data: { tournaments: [] } });
 
-    Promise.all([dpPending, fetchWntFeedRows(from, to)]).then(function(both) {
+    Promise.all([dpPending, fetchWntFeedRows(from, to), fetchPbsFeedRows(from, to)]).then(function(both) {
       var res = both[0];
       wntFeedRows = both[1];
+      pbsFeedRows = both[2];
       var tournaments = (res.data && res.data.tournaments) || [];
       if (tournaments.length >= 1000) feedWasTruncated = true;
 
@@ -1847,7 +2083,7 @@ button { font-family: inherit; font-size: inherit; }
       for (var id in tournamentMap) feedData.push(tournamentMap[id]);
       // Re-concatenated rather than pushed once, because paging in more
       // DigitalPool results rebuilds this list from the map alone.
-      feedData = feedData.concat(wntFeedRows);
+      feedData = feedData.concat(wntFeedRows, pbsFeedRows);
       feedLoading = false;
       feedTruncated = { players: feedWasTruncated, venues: false, tds: false };
       feedPaginationState = { tournamentMap: tournamentMap, fromStr: fromStr, toStr: toStr, offset: 1000,
@@ -1905,8 +2141,8 @@ button { font-family: inherit; font-size: inherit; }
       return;
     }
 
-    // Only worth saying when there is genuinely nothing here. The WNT calendar
-    // usually fills the table on its own, and telling someone to go and paste a
+    // Only worth saying when there is genuinely nothing here. The tour calendars
+    // usually fill the table on their own, and telling someone to go and paste a
     // URL over a list of events would read as a bug.
     if (feedData.length === 0 && favs.players.length === 0 && favs.venues.length === 0 && favs.tds.length === 0) {
       tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#475569;">Paste a tournament URL above to get started</td></tr>';
@@ -1923,11 +2159,11 @@ button { font-family: inherit; font-size: inherit; }
     if (hasAnySelection()) {
       var selNames = getSelectedFavNames();
       filtered = feedData.filter(function(t) {
-        // A WNT row carries no favourites to be matched against — the calendar
+        // A tour-calendar row carries no favourites to match against — the calendar
         // lists no players — so filtering on one would make the tour's events
         // disappear the moment anybody narrowed the list, which is the opposite
         // of always being there.
-        if (t.source === 'wnt') return true;
+        if (t.source === 'wnt' || t.source === 'pbs') return true;
         for (var i = 0; i < t.favNames.length; i++) {
           if (selNames.indexOf(t.favNames[i].toLowerCase()) !== -1) return true;
         }
@@ -1982,13 +2218,14 @@ button { font-family: inherit; font-size: inherit; }
       if (isLive) tag = ' <span class="mr-live" style="font-size:13px">\uD83D\uDD25</span>';
       else if (isFuture) tag = ' <span style="filter:grayscale(1) opacity(0.5);font-size:11px">\uD83D\uDCC5</span>';
       var venueName = t.venue ? t.venue.name : '';
-      // In the favourites column, which is empty on a WNT row anyway — the
+      // In the favourites column, which is empty on a tour-calendar row — the
       // calendar lists no players, so there is nothing to have matched a
       // favourite against. That makes it the one cell where the mark costs no
       // layout at all and fills space that would otherwise be blank, while
       // still answering the question that column raises: why is this row here?
       var mark = t.source === 'wnt'
-        ? '<span class="wnt-mark" role="img" aria-label="WNT" title="WNT Live Scores"></span>' : '';
+        ? '<span class="wnt-mark" role="img" aria-label="WNT" title="WNT Live Scores"></span>'
+        : (t.source === 'pbs' ? '<span class="pbs-mark" aria-label="Predator Pro Billiard Series" title="Pro Billiard Series"><span aria-hidden="true">PREDATOR</span></span>' : '');
       tr.innerHTML = '<td>' + esc(dateStr) + tag + '</td>'
         + '<td>' + esc(t.name) + '</td>'
         + '<td class="venue-col">' + esc(venueName) + '</td>'
@@ -1997,7 +2234,11 @@ button { font-family: inherit; font-size: inherit; }
         return function(e) {
           if (e.metaKey || e.ctrlKey) {
             var url = new URL(window.location);
-            url.searchParams.set(source === 'wnt' ? 'wnt' : 'digitalpool', slug);
+            var sourceParam = source === 'wnt' ? 'wnt' : (source === 'pbs' ? 'pbs' : 'digitalpool');
+            url.searchParams.delete('digitalpool');
+            url.searchParams.delete('wnt');
+            url.searchParams.delete('pbs');
+            url.searchParams.set(sourceParam, slug);
             window.open(url.toString(), '_blank');
             return;
           }
@@ -2081,7 +2322,7 @@ button { font-family: inherit; font-size: inherit; }
       for (var id in tournamentMap) feedData.push(tournamentMap[id]);
       // Re-concatenated rather than pushed once, because paging in more
       // DigitalPool results rebuilds this list from the map alone.
-      feedData = feedData.concat(wntFeedRows);
+      feedData = feedData.concat(wntFeedRows, pbsFeedRows);
       ps.offset += 1000;
       clearStatus();
       renderFeed();
@@ -2098,7 +2339,7 @@ button { font-family: inherit; font-size: inherit; }
   // Match Detail
   // =====================================================
   var currentSlug = null;
-  var currentSource = 'digitalpool'; // 'digitalpool' | 'wnt'
+  var currentSource = 'digitalpool'; // 'digitalpool' | 'wnt' | 'pbs'
   var currentPlayerList = null;
   var currentMatches = null;
   var currentTournament = null;
@@ -2121,7 +2362,7 @@ button { font-family: inherit; font-size: inherit; }
   var navHistory = [];
   var NAV_HISTORY_MAX = 20;
   var cache = {}; // source:slug → { type: 'matches'|'players', data: ..., time: ... }
-  // Namespaced by source: the two sites slugify events differently but nothing
+  // Namespaced by source: the sites slugify events differently but nothing
   // stops them from colliding on a name.
   function cacheKey(slug, source) { return (source || 'digitalpool') + ':' + slug; }
 
@@ -2232,9 +2473,11 @@ button { font-family: inherit; font-size: inherit; }
     updateSearchFab();
   }
 
-  // Both sources resolve to the same {matches, tournament, bracketByNum}.
+  // Every source resolves to the same {matches, tournament, bracketByNum}.
   function fetchForSource(slug, source) {
-    return source === 'wnt' ? fetchWntMatches(slug) : fetchMatches(slug);
+    if (source === 'wnt') return fetchWntMatches(slug);
+    if (source === 'pbs') return fetchPbsMatches(slug);
+    return fetchMatches(slug);
   }
 
   function loadTournament(slug, source) {
@@ -2294,8 +2537,8 @@ button { font-family: inherit; font-size: inherit; }
       var fetchMs = Math.round(performance.now() - fetchT0);
       if (result.matches.length === 0) {
         dismissLoadingToast();
-        if (currentSource === 'wnt') {
-          showStatus('No matches published yet for this WNT event.', 'info');
+        if (currentSource !== 'digitalpool') {
+          showStatus('No matches published yet for this event.', 'info');
           return;
         }
         loadPlayerList(slug);
@@ -2460,11 +2703,14 @@ button { font-family: inherit; font-size: inherit; }
         // No stage in the link: graph.html opens on the furthest one that has
         // matches, which is where the event actually is.
         + ' <a class="btn btn-link" href="graph.html?wnt=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
+    } else if (t.source === 'pbs') {
+      links = ' <a class="btn btn-link" href="' + esc(t.sourceUrl) + '" target="_blank" rel="noopener">PBS &rarr;</a>'
+        + (t.cueScoreUrl ? ' <a class="btn btn-link" href="' + esc(t.cueScoreUrl) + '" target="_blank" rel="noopener">CueScore &rarr;</a>' : '');
     } else {
       links = ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a>';
     }
     html += '<div class="match-title">' + esc(t.name) + links + '</div>';
-    html += '<div class="match-meta">' + esc(t.source === 'wnt' && t.dates ? t.dates : dateStr) + '</div>';
+    html += '<div class="match-meta">' + esc((t.source === 'wnt' || t.source === 'pbs') && t.dates ? t.dates : dateStr) + '</div>';
     if (venueStr) {
       var venueFavBtn = '';
       // WNT venues carry no id, so there is nothing to favorite against.
@@ -3116,6 +3362,7 @@ button { font-family: inherit; font-size: inherit; }
     var url = new URL(window.location);
     url.searchParams.delete('digitalpool');
     url.searchParams.delete('wnt');
+    url.searchParams.delete('pbs');
     history.replaceState(null, '', url);
   };
 
@@ -3757,12 +4004,15 @@ button { font-family: inherit; font-size: inherit; }
       if (!url) return;
       var wntMatch = url.match(/wntlivescores\.com\/events\/([^\/\?#]+)/);
       var slugMatch = url.match(/\/tournaments\/([^\/\?#]+)/);
+      var pbsMatch = url.match(/^https?:\/\/(?:www\.)?probilliardseries\.com\/(event\/[^?#]+)/i);
       if (wntMatch) {
         loadTournament(safeDecode(wntMatch[1]), 'wnt');
+      } else if (pbsMatch) {
+        loadTournament(safeDecode(pbsMatch[1]).replace(/\/+$/, ''), 'pbs');
       } else if (slugMatch) {
         loadSmartTournament(safeDecode(slugMatch[1]));
       } else {
-        showStatus('Could not parse tournament URL. Expected digitalpool.com/tournaments/… or wntlivescores.com/events/…', 'error');
+        showStatus('Could not parse tournament URL. Expected DigitalPool, WNT Live Scores, or Pro Billiard Series.', 'error');
       }
     }
   });
@@ -3829,8 +4079,11 @@ button { font-family: inherit; font-size: inherit; }
 
   function updateUrlBar(slug) {
     var url = new URL(window.location);
-    var param = currentSource === 'wnt' ? 'wnt' : 'digitalpool';
-    url.searchParams.delete(param === 'wnt' ? 'digitalpool' : 'wnt');
+    var param = currentSource === 'wnt' ? 'wnt' : (currentSource === 'pbs' ? 'pbs' : 'digitalpool');
+    var params = ['digitalpool', 'wnt', 'pbs'];
+    for (var i = 0; i < params.length; i++) {
+      if (params[i] !== param) url.searchParams.delete(params[i]);
+    }
     url.searchParams.set(param, slug);
     history.replaceState(null, '', url);
   }
@@ -3869,6 +4122,11 @@ button { font-family: inherit; font-size: inherit; }
     var wntSlug = params.get('wnt');
     if (wntSlug) {
       loadTournament(wntSlug, 'wnt');
+      return;
+    }
+    var pbsPath = params.get('pbs');
+    if (pbsPath) {
+      loadTournament(pbsPath, 'pbs');
       return;
     }
     var dpSlug = params.get('digitalpool');

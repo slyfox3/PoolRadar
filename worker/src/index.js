@@ -1,5 +1,5 @@
 /**
- * wnt-proxy — authenticated read-only proxy for wntlivescores.com.
+ * PoolRadar data proxy — authenticated WNT reads plus PBS page resolution.
  *
  * Everything on that site sits behind a login, including the JSON the live
  * scores page polls. This Worker holds a session so PoolRadar (a static page
@@ -7,6 +7,8 @@
  *
  *   GET /wnt/events        the event list, scraped (no JSON upstream exists)
  *   GET /wnt/event/<slug>  every stage and group of one event, merged
+ *   GET /pbs/events        the PBS tournament calendar, scraped
+ *   GET /pbs/event?path=…  a Pro Billiard Series page's CueScore locator
  *
  * Secrets (set with `wrangler secret put`, never in this file or wrangler.toml):
  *   WNT_EMAIL, WNT_PASSWORD  credentials to log in with
@@ -16,6 +18,8 @@
  */
 
 const BASE = 'https://www.wntlivescores.com';
+const PBS_BASE = 'https://probilliardseries.com';
+const PBS_TRANSLATE_BASE = 'https://probilliardseries-com.translate.goog';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
@@ -30,6 +34,8 @@ function originAllowed(origin) {
 // Upstream polls itself every 33s, so 20s is fresh without adding load.
 const EVENT_TTL = 20;
 const EVENTS_TTL = 600;
+const PBS_EVENTS_TTL = 600;
+const PBS_RESOLVE_TTL = 86400;
 // Whether an event has a bracket at all is settled for anything already played,
 // and an upcoming one gains its draw days ahead, so a day is generous either
 // way — and it is what stops a second visit re-asking about the same events.
@@ -319,6 +325,116 @@ function json(obj, status, origin, ttl) {
   return new Response(JSON.stringify(obj), { status, headers: h });
 }
 
+function normalisePbsPath(raw) {
+  const path = String(raw || '').replace(/^\/+|\/+$/g, '');
+  if (!/^event\/[A-Za-z0-9._~%/-]+$/.test(path) ||
+      path.split('/').some((part) => !part || part === '.' || part === '..')) {
+    return null;
+  }
+  return path;
+}
+
+async function fetchPbsHtml(path) {
+  const headers = { 'User-Agent': UA, 'Accept': 'text/html' };
+  const qs = '?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en';
+  const urls = [PBS_BASE + '/' + path + '/', PBS_TRANSLATE_BASE + '/' + path + '/' + qs];
+  for (const url of urls) {
+    let res;
+    try {
+      res = await fetch(url, { headers });
+    } catch (e) {
+      continue;
+    }
+    if (!res.ok) continue;
+    const html = await res.text();
+    if (!/Checking your browser before accessing|\/hcdn-cgi\/jschallenge/i.test(html)) {
+      return html;
+    }
+  }
+  // The PBS host sometimes puts even its public WordPress pages behind an
+  // browser check. Google Translate's normal page proxy is the
+  // fallback above; CueScore match data itself never goes through it.
+  throw new Error('Pro Billiard Series page could not be loaded.');
+}
+
+function pbsPathFromUrl(url) {
+  const m = /^https?:\/\/(?:www\.)?(?:probilliardseries\.com|probilliardseries-com\.translate\.goog)\/(event\/[^"'?#]+)/i.exec(url);
+  return m ? m[1].replace(/^\/+|\/+$/g, '') : null;
+}
+
+async function resolvePbsTournamentId(path) {
+  let page = await fetchPbsHtml(path);
+  let found = /new\s+CueScore\.Tournament\(\s*(\d+)\s*\)/.exec(page);
+  if (found) return { tournamentId: Number(found[1]), matchesPath: path };
+
+  // Calendar rows point to the tournament landing page, whose Draw button
+  // points to a child page containing the actual CueScore embed.
+  const hrefs = page.match(/https?:\/\/[^"']+/g) || [];
+  for (let i = 0; i < hrefs.length; i++) {
+    const drawPath = pbsPathFromUrl(hrefs[i].replace(/&amp;/g, '&'));
+    if (!drawPath || !/(?:^|\/)matches[^/]*$/i.test(drawPath)) continue;
+    page = await fetchPbsHtml(drawPath);
+    found = /new\s+CueScore\.Tournament\(\s*(\d+)\s*\)/.exec(page);
+    if (found) return { tournamentId: Number(found[1]), matchesPath: drawPath };
+  }
+  return { tournamentId: null, matchesPath: null };
+}
+
+async function loadPbsEvent(path) {
+  const resolved = await resolvePbsTournamentId(path);
+  return {
+    tournamentId: resolved.tournamentId,
+    pbsPath: path,
+    pbsMatchesPath: resolved.matchesPath,
+    pbsUrl: PBS_BASE + '/' + path + '/',
+  };
+}
+
+async function loadPbsEvents() {
+  const html = await fetchPbsHtml('events');
+  const roots = {};
+  const rootRe = /href="https:\/\/(?:www\.)?(?:probilliardseries\.com|probilliardseries-com\.translate\.goog)\/(event\/[^"?#]+)\/?(?:\?[^"#]*)?"/gi;
+  let hit;
+  while ((hit = rootRe.exec(html)) !== null) {
+    const path = hit[1].replace(/^\/+|\/+$/g, '');
+    if (path.split('/').length !== 2) continue;
+    const before = html.slice(Math.max(0, hit.index - 12000), hit.index);
+    const headings = [...before.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+    const dates = [...before.matchAll(/jet-listing-dynamic-field__content">\s*([^<]*?\d{4})\s*</gi)];
+    if (!headings.length) continue;
+    const name = stripTags(headings[headings.length - 1][1]);
+    if (/events$/i.test(name)) continue;
+    roots[path] = {
+      name,
+      dates: dates.length ? stripTags(dates[dates.length - 1][1]) : null,
+    };
+  }
+
+  const events = [];
+  const seen = new Set();
+  const cardRe = /data-url="https:\/\/(?:www\.)?probilliardseries\.com\/(event\/[^"?#]+)\/?"/gi;
+  while ((hit = cardRe.exec(html)) !== null) {
+    const path = hit[1].replace(/^\/+|\/+$/g, '');
+    const parts = path.split('/');
+    if (parts.length < 3 || seen.has(path)) continue;
+    const next = html.indexOf('data-url="https://probilliardseries.com/event/', cardRe.lastIndex);
+    const chunk = html.slice(hit.index, next < 0 ? html.length : next);
+    const title = /<h3[^>]*>([\s\S]*?)<\/h3>/i.exec(chunk);
+    const date = /jet-listing-dynamic-field__content">\s*([^<]*?\d{4})\s*</i.exec(chunk);
+    if (!title || !date) continue;
+    const root = roots[parts.slice(0, 2).join('/')] || {};
+    seen.add(path);
+    events.push({
+      path,
+      name: stripTags(title[1]),
+      dates: stripTags(date[1]),
+      series: root.name || null,
+      seriesDates: root.dates || null,
+    });
+  }
+  return events;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -424,6 +540,14 @@ export default {
       if (url.pathname === '/wnt/events') {
         payload = await loadEvents(env);
         ttl = EVENTS_TTL;
+      } else if (url.pathname === '/pbs/events') {
+        payload = await loadPbsEvents();
+        ttl = PBS_EVENTS_TTL;
+      } else if (url.pathname === '/pbs/event') {
+        const path = normalisePbsPath(url.searchParams.get('path'));
+        if (!path) return json({ error: 'invalid PBS event path' }, 400, origin);
+        payload = await loadPbsEvent(path);
+        ttl = PBS_RESOLVE_TTL;
       } else {
         const m = /^\/wnt\/event\/([A-Za-z0-9._-]+)\/?$/.exec(url.pathname);
         if (!m) return json({ error: 'unknown route' }, 404, origin);
