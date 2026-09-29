@@ -2717,7 +2717,8 @@ button { font-family: inherit; font-size: inherit; }
         + ' <a class="btn btn-link" href="graph.html?wnt=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
     } else if (t.source === 'pbs') {
       links = ' <a class="btn btn-link" href="' + esc(t.sourceUrl) + '" target="_blank" rel="noopener">PBS &rarr;</a>'
-        + (t.cueScoreUrl ? ' <a class="btn btn-link" href="' + esc(t.cueScoreUrl) + '" target="_blank" rel="noopener">CueScore &rarr;</a>' : '');
+        + (t.cueScoreUrl ? ' <a class="btn btn-link" href="' + esc(t.cueScoreUrl) + '" target="_blank" rel="noopener">CueScore &rarr;</a>' : '')
+        + ' <a class="btn btn-link" href="graph.html?pbs=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
     } else {
       links = ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a>';
     }

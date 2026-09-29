@@ -338,7 +338,7 @@ a:hover { text-decoration: underline; }
 
 <div class="header">
   <h1>Bracket Graph</h1>
-  <input class="url-input" id="slug-input" placeholder="digitalpool.com or wntlivescores.com URL">
+  <input class="url-input" id="slug-input" placeholder="DigitalPool, WNT, or Pro Billiard Series URL">
   <button class="toggle-btn" id="load-btn">Load</button>
   <span class="spacer"></span>
   <a id="back-link" href="index.html">&larr; PoolRadar</a>
@@ -428,6 +428,9 @@ const GQL = 'https://api-cached.digitalpool.com/';
 const WNT_PROXY_REMOTE = 'https://wnt-proxy.slyfox3.workers.dev';
 const WNT_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? '/wnt' : WNT_PROXY_REMOTE + '/wnt';
+const PBS_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? '/pbs' : WNT_PROXY_REMOTE + '/pbs';
+const CUESCORE_API = 'https://api.cuescore.com';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -682,6 +685,119 @@ function fetchWnt(slug) {
     }));
 }
 
+// ---------------------------------------------------------------------------
+// Pro Billiard Series / CueScore — third source
+//
+// The PBS site embeds a CueScore tournament. Our proxy gets past PBS's browser
+// challenge and returns that tournament id; CueScore's public JSON then gives
+// us the bracket. Its match fields map directly onto the same row shape used by
+// DigitalPool and WNT, so all graph, search, cut, and refresh code stays shared.
+// ---------------------------------------------------------------------------
+
+const CUESCORE_WALKOVER_PLAYER = 1000615;
+const CUESCORE_WALKOVER_TEAM = 1104541;
+const PBS_STATUS = { 0: 'NOT_STARTED', 1: 'IN_PROGRESS', 2: 'COMPLETED' };
+
+function pbsParticipantId(p) {
+  return p && (p.playerId || p.teamId) || 0;
+}
+
+function pbsIsWalkover(p) {
+  const id = pbsParticipantId(p);
+  return id === CUESCORE_WALKOVER_PLAYER || id === CUESCORE_WALKOVER_TEAM;
+}
+
+function pbsCountry(p) {
+  const country = p && p.country;
+  if (!country || Object.prototype.toString.call(country) !== '[object Object]') return null;
+  if (/chinese\s+taipei/i.test(country.name || '')) return 'tw';
+  const m = String(country.image || '').match(/\/([a-z]{2})\.png(?:\?|$)/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+function pbsPlayer(p) {
+  if (!p || !pbsParticipantId(p) || pbsIsWalkover(p)) return null;
+  const country = pbsCountry(p);
+  const name = p.name || ((p.firstname || '') + ' ' + (p.lastname || '')).trim();
+  if (!name) return null;
+  return {
+    name, skill_level: null, country,
+    countryName: country ? (COUNTRY_NAME_OVERRIDE[country] || (p.country && p.country.name) || country) : null,
+  };
+}
+
+function pbsWinnerSide(m, status) {
+  if (status !== 'COMPLETED') return 0;
+  const penalty = Number(m.penalty) || 0;
+  const aLost = !!(penalty & (1 | 4 | 16));
+  const bLost = !!(penalty & (2 | 8 | 32));
+  if (aLost !== bLost) return aLost ? 2 : 1;
+  if (pbsIsWalkover(m.playerA) !== pbsIsWalkover(m.playerB)) {
+    return pbsIsWalkover(m.playerA) ? 2 : 1;
+  }
+  const a = Number(m.scoreA), b = Number(m.scoreB);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) return 0;
+  return a > b ? 1 : 2;
+}
+
+function pbsRows(data) {
+  const raw = (data && data.matches) || [];
+  const here = new Set(raw.map(m => Number(m.matchno)));
+  const dest = (n) => {
+    const v = Number(n);
+    return v && here.has(v) ? v : null;
+  };
+  return raw.map((m) => {
+    const num = Number(m.matchno);
+    const status = PBS_STATUS[m.matchstatusCode] || 'NOT_STARTED';
+    const winner = pbsWinnerSide(m, status);
+    const played = status !== 'NOT_STARTED';
+    const round = m.round == null ? null : Number(m.round);
+    const table = m.table && !Array.isArray(m.table) ? m.table.name || null : null;
+    return {
+      match_number: num,
+      round: round != null && Number.isFinite(round) ? round : null,
+      round_label: m.roundName || null,
+      identifier: '#' + num,
+      status,
+      is_bye: pbsIsWalkover(m.playerA) || pbsIsWalkover(m.playerB),
+      challenger1: pbsPlayer(m.playerA),
+      challenger2: pbsPlayer(m.playerB),
+      challenger1_score: played ? m.scoreA : null,
+      challenger2_score: played ? m.scoreB : null,
+      challenger1_is_winner: winner === 1,
+      challenger2_is_winner: winner === 2,
+      winner_to_num: dest(m.winnerNext),
+      loser_to_num: dest(m.loserNext),
+      table_name: table,
+      scheduled_time: status === 'NOT_STARTED' ? (m.starttime || null) : null,
+      start_time: status !== 'NOT_STARTED' ? (m.starttime || null) : null,
+      winner_to_pos: null,
+      loser_to_pos: null,
+    };
+  }).filter(r => Number.isFinite(r.match_number));
+}
+
+async function fetchPbs(path) {
+  const locatorResponse = await fetch(PBS_PROXY + '/event?path=' + encodeURIComponent(path));
+  const locator = await locatorResponse.json();
+  if (!locatorResponse.ok) {
+    throw new Error(locator.message || locator.error || ('HTTP ' + locatorResponse.status));
+  }
+  if (!locator.tournamentId) {
+    return { matches: [], name: path.split('/').pop().replace(/-/g, ' '), pbsUrl: locator.pbsUrl };
+  }
+  const response = await fetch(CUESCORE_API + '/tournament/?lang=en&id=' +
+    encodeURIComponent(locator.tournamentId));
+  if (!response.ok) throw new Error('CueScore returned HTTP ' + response.status);
+  const data = await response.json();
+  if (!data || !Array.isArray(data.matches)) {
+    throw new Error('CueScore returned an unrecognised tournament response.');
+  }
+  data.pbsUrl = locator.pbsUrl;
+  return data;
+}
+
 // A knockout round is better named by how many are left in it than by its
 // number — "Quarterfinals", not "Winners R4".
 function knockoutName(n) {
@@ -861,7 +977,7 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
     sub = mmEsc(tableLabel(r.table_name));
   } else if (r.status !== 'COMPLETED' && !r.is_bye) {
     // Tested against COMPLETED rather than for NOT_STARTED: that is the one
-    // status both sources agree on the spelling of, and anything that is
+    // status all sources agree on the spelling of, and anything that is
     // neither finished nor under way is by definition still to come.
     sub = mmEsc(timeLabel(r));
     if (sub) subKind = ' tbl-when';
@@ -2712,12 +2828,14 @@ function syncButtons() {
 
 function safeDecode(s) { try { return decodeURIComponent(s); } catch (e) { return s; } }
 
-// A full URL from either site names its own source. A bare slug keeps whichever
+// A full URL from any source names its own source. A bare slug/path keeps whichever
 // source is loaded, since there is nothing in a slug to tell them apart.
 function parseTarget(raw) {
   const s = (raw || '').trim();
   let m = s.match(/wntlivescores\.com\/events\/([^/?#]+)/i);
   if (m) return { source: 'wnt', slug: safeDecode(m[1]) };
+  m = s.match(/probilliardseries\.com\/(event\/[^?#]+?)(?:\/+)?(?:[?#]|$)/i);
+  if (m) return { source: 'pbs', slug: safeDecode(m[1]).replace(/\/+$/, '') };
   m = s.match(/digitalpool\.com\/tournaments\/([^/?#]+)/i);
   if (m) return { source: 'digitalpool', slug: safeDecode(m[1]) };
   return { source: state.source, slug: s.replace(/^\/+|\/+$/g, '') };
@@ -2776,11 +2894,13 @@ function closeSearch() {
 }
 
 function syncUrl() {
-  const wnt = state.source === 'wnt';
   const url = new URL(location);
-  url.searchParams.delete(wnt ? 'digitalpool' : 'wnt');
-  url.searchParams.set(wnt ? 'wnt' : 'digitalpool', state.slug);
-  if (wnt && state.stage) url.searchParams.set('stage', String(state.stage));
+  const sourceParam = state.source === 'wnt' ? 'wnt' : (state.source === 'pbs' ? 'pbs' : 'digitalpool');
+  for (const param of ['digitalpool', 'wnt', 'pbs']) {
+    if (param !== sourceParam) url.searchParams.delete(param);
+  }
+  url.searchParams.set(sourceParam, state.slug);
+  if (state.source === 'wnt' && state.stage) url.searchParams.set('stage', String(state.stage));
   else url.searchParams.delete('stage');
   if (state.fromStage > 0) url.searchParams.set('from', String(state.fromStage));
   else url.searchParams.delete('from');
@@ -2833,13 +2953,14 @@ let loadSeq = 0;
 
 async function load(source, slug) {
   if (!slug) {
-    setStatus('Paste a digitalpool.com or wntlivescores.com URL above, or add ' +
-      '<code>?digitalpool=&lt;slug&gt;</code> or <code>?wnt=&lt;slug&gt;</code> to this one.');
+    setStatus('Paste a DigitalPool, WNT, or Pro Billiard Series URL above, or add ' +
+      '<code>?digitalpool=&lt;slug&gt;</code>, <code>?wnt=&lt;slug&gt;</code>, or ' +
+      '<code>?pbs=&lt;event/path&gt;</code> to this one.');
     return;
   }
   const seq = ++loadSeq;
   if (state.slug && (state.source !== source || state.slug !== slug)) clearFocusHistory();
-  state.source = source === 'wnt' ? 'wnt' : 'digitalpool';
+  state.source = source === 'wnt' || source === 'pbs' ? source : 'digitalpool';
   state.slug = slug;
   $('slug-input').value = slug;
   setStatus('<span class="spinner"></span>Loading ' + esc(slug) + '…');
@@ -2867,6 +2988,15 @@ async function load(source, slug) {
       setRows(wntRows(state.wntData, state.stage));
       state.tournament = { name: state.wntData.name || slug };
       loaded = 'stage ' + state.stage + ', ' + state.rows.length + ' matches';
+    } else if (state.source === 'pbs') {
+      state.wntData = null;
+      state.stage = 0;
+      populateStages([]);
+      const event = await fetchPbs(slug);
+      if (seq !== loadSeq) return;
+      setRows(pbsRows(event));
+      state.tournament = { name: event.name || slug };
+      loaded = state.rows.length + ' bracket rows';
     } else {
       state.wntData = null;
       state.stage = 0;
@@ -2884,8 +3014,8 @@ async function load(source, slug) {
     }
     const name = state.tournament ? state.tournament.name : slug;
     document.title = name + ' — Bracket Graph';
-    $('back-link').href = 'index.html?' + (state.source === 'wnt' ? 'wnt=' : 'digitalpool=') +
-      encodeURIComponent(slug);
+    const sourceParam = state.source === 'wnt' ? 'wnt' : (state.source === 'pbs' ? 'pbs' : 'digitalpool');
+    $('back-link').href = 'index.html?' + sourceParam + '=' + encodeURIComponent(slug);
     $('back-link').textContent = '← ' + name;
     setStatus('Loaded ' + loaded + ' in ' + Math.round(performance.now() - t0) + ' ms');
     populateRounds(state.rows);
@@ -3049,6 +3179,11 @@ async function refreshData() {
       if (!stages.some(s => s.stage === state.stage)) return;
       populateStages(stages);
       rows = wntRows(event, state.stage);
+      tournament = { name: event.name || state.slug };
+    } else if (state.source === 'pbs') {
+      const event = await fetchPbs(state.slug);
+      if (seq !== loadSeq) return;
+      rows = pbsRows(event);
       tournament = { name: event.name || state.slug };
     } else {
       const data = await gql(QUERY, { s: state.slug });
@@ -3216,8 +3351,9 @@ state.country = (params.get('country') || '').toLowerCase() || null;
 state.stage = Math.max(0, parseInt(params.get('stage') || '0', 10) || 0);
 state.waiting = Math.max(0, parseInt(params.get('waiting') || '0', 10) || 0) || null;
 const wntSlug = params.get('wnt');
-state.source = wntSlug ? 'wnt' : 'digitalpool';
-const initial = wntSlug || params.get('digitalpool') || '';
+const pbsPath = params.get('pbs');
+state.source = wntSlug ? 'wnt' : (pbsPath ? 'pbs' : 'digitalpool');
+const initial = wntSlug || pbsPath || params.get('digitalpool') || '';
 $('slug-input').value = initial;
 // bracket-algo.js is this page's one dependency and it arrives as a plain
 // script, so nothing checks that it turned up. A browser holding an old copy of
