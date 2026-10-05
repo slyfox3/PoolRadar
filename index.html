@@ -3334,14 +3334,22 @@ button { font-family: inherit; font-size: inherit; }
       var p2Win = m.p2Won;
       var hasScore = m.s1 != null && m.s2 != null && (m.s1 > 0 || m.s2 > 0);
       var roundLabel = '';
+      var matchLabel = m.identifier || ('#' + m.num);
       if (m.identifier) {
         roundLabel = m.identifier.replace(/-\d+$/, '');
       } else if (m.round) {
         roundLabel = 'R' + m.round;
       }
+      if (currentSource === 'bracketbeast' && m.identifier) {
+        var beastLabel = /^(.*)-(\d+)$/.exec(m.identifier);
+        if (beastLabel) {
+          roundLabel = beastLabel[1];
+          matchLabel = beastLabel[2];
+        }
+      }
       html += '<div class="flat-match">';
-      html += '<span class="fm-num">' + esc(m.identifier || ('#' + m.num)) + '</span>';
-      html += '<span class="fm-round">' + esc(roundLabel) + '</span>';
+      html += '<span class="fm-num">' + esc(currentSource === 'bracketbeast' ? roundLabel : matchLabel) + '</span>';
+      html += '<span class="fm-round">' + esc(currentSource === 'bracketbeast' ? matchLabel : roundLabel) + '</span>';
       html += '<span class="fm-add">' + (m.p1 ? playerFavBtn(m.p1) : '') + '</span>';
       var completed = m.status !== 'IN_PROGRESS';
       html += m.p1 ? fmPlayerCell('fm-p1', m.p1, p1Fav, completed && p1Win, completed && p2Win)
