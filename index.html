@@ -6,7 +6,7 @@
 <title>PoolRadar</title>
 <meta property="og:type" content="website">
 <meta property="og:title" content="PoolRadar">
-<meta property="og:description" content="Track pool players and match results across DigitalPool, WNT, and Pro Billiard Series tournaments.">
+<meta property="og:description" content="Track pool players and match results across DigitalPool, WNT, Pro Billiard Series, and Bracket Beast tournaments.">
 <meta property="og:url" content="https://slyfox3.github.io/PoolRadar/">
 <meta property="og:site_name" content="PoolRadar">
 <meta property="og:image" content="https://slyfox3.github.io/PoolRadar/previews/preview.png">
@@ -17,7 +17,7 @@
 <meta property="og:image:alt" content="PoolRadar">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="PoolRadar">
-<meta name="twitter:description" content="Track pool players and match results across DigitalPool, WNT, and Pro Billiard Series tournaments.">
+<meta name="twitter:description" content="Track pool players and match results across DigitalPool, WNT, Pro Billiard Series, and Bracket Beast tournaments.">
 <meta name="twitter:image" content="https://slyfox3.github.io/PoolRadar/previews/preview.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><clipPath id='b'><circle cx='16' cy='16' r='14'/></clipPath></defs><circle cx='16' cy='16' r='14' fill='%23ffffff'/><rect x='0' y='9' width='32' height='14' fill='%23fbbf24' clip-path='url(%23b)'/><ellipse cx='16' cy='16' rx='7' ry='6' fill='%23ffffff'/><text x='16' y='20' text-anchor='middle' font-size='12' font-weight='700' font-family='Arial,sans-serif' fill='%23000000'>9</text><circle cx='16' cy='16' r='14' fill='none' stroke='%2394a3b8' stroke-width='0.4'/></svg>">
 <script>
@@ -364,8 +364,8 @@ button { font-family: inherit; font-size: inherit; }
   <div class="modal">
     <button class="modal-close" onclick="document.getElementById('help-modal').classList.add('hidden')">&times;</button>
     <h2>PoolRadar</h2>
-    <p>Track your favorite pool players, venues, and tournament directors across DigitalPool, WNT, and Pro Billiard Series tournaments.</p>
-    <p><strong>Getting started:</strong> Paste a DigitalPool, WNT Live Scores, or Pro Billiard Series tournament URL in the top bar. Click any player name to add them as a favorite. Click the venue or TD buttons to save those too.</p>
+    <p>Track your favorite pool players, venues, and tournament directors across DigitalPool, WNT, Pro Billiard Series, and Bracket Beast tournaments.</p>
+    <p><strong>Getting started:</strong> Paste a DigitalPool, WNT Live Scores, Pro Billiard Series, or Bracket Beast tournament URL in the top bar. Click any player name to add them as a favorite. Click the venue or TD buttons to save those too.</p>
     <p><strong>Favorites feed:</strong> Once you have favorites, the tournament feed auto-populates with recent tournaments (+/- 3 days) involving your favorites.</p>
     <p><strong>Duplicate accounts:</strong> PoolRadar automatically detects and groups duplicate DigitalPool accounts by matching Fargo ID and name slug variations.</p>
     <p><strong>Live updates:</strong> Match detail auto-refreshes every 60 seconds for in-progress tournaments.</p>
@@ -454,6 +454,7 @@ button { font-family: inherit; font-size: inherit; }
 
 <script src="bracket-algo.js"></script>
 <script src="stream-mappings.js"></script>
+<script src="bracketbeast.js"></script>
 <script>
 (function() {
   'use strict';
@@ -467,6 +468,8 @@ button { font-family: inherit; font-size: inherit; }
     ? '/wnt' : (DATA_PROXY_REMOTE ? DATA_PROXY_REMOTE + '/wnt' : '');
   var PBS_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     ? '/pbs' : (DATA_PROXY_REMOTE ? DATA_PROXY_REMOTE + '/pbs' : '');
+  var BRACKETBEAST_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? '/bracketbeast' : (DATA_PROXY_REMOTE ? DATA_PROXY_REMOTE + '/bracketbeast' : '');
   var CUESCORE_API = 'https://api.cuescore.com';
 
   // =====================================================
@@ -2489,6 +2492,38 @@ button { font-family: inherit; font-size: inherit; }
   function fetchForSource(slug, source) {
     if (source === 'wnt') return fetchWntMatches(slug);
     if (source === 'pbs') return fetchPbsMatches(slug);
+    if (source === 'bracketbeast') {
+      if (!BRACKETBEAST_PROXY) return Promise.reject(new Error('No Bracket Beast proxy configured.'));
+      var target = String(slug).split('/');
+      var resolved = target.length === 3 && target.every(function(id) { return /^\d+$/.test(id); })
+        ? Promise.resolve(target)
+        : fetch(BRACKETBEAST_PROXY + '/tournament/53/divisions').then(function(r) {
+            if (!r.ok) throw new Error('Could not resolve Bracket Beast division alias.');
+            return r.json();
+          }).then(function(data) {
+            var alias = String(slug).toLowerCase();
+            var division = (data.divisions || []).find(function(d) {
+              return String(d.acronym || '').toLowerCase() === alias;
+            });
+            var bracket = division && division.brackets && division.brackets[0];
+            if (!division || !bracket) throw new Error('Unknown Bracket Beast division alias: ' + slug);
+            return [String(division.tournamentId || 53), String(division.divisionId), String(bracket.divisionBracketId)];
+          });
+      return resolved.then(function(ids) {
+        return fetch(BRACKETBEAST_PROXY + '/bracket?id=' + encodeURIComponent(ids[2]))
+        .then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error(data.message || data.error || ('HTTP ' + r.status));
+            return data;
+          });
+        })
+        .then(function(data) {
+          var sourceUrl = 'https://player.bracketbeast.com/tournament/' + ids[0]
+            + '/divisions/' + ids[1] + '/brackets/' + ids[2];
+          return bracketBeastBuildResult(data, sourceUrl);
+        });
+      });
+    }
     return fetchMatches(slug);
   }
 
@@ -2705,7 +2740,9 @@ button { font-family: inherit; font-size: inherit; }
     var isVenueFav = t.venue && isFavVenue(t.venue.id);
     var isTdFav = tdId && isFavTd(tdId);
 
-    var html = '<button class="back-to-list" onclick="backToList()">&laquo; Back to tournament list</button>';
+    var html = t.source === 'bracketbeast'
+      ? '<button class="back-to-list" onclick="location.href=\'wbca_2026.html\'">&laquo; Back to tournament list</button>'
+      : '<button class="back-to-list" onclick="backToList()">&laquo; Back to tournament list</button>';
     html += '<div class="match-detail">';
     html += '<div class="match-header">';
     var links;
@@ -2719,6 +2756,9 @@ button { font-family: inherit; font-size: inherit; }
       links = ' <a class="btn btn-link" href="' + esc(t.sourceUrl) + '" target="_blank" rel="noopener">PBS &rarr;</a>'
         + (t.cueScoreUrl ? ' <a class="btn btn-link" href="' + esc(t.cueScoreUrl) + '" target="_blank" rel="noopener">CueScore &rarr;</a>' : '')
         + ' <a class="btn btn-link" href="graph.html?pbs=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
+    } else if (t.source === 'bracketbeast') {
+      links = ' <a class="btn btn-link" href="' + esc(t.sourceUrl) + '" target="_blank" rel="noopener">Bracket Beast &rarr;</a>'
+        + ' <a class="btn btn-link" href="graph.html?bracketbeast=' + encodeURIComponent(currentSlug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
     } else {
       links = ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a>';
     }
@@ -3033,7 +3073,8 @@ button { font-family: inherit; font-size: inherit; }
         var oppFav = isPlayerFav(pm.opp);
         var hasScore = pm.myScore != null && pm.oppScore != null && (pm.myScore > 0 || pm.oppScore > 0);
         html += '<div class="match-row">';
-        html += '<span class="match-num">#' + pm.num + '</span>';
+        var pmLabel = bracketByNum[pm.num] && bracketByNum[pm.num].identifier;
+        html += '<span class="match-num">' + esc(pmLabel || ('#' + pm.num)) + '</span>';
         html += '<span class="match-vs-label">vs</span>';
         html += playerFavBtn(pm.opp);
         html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + playerFlagHtml(pm.opp) + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
@@ -3299,7 +3340,7 @@ button { font-family: inherit; font-size: inherit; }
         roundLabel = 'R' + m.round;
       }
       html += '<div class="flat-match">';
-      html += '<span class="fm-num">#' + m.num + '</span>';
+      html += '<span class="fm-num">' + esc(m.identifier || ('#' + m.num)) + '</span>';
       html += '<span class="fm-round">' + esc(roundLabel) + '</span>';
       html += '<span class="fm-add">' + (m.p1 ? playerFavBtn(m.p1) : '') + '</span>';
       var completed = m.status !== 'IN_PROGRESS';
@@ -4018,14 +4059,17 @@ button { font-family: inherit; font-size: inherit; }
       var wntMatch = url.match(/wntlivescores\.com\/events\/([^\/\?#]+)/);
       var slugMatch = url.match(/\/tournaments\/([^\/\?#]+)/);
       var pbsMatch = url.match(/^https?:\/\/(?:www\.)?probilliardseries\.com\/(event\/[^?#]+)/i);
+      var beastMatch = url.match(/^https?:\/\/player\.bracketbeast\.com\/tournament\/(\d+)\/divisions\/(\d+)\/brackets\/(\d+)/i);
       if (wntMatch) {
         loadTournament(safeDecode(wntMatch[1]), 'wnt');
       } else if (pbsMatch) {
         loadTournament(safeDecode(pbsMatch[1]).replace(/\/+$/, ''), 'pbs');
+      } else if (beastMatch) {
+        loadTournament(beastMatch[1] + '/' + beastMatch[2] + '/' + beastMatch[3], 'bracketbeast');
       } else if (slugMatch) {
         loadSmartTournament(safeDecode(slugMatch[1]));
       } else {
-        showStatus('Could not parse tournament URL. Expected DigitalPool, WNT Live Scores, or Pro Billiard Series.', 'error');
+        showStatus('Could not parse tournament URL. Expected DigitalPool, WNT Live Scores, Pro Billiard Series, or Bracket Beast.', 'error');
       }
     }
   });
@@ -4092,8 +4136,8 @@ button { font-family: inherit; font-size: inherit; }
 
   function updateUrlBar(slug) {
     var url = new URL(window.location);
-    var param = currentSource === 'wnt' ? 'wnt' : (currentSource === 'pbs' ? 'pbs' : 'digitalpool');
-    var params = ['digitalpool', 'wnt', 'pbs'];
+    var param = currentSource === 'wnt' ? 'wnt' : (currentSource === 'pbs' ? 'pbs' : (currentSource === 'bracketbeast' ? 'bracketbeast' : 'digitalpool'));
+    var params = ['digitalpool', 'wnt', 'pbs', 'bracketbeast'];
     for (var i = 0; i < params.length; i++) {
       if (params[i] !== param) url.searchParams.delete(params[i]);
     }
@@ -4140,6 +4184,11 @@ button { font-family: inherit; font-size: inherit; }
     var pbsPath = params.get('pbs');
     if (pbsPath) {
       loadTournament(pbsPath, 'pbs');
+      return;
+    }
+    var beastPath = params.get('bracketbeast');
+    if (beastPath) {
+      loadTournament(beastPath, 'bracketbeast');
       return;
     }
     var dpSlug = params.get('digitalpool');

@@ -8,6 +8,7 @@ will:
     GET /wnt/event/<slug>  -> every stage/group of an event, merged
     GET /pbs/events        -> the PBS tournament calendar, scraped
     GET /pbs/event?path=…  -> a Pro Billiard Series page's CueScore locator
+    GET /bracketbeast/bracket?id=… -> a public Bracket Beast draw
 
 wntlivescores.com requires a session for everything, so supply one via the
 WNT_SID env var or a .wnt-session file next to this script. Both hold the raw
@@ -33,6 +34,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://www.wntlivescores.com'
 PBS_BASE = 'https://probilliardseries.com'
 PBS_TRANSLATE_BASE = 'https://probilliardseries-com.translate.goog'
+BRACKETBEAST_BASE = 'https://bracket-beast-prod-app.azurewebsites.net/api'
 UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/126.0 Safari/537.36')
 
@@ -41,6 +43,8 @@ EVENT_TTL = 20
 EVENTS_TTL = 600
 PBS_EVENTS_TTL = 600
 PBS_RESOLVE_TTL = 86400
+BRACKETBEAST_TTL = 20
+BRACKETBEAST_DIVISIONS_TTL = 600
 # Whether an event has a bracket at all is settled for anything already played,
 # and an upcoming one gains its draw days ahead — so a day is generous either
 # way, and it is what keeps a repeat visit from re-asking about the same events.
@@ -53,6 +57,44 @@ MAX_STAGES = 6
 MAX_GROUPS = 32
 
 _cache = {}
+
+
+def load_bracket_beast(bracket_id):
+    body = json.dumps({'divisionBracketId': bracket_id}).encode()
+    request = urllib.request.Request(
+        BRACKETBEAST_BASE + '/external/viewbracket', data=body,
+        headers={'Content-Type': 'application/json', 'tenantId': '1.',
+                 'User-Agent': UA}, method='POST')
+    with urllib.request.urlopen(request, timeout=30) as response:
+        bracket = json.load(response)
+    tournament = None
+    tournament_id = bracket.get('tournamentId')
+    if tournament_id:
+        request = urllib.request.Request(
+            BRACKETBEAST_BASE + '/external/tournament/' + str(tournament_id),
+            headers={'tenantId': '1.', 'User-Agent': UA})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            tournament = json.load(response)
+    return {'bracket': bracket, 'tournament': tournament}
+
+
+def load_bracket_beast_divisions(tournament_id):
+    headers = {'tenantId': '1.', 'User-Agent': UA}
+    url = (BRACKETBEAST_BASE + '/external/tournament/' + str(tournament_id) +
+           '/divisions?pageNumber=1&pageSize=100')
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
+        divisions = [d for d in json.load(response).get('items', []) if not d.get('isHidden')]
+
+    def add_brackets(division):
+        url = BRACKETBEAST_BASE + '/external/' + str(division['divisionId']) + '/brackets'
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
+            out = dict(division)
+            out['brackets'] = json.load(response)
+            return out
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        divisions = list(pool.map(add_brackets, divisions))
+    return {'tournamentId': tournament_id, 'divisions': divisions}
 
 
 class WntAuthError(Exception):
@@ -382,9 +424,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         route = urllib.parse.urlparse(self.path)
-        if not route.path.startswith('/wnt/') and not route.path.startswith('/pbs/'):
+        if not route.path.startswith('/wnt/') and not route.path.startswith('/pbs/') and not route.path.startswith('/bracketbeast/'):
             return super().do_GET()
         try:
+            if route.path == '/bracketbeast/tournament/53/divisions':
+                data = cached('bracketbeast:53:divisions', BRACKETBEAST_DIVISIONS_TTL,
+                              lambda: load_bracket_beast_divisions(53))
+                return self._json(data)
+            if route.path == '/bracketbeast/bracket':
+                raw = urllib.parse.parse_qs(route.query).get('id', [''])[0]
+                if not raw.isdigit():
+                    return self._json({'error': 'invalid Bracket Beast bracket id'}, 400)
+                data = cached('bracketbeast:' + raw, BRACKETBEAST_TTL,
+                              lambda: load_bracket_beast(int(raw)))
+                return self._json(data)
             if route.path == '/pbs/events':
                 return self._json(cached('pbs-events', PBS_EVENTS_TTL,
                                          load_pbs_events))

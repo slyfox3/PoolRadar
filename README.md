@@ -1,7 +1,7 @@
 # PoolRadar
 
-Track pool players and match results across DigitalPool, WNT Live Scores, and
-Pro Billiard Series (CueScore) tournaments.
+Track pool players and match results across DigitalPool, WNT Live Scores,
+Pro Billiard Series (CueScore), and Bracket Beast tournaments.
 
 **[https://slyfox3.github.io/PoolRadar/](https://slyfox3.github.io/PoolRadar/)**
 

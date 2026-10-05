@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2026 Western BCA 9-Ball Championships — PoolRadar</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f1f5f9;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.hero{background:linear-gradient(135deg,#0f172a,#1d4ed8);color:white;padding:42px 20px}.wrap{max-width:920px;margin:auto}.back{color:#bfdbfe;text-decoration:none;font-size:14px}.back:hover{text-decoration:underline}h1{font-size:clamp(26px,5vw,42px);line-height:1.08;margin:20px 0 10px}.sub{color:#dbeafe;font-size:16px}.meta{color:#93c5fd;font-size:14px;margin-top:8px}.content{padding:26px 20px 50px}.status{text-align:center;color:#64748b;padding:40px}.spinner{display:inline-block;width:16px;height:16px;border:2px solid #cbd5e1;border-top-color:#2563eb;border-radius:50%;animation:spin .65s linear infinite;vertical-align:-3px;margin-right:8px}@keyframes spin{to{transform:rotate(360deg)}}.day{margin:28px 0 12px;font-size:14px;color:#475569;text-transform:uppercase;letter-spacing:.08em}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.card{background:white;border:1px solid #dbe3ee;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(15,23,42,.05)}.card h2{font-size:18px;margin:0 0 7px}.details{font-size:13px;color:#64748b;min-height:20px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.btn{display:inline-block;border-radius:7px;padding:8px 12px;text-decoration:none;font-size:13px;font-weight:600;background:#2563eb;color:white}.btn.graph{background:#0f172a}.btn.source{background:white;color:#475569;border:1px solid #cbd5e1}.empty{color:#94a3b8;font-size:13px;margin-top:14px}.error{color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:14px}.search-fab{position:fixed;right:24px;bottom:calc(24px + env(safe-area-inset-bottom));width:52px;height:52px;border:0;border-radius:50%;background:#2563eb;color:white;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.4);z-index:20}.search-fab:hover{background:#1d4ed8}.search-fab svg{width:23px;height:23px}.search-overlay{position:fixed;inset:0;background:rgba(2,6,23,.95);z-index:30;display:none;padding:max(12px,env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom))}.search-overlay.open{display:block}.search-box{max-width:560px;height:100%;margin:auto;display:flex;flex-direction:column}.search-bar{display:flex;align-items:center;gap:8px;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:6px 10px}.search-bar svg{width:17px;height:17px;color:#64748b}.search-input{flex:1;min-width:0;background:none;border:0;outline:0;color:#f8fafc;font:16px inherit;padding:8px 0}.search-close{border:0;background:none;color:#94a3b8;font-size:27px;cursor:pointer}.search-note{color:#64748b;font-size:12px;padding:10px 12px}.search-results{overflow:auto}.search-result{display:block;color:#e2e8f0;text-decoration:none;padding:11px 12px;border-radius:8px}.search-result:hover,.search-result.active{background:#1e293b}.search-name{font-size:16px}.search-name mark{background:none;color:#60a5fa;font-weight:700}.search-division{color:#64748b;font-size:12px;margin-top:3px}.search-empty{color:#64748b;text-align:center;padding:36px 12px}
+.hero-search-wrap{position:relative;max-width:560px;margin-top:22px}.hero-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:19px;height:19px;color:#64748b;pointer-events:none}.hero-search{width:100%;border:1px solid rgba(255,255,255,.3);border-radius:10px;background:white;color:#172033;font:16px inherit;padding:13px 16px 13px 43px;outline:none;box-shadow:0 5px 18px rgba(2,6,23,.2)}.hero-search:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(147,197,253,.25),0 5px 18px rgba(2,6,23,.2)}
+</style>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <a class="back" href="index.html">← PoolRadar</a>
+  <h1>2026 Western BCA<br>9-Ball Championships</h1>
+  <div class="sub">Chinook Winds Casino · Oregon</div>
+  <div class="meta">October 10–19, 2026</div>
+  <div class="hero-search-wrap"><svg class="hero-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4.5-4.5"></path></svg><input class="hero-search" id="hero-search" placeholder="Search players across all divisions…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Search players across all divisions"></div>
+</div></header>
+<main class="content"><div class="wrap" id="list"><div class="status"><span class="spinner"></span>Loading divisions…</div></div></main>
+<button class="search-fab" id="search-fab" aria-label="Search players" title="Search players (/)" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4.5-4.5"></path></svg></button>
+<div class="search-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-label="Search players"><div class="search-box">
+  <div class="search-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4.5-4.5"></path></svg><input class="search-input" id="search-input" placeholder="Search players…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button class="search-close" id="search-close" aria-label="Close">&times;</button></div>
+  <div class="search-note" id="search-note">Loading player index…</div><div class="search-results" id="search-results"></div>
+</div></div>
+<script>
+(function(){
+  'use strict';
+  var TOURNAMENT_ID=53;
+  var remote='https://wnt-proxy.slyfox3.workers.dev';
+  var base=(location.hostname==='localhost'||location.hostname==='127.0.0.1')?'':remote;
+  var players=[],searchReady=false,searchCursor=-1,searchHits=[];
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function dateLabel(s){if(!s)return 'Date TBA';var d=new Date(s+'T12:00:00');return d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});}
+  function medalRank(name){
+    var order={iron:0,bronze:1,silver:2,gold:3,platinum:4,elite:5};
+    var match=String(name||'').toLowerCase().match(/\b(iron|bronze|silver|gold|platinum|elite)\b/);
+    return match?order[match[1]]:null;
+  }
+  function eventType(name){
+    name=String(name||'').toLowerCase();
+    if(/\bfunday\b/.test(name))return {rank:3,label:'Funday'};
+    if(/\b(single|singles)\b/.test(name))return {rank:0,label:'Singles'};
+    if(/\b(double|doubles)\b/.test(name))return {rank:1,label:'Doubles'};
+    if(/\b(team|teams)\b/.test(name))return {rank:2,label:'Teams'};
+    return {rank:4,label:'Other'};
+  }
+  function render(data){
+    var divisions=(data.divisions||[]).slice().sort(function(a,b){
+      var ae=eventType(a.name).rank,be=eventType(b.name).rank;
+      if(ae!==be)return ae-be;
+      var ar=medalRank(a.name),br=medalRank(b.name);
+      if(ar!==null&&br!==null&&ar!==br)return ar-br;
+      return String(a.name).localeCompare(String(b.name),undefined,{numeric:true,sensitivity:'base'});
+    });
+    var html='',category='';
+    divisions.forEach(function(d,index){
+      var type=eventType(d.name);
+      if(type.label!==category){
+        if(category)html+='</div>';
+        category=type.label;
+        html+='<h2 class="day">'+esc(category)+'</h2><div class="grid">';
+      }
+      var brackets=d.brackets||[];
+      html+='<article class="card"><h2>'+esc(String(d.name||'').trim())+'</h2>'+
+        '<div class="details">'+esc(dateLabel(d.startDate))+
+        (d.expectedNumberOfPlayers?' · '+d.expectedNumberOfPlayers+'-player':'')+'</div>';
+      if(brackets.length){
+        html+='<div class="actions">';
+        brackets.forEach(function(b){
+          var slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;
+          var source='https://player.bracketbeast.com/tournament/'+TOURNAMENT_ID+'/divisions/'+d.divisionId+'/brackets/'+b.divisionBracketId;
+          html+='<a class="btn" href="index.html?bracketbeast='+encodeURIComponent(slug)+'">Matches</a>'+
+            '<a class="btn graph" href="graph.html?bracketbeast='+encodeURIComponent(slug)+'">Smart Bracket</a>'+
+            '<a class="btn source" target="_blank" rel="noopener" href="'+esc(source)+'">Bracket Beast ↗</a>';
+        });
+        html+='</div>';
+      }else html+='<div class="empty">Bracket not published yet</div>';
+      html+='</article>';
+    });
+    if(category)html+='</div>';
+    document.getElementById('list').innerHTML=html||'<div class="status">No divisions published yet.</div>';
+  }
+  function normal(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
+  function rankPlayers(query){
+    var tokens=normal(query).trim().split(/\s+/).filter(Boolean),out=[];
+    if(!tokens.length)return [];
+    players.forEach(function(p){
+      var name=normal(p.name),words=name.split(/[\s/\\,&-]+/).filter(Boolean),score=0,ok=true;
+      tokens.forEach(function(token){
+        if(!ok)return;
+        if(name.indexOf(token)===0)return;
+        if(words.some(function(word){return word.indexOf(token)===0;})){score+=1;return;}
+        if(name.indexOf(token)!==-1){score+=3;return;}
+        ok=false;
+      });
+      if(ok)out.push({player:p,score:score});
+    });
+    out.sort(function(a,b){return a.score-b.score||a.player.name.localeCompare(b.player.name);});
+    return out.slice(0,200).map(function(x){return x.player;});
+  }
+  function marked(name,query){
+    var tokens=normal(query).trim().split(/\s+/).filter(Boolean);
+    if(!tokens.length)return esc(name);
+    var low=normal(name),ranges=[];
+    tokens.forEach(function(t){var at=low.indexOf(t);if(at>=0)ranges.push([at,at+t.length]);});
+    ranges.sort(function(a,b){return a[0]-b[0];});
+    var html='',at=0;
+    ranges.forEach(function(r){if(r[0]<at)return;html+=esc(name.slice(at,r[0]))+'<mark>'+esc(name.slice(r[0],r[1]))+'</mark>';at=r[1];});
+    return html+esc(name.slice(at));
+  }
+  function renderSearch(){
+    var query=document.getElementById('search-input').value;
+    searchHits=rankPlayers(query);searchCursor=-1;
+    var result=document.getElementById('search-results');
+    if(!searchReady){result.innerHTML='<div class="search-empty"><span class="spinner"></span>Loading players…</div>';return;}
+    if(!query.trim()){result.innerHTML='<div class="search-empty">Type a player’s first or last name</div>';return;}
+    if(!searchHits.length){result.innerHTML='<div class="search-empty">No players found</div>';return;}
+    result.innerHTML=searchHits.map(function(p,i){return '<a class="search-result" data-index="'+i+'" href="index.html?bracketbeast='+encodeURIComponent(p.slug)+'"><div class="search-name">'+marked(p.name,query)+'</div><div class="search-division">'+esc(p.division)+'</div></a>';}).join('');
+  }
+  function loadPlayers(divisions){
+    var jobs=[];
+    (divisions||[]).forEach(function(d){(d.brackets||[]).forEach(function(b){jobs.push(fetch(base+'/bracketbeast/bracket?id='+encodeURIComponent(b.divisionBracketId)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(payload){
+        var seen={},slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;(payload.bracket.rounds||[]).forEach(function(round){(round.matches||[]).forEach(function(m){[m.divisionPlayer1Name,m.divisionPlayer2Name].forEach(function(name){name=String(name||'').trim();var key=normal(name);if(name&&!seen[key]){seen[key]=true;players.push({name:name,division:d.name,slug:slug});}});});});
+      }).catch(function(){return null;}));});});
+    Promise.all(jobs).then(function(){players.sort(function(a,b){return a.name.localeCompare(b.name)||a.division.localeCompare(b.division);});searchReady=true;document.getElementById('search-note').textContent=players.length+' players and teams across '+jobs.length+' brackets';renderSearch();});
+  }
+  function openSearch(initial){if(typeof initial!=='string')initial='';document.getElementById('search-overlay').classList.add('open');document.getElementById('search-input').value=initial;renderSearch();document.getElementById('search-input').focus();}
+  function closeSearch(){document.getElementById('search-overlay').classList.remove('open');}
+  document.getElementById('search-fab').addEventListener('click',openSearch);
+  document.getElementById('search-close').addEventListener('click',closeSearch);
+  document.getElementById('search-input').addEventListener('input',renderSearch);
+  document.getElementById('hero-search').addEventListener('input',function(){if(this.value)openSearch(this.value);});
+  document.getElementById('hero-search').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();openSearch(this.value);}});
+  document.getElementById('search-input').addEventListener('keydown',function(e){
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(!searchHits.length)return;searchCursor=(searchCursor+(e.key==='ArrowDown'?1:-1)+searchHits.length)%searchHits.length;document.querySelectorAll('.search-result').forEach(function(el,i){el.classList.toggle('active',i===searchCursor);});}
+    if(e.key==='Enter'&&searchHits.length){var at=searchCursor<0?0:searchCursor;location.href='index.html?bracketbeast='+encodeURIComponent(searchHits[at].slug);}
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSearch();else if(e.key==='/'&&!document.getElementById('search-overlay').classList.contains('open')){e.preventDefault();openSearch();}});
+  fetch(base+'/bracketbeast/tournament/53/divisions').then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;});}).then(function(data){render(data);loadPlayers(data.divisions);}).catch(function(e){document.getElementById('list').innerHTML='<div class="error">Could not load divisions: '+esc(e.message)+'</div>';});
+})();
+</script>
+</body>
+</html>

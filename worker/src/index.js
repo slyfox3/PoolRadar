@@ -20,6 +20,7 @@
 const BASE = 'https://www.wntlivescores.com';
 const PBS_BASE = 'https://probilliardseries.com';
 const PBS_TRANSLATE_BASE = 'https://probilliardseries-com.translate.goog';
+const BRACKETBEAST_BASE = 'https://bracket-beast-prod-app.azurewebsites.net/api';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
@@ -36,6 +37,41 @@ const EVENT_TTL = 20;
 const EVENTS_TTL = 600;
 const PBS_EVENTS_TTL = 600;
 const PBS_RESOLVE_TTL = 86400;
+const BRACKETBEAST_TTL = 20;
+const BRACKETBEAST_DIVISIONS_TTL = 600;
+
+async function loadBracketBeast(bracketId) {
+  const bracketRes = await fetch(BRACKETBEAST_BASE + '/external/viewbracket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'tenantId': '1.', 'User-Agent': UA },
+    body: JSON.stringify({ divisionBracketId: bracketId }),
+  });
+  if (!bracketRes.ok) throw new Error('Bracket Beast returned ' + bracketRes.status);
+  const bracket = await bracketRes.json();
+  let tournament = null;
+  if (bracket.tournamentId) {
+    const metaRes = await fetch(BRACKETBEAST_BASE + '/external/tournament/' + bracket.tournamentId, {
+      headers: { 'tenantId': '1.', 'User-Agent': UA },
+    });
+    if (metaRes.ok) tournament = await metaRes.json();
+  }
+  return { bracket, tournament };
+}
+
+async function loadBracketBeastDivisions(tournamentId) {
+  const headers = { 'tenantId': '1.', 'User-Agent': UA };
+  const response = await fetch(BRACKETBEAST_BASE + '/external/tournament/' + tournamentId +
+    '/divisions?pageNumber=1&pageSize=100', { headers });
+  if (!response.ok) throw new Error('Bracket Beast divisions returned ' + response.status);
+  const page = await response.json();
+  const divisions = (page.items || []).filter((d) => !d.isHidden);
+  const withBrackets = await Promise.all(divisions.map(async (division) => {
+    const r = await fetch(BRACKETBEAST_BASE + '/external/' + division.divisionId + '/brackets',
+      { headers });
+    return { ...division, brackets: r.ok ? await r.json() : [] };
+  }));
+  return { tournamentId, divisions: withBrackets };
+}
 // Whether an event has a bracket at all is settled for anything already played,
 // and an upcoming one gains its draw days ahead, so a day is generous either
 // way — and it is what stops a second visit re-asking about the same events.
@@ -548,6 +584,14 @@ export default {
         if (!path) return json({ error: 'invalid PBS event path' }, 400, origin);
         payload = await loadPbsEvent(path);
         ttl = PBS_RESOLVE_TTL;
+      } else if (url.pathname === '/bracketbeast/bracket') {
+        const id = url.searchParams.get('id');
+        if (!/^\d+$/.test(id || '')) return json({ error: 'invalid Bracket Beast bracket id' }, 400, origin);
+        payload = await loadBracketBeast(Number(id));
+        ttl = BRACKETBEAST_TTL;
+      } else if (url.pathname === '/bracketbeast/tournament/53/divisions') {
+        payload = await loadBracketBeastDivisions(53);
+        ttl = BRACKETBEAST_DIVISIONS_TTL;
       } else {
         const m = /^\/wnt\/event\/([A-Za-z0-9._-]+)\/?$/.exec(url.pathname);
         if (!m) return json({ error: 'unknown route' }, 404, origin);

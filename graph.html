@@ -338,7 +338,7 @@ a:hover { text-decoration: underline; }
 
 <div class="header">
   <h1>Bracket Graph</h1>
-  <input class="url-input" id="slug-input" placeholder="DigitalPool, WNT, or Pro Billiard Series URL">
+  <input class="url-input" id="slug-input" placeholder="DigitalPool, WNT, PBS, or Bracket Beast URL">
   <button class="toggle-btn" id="load-btn">Load</button>
   <span class="spacer"></span>
   <a id="back-link" href="index.html">&larr; PoolRadar</a>
@@ -417,6 +417,7 @@ a:hover { text-decoration: underline; }
      the unit tests — and a classic script is specified to run before any
      module, so its globals are already there when the one below starts. -->
 <script src="bracket-algo.js"></script>
+<script src="bracketbeast.js"></script>
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
@@ -430,6 +431,8 @@ const WNT_PROXY = (location.hostname === 'localhost' || location.hostname === '1
   ? '/wnt' : WNT_PROXY_REMOTE + '/wnt';
 const PBS_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
   ? '/pbs' : WNT_PROXY_REMOTE + '/pbs';
+const BRACKETBEAST_PROXY = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? '/bracketbeast' : WNT_PROXY_REMOTE + '/bracketbeast';
 const CUESCORE_API = 'https://api.cuescore.com';
 
 mermaid.initialize({
@@ -796,6 +799,43 @@ async function fetchPbs(path) {
   }
   data.pbsUrl = locator.pbsUrl;
   return data;
+}
+
+// Bracket Beast — fourth source. The shared adapter reconstructs the implicit
+// winner paths and explicit consolation paths; this thin mapping only changes
+// PoolRadar's canonical field names to the graph's DigitalPool-shaped rows.
+async function fetchBracketBeast(path) {
+  let ids = String(path).split('/');
+  if (ids.length !== 3 || !ids.every(id => /^\d+$/.test(id))) {
+    const response = await fetch(BRACKETBEAST_PROXY + '/tournament/53/divisions');
+    if (!response.ok) throw new Error('Could not resolve Bracket Beast division alias.');
+    const data = await response.json();
+    const alias = String(path).toLowerCase();
+    const division = (data.divisions || []).find(d => String(d.acronym || '').toLowerCase() === alias);
+    const bracket = division && division.brackets && division.brackets[0];
+    if (!division || !bracket) throw new Error('Unknown Bracket Beast division alias: ' + path);
+    ids = [String(division.tournamentId || 53), String(division.divisionId), String(bracket.divisionBracketId)];
+  }
+  const response = await fetch(BRACKETBEAST_PROXY + '/bracket?id=' + encodeURIComponent(ids[2]));
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || payload.error || ('HTTP ' + response.status));
+  const sourceUrl = 'https://player.bracketbeast.com/tournament/' + ids[0] +
+    '/divisions/' + ids[1] + '/brackets/' + ids[2];
+  return bracketBeastBuildResult(payload, sourceUrl);
+}
+
+function bracketBeastRows(result) {
+  return Object.values(result.bracketByNum).map(r => ({
+    match_number: r.num, round: r.round, round_label: null,
+    identifier: r.identifier, status: r.status, is_bye: r.is_bye,
+    challenger1: r.p1, challenger2: r.p2,
+    challenger1_score: r.s1, challenger2_score: r.s2,
+    challenger1_is_winner: r.p1Won, challenger2_is_winner: r.p2Won,
+    winner_to_num: r.winnerTo, loser_to_num: r.loserTo,
+    table_name: r.tableName || null,
+    scheduled_time: r.scheduledTime, start_time: r.startTime,
+    winner_to_pos: null, loser_to_pos: null,
+  }));
 }
 
 // A knockout round is better named by how many are left in it than by its
@@ -2838,6 +2878,8 @@ function parseTarget(raw) {
   if (m) return { source: 'pbs', slug: safeDecode(m[1]).replace(/\/+$/, '') };
   m = s.match(/digitalpool\.com\/tournaments\/([^/?#]+)/i);
   if (m) return { source: 'digitalpool', slug: safeDecode(m[1]) };
+  m = s.match(/player\.bracketbeast\.com\/tournament\/(\d+)\/divisions\/(\d+)\/brackets\/(\d+)/i);
+  if (m) return { source: 'bracketbeast', slug: m.slice(1).join('/') };
   return { source: state.source, slug: s.replace(/^\/+|\/+$/g, '') };
 }
 
@@ -2895,8 +2937,8 @@ function closeSearch() {
 
 function syncUrl() {
   const url = new URL(location);
-  const sourceParam = state.source === 'wnt' ? 'wnt' : (state.source === 'pbs' ? 'pbs' : 'digitalpool');
-  for (const param of ['digitalpool', 'wnt', 'pbs']) {
+  const sourceParam = state.source === 'wnt' ? 'wnt' : (state.source === 'pbs' ? 'pbs' : (state.source === 'bracketbeast' ? 'bracketbeast' : 'digitalpool'));
+  for (const param of ['digitalpool', 'wnt', 'pbs', 'bracketbeast']) {
     if (param !== sourceParam) url.searchParams.delete(param);
   }
   url.searchParams.set(sourceParam, state.slug);
@@ -2953,14 +2995,14 @@ let loadSeq = 0;
 
 async function load(source, slug) {
   if (!slug) {
-    setStatus('Paste a DigitalPool, WNT, or Pro Billiard Series URL above, or add ' +
+    setStatus('Paste a DigitalPool, WNT, Pro Billiard Series, or Bracket Beast URL above, or add ' +
       '<code>?digitalpool=&lt;slug&gt;</code>, <code>?wnt=&lt;slug&gt;</code>, or ' +
-      '<code>?pbs=&lt;event/path&gt;</code> to this one.');
+      '<code>?pbs=&lt;event/path&gt;</code>, or <code>?bracketbeast=&lt;division-code&gt;</code> to this one.');
     return;
   }
   const seq = ++loadSeq;
   if (state.slug && (state.source !== source || state.slug !== slug)) clearFocusHistory();
-  state.source = source === 'wnt' || source === 'pbs' ? source : 'digitalpool';
+  state.source = ['wnt', 'pbs', 'bracketbeast'].includes(source) ? source : 'digitalpool';
   state.slug = slug;
   $('slug-input').value = slug;
   setStatus('<span class="spinner"></span>Loading ' + esc(slug) + '…');
@@ -2997,6 +3039,15 @@ async function load(source, slug) {
       setRows(pbsRows(event));
       state.tournament = { name: event.name || slug };
       loaded = state.rows.length + ' bracket rows';
+    } else if (state.source === 'bracketbeast') {
+      state.wntData = null;
+      state.stage = 0;
+      populateStages([]);
+      const result = await fetchBracketBeast(slug);
+      if (seq !== loadSeq) return;
+      setRows(bracketBeastRows(result));
+      state.tournament = result.tournament;
+      loaded = state.rows.length + ' bracket rows';
     } else {
       state.wntData = null;
       state.stage = 0;
@@ -3014,7 +3065,7 @@ async function load(source, slug) {
     }
     const name = state.tournament ? state.tournament.name : slug;
     document.title = name + ' — Bracket Graph';
-    const sourceParam = state.source === 'wnt' ? 'wnt' : (state.source === 'pbs' ? 'pbs' : 'digitalpool');
+    const sourceParam = state.source === 'wnt' ? 'wnt' : (state.source === 'pbs' ? 'pbs' : (state.source === 'bracketbeast' ? 'bracketbeast' : 'digitalpool'));
     $('back-link').href = 'index.html?' + sourceParam + '=' + encodeURIComponent(slug);
     $('back-link').textContent = '← ' + name;
     setStatus('Loaded ' + loaded + ' in ' + Math.round(performance.now() - t0) + ' ms');
@@ -3185,6 +3236,11 @@ async function refreshData() {
       if (seq !== loadSeq) return;
       rows = pbsRows(event);
       tournament = { name: event.name || state.slug };
+    } else if (state.source === 'bracketbeast') {
+      const result = await fetchBracketBeast(state.slug);
+      if (seq !== loadSeq) return;
+      rows = bracketBeastRows(result);
+      tournament = result.tournament;
     } else {
       const data = await gql(QUERY, { s: state.slug });
       if (seq !== loadSeq) return;
@@ -3352,8 +3408,9 @@ state.stage = Math.max(0, parseInt(params.get('stage') || '0', 10) || 0);
 state.waiting = Math.max(0, parseInt(params.get('waiting') || '0', 10) || 0) || null;
 const wntSlug = params.get('wnt');
 const pbsPath = params.get('pbs');
-state.source = wntSlug ? 'wnt' : (pbsPath ? 'pbs' : 'digitalpool');
-const initial = wntSlug || pbsPath || params.get('digitalpool') || '';
+const beastPath = params.get('bracketbeast');
+state.source = wntSlug ? 'wnt' : (pbsPath ? 'pbs' : (beastPath ? 'bracketbeast' : 'digitalpool'));
+const initial = wntSlug || pbsPath || beastPath || params.get('digitalpool') || '';
 $('slug-input').value = initial;
 // bracket-algo.js is this page's one dependency and it arrives as a plain
 // script, so nothing checks that it turned up. A browser holding an old copy of
