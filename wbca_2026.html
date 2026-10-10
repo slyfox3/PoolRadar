@@ -31,6 +31,7 @@
   var base=(location.hostname==='localhost'||location.hostname==='127.0.0.1')?'':remote;
   var players=[],searchReady=false,searchCursor=-1,searchHits=[];
   var divisionData={divisions:[]},registrationEntries=[];
+  var SEARCH_CACHE_KEY='poolradar_wbca_2026_search_v1';
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function dateLabel(s){if(!s)return 'Date TBA';var d=new Date(s+'T12:00:00');return d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});}
   function medalRank(name){
@@ -135,27 +136,33 @@
     }).join('');
   }
   function loadPlayers(divisions){
-    var jobs=[];
-    var fullNames=Promise.allSettled([wbcaSearch.loadEntries(base),wbcaSearch.loadEntries(base,'Teams'),wbcaSearch.loadEntries(base,'Singles')]);
+    var jobs=[],loadedPlayers=[],bracketFailures=0;
+    var fullNames=Promise.allSettled(['Scotch','Teams','Singles'].map(function(kind){
+      return registrationEntries.length?Promise.resolve(registrationEntries.filter(function(e){return String(e.division).toLowerCase()===kind.toLowerCase();})):wbcaSearch.loadEntries(base,kind);
+    }));
     (divisions||[]).forEach(function(d){(d.brackets||[]).forEach(function(b){jobs.push(fetch(base+'/bracketbeast/bracket?id='+encodeURIComponent(b.divisionBracketId)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(payload){
-        var seen={},slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;(payload.bracket.rounds||[]).forEach(function(round){(round.matches||[]).forEach(function(m){[m.divisionPlayer1Name,m.divisionPlayer2Name].forEach(function(name){name=String(name||'').trim();var key=normal(name);if(name&&!seen[key]){seen[key]=true;players.push({name:name,division:d.name,slug:slug});}});});});
-      }).catch(function(){return null;}));});});
-    Promise.all([Promise.all(jobs),fullNames]).then(function(results){
+        var seen={},slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;(payload.bracket.rounds||[]).forEach(function(round){(round.matches||[]).forEach(function(m){[m.divisionPlayer1Name,m.divisionPlayer2Name].forEach(function(name){name=String(name||'').trim();var key=normal(name);if(name&&!seen[key]){seen[key]=true;loadedPlayers.push({name:name,division:d.name,slug:slug});}});});});
+      }).catch(function(){bracketFailures++;return null;}));});});
+    return Promise.all([Promise.all(jobs),fullNames]).then(function(results){
       var entries=[],failed=[];
       results[1].forEach(function(result,i){if(result.status==='fulfilled')entries=entries.concat(result.value);else failed.push(['Scotch','Teams','Singles'][i]);});
-      wbcaSearch.enrich(players,entries);
+      wbcaSearch.enrich(loadedPlayers,entries);
       wbcaSearch.registeredDivisions(entries).forEach(function(division){
         var published=(divisions||[]).find(function(d){return normal(d.name).replace(/[^a-z0-9]+/g,'')===normal(division.name).replace(/[^a-z0-9]+/g,'');});
         var bracket=published&&published.brackets&&published.brackets[0];
         var slug=bracket?(String(published.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+published.divisionId+'/'+bracket.divisionBracketId):division.acronym;
         wbcaSearch.registeredPlayers(division.name,entries).forEach(function(p){
-          if(!players.some(function(other){return wbcaSearch.sameSearchEntry(other,{name:p.name,division:division.name,searchMembers:p.searchMembers});})){
-            players.push({name:p.name,division:division.name,slug:slug,rating:p.skill_level,searchNames:p.searchNames,searchMembers:p.searchMembers||[]});
+          if(!loadedPlayers.some(function(other){return wbcaSearch.sameSearchEntry(other,{name:p.name,division:division.name,searchMembers:p.searchMembers});})){
+            loadedPlayers.push({name:p.name,division:division.name,slug:slug,rating:p.skill_level,searchNames:p.searchNames,searchMembers:p.searchMembers||[]});
           }
         });
       });
-      players=wbcaSearch.uniqueSearchEntries(players);
+      loadedPlayers=wbcaSearch.uniqueSearchEntries(loadedPlayers);
+      if(searchReady&&(failed.length||bracketFailures))return;
+      players=loadedPlayers;registrationEntries=entries;
       players.sort(function(a,b){return a.name.localeCompare(b.name)||a.division.localeCompare(b.division);});searchReady=true;
+      render(divisionData);
+      if(!failed.length&&!bracketFailures)saveSearchCache();
       document.getElementById('search-note').textContent=players.length+' players and teams · '+jobs.length+' published brackets'+(failed.length?' · '+failed.join(' / ')+' full-name lookup unavailable':'');renderSearch();
     });
   }
@@ -171,8 +178,55 @@
     if(e.key==='Enter'&&searchHits.length){var at=searchCursor<0?0:searchCursor;var result=document.querySelector('.search-result[data-index="'+at+'"]');if(result&&result.href)location.href=result.href;}
   });
   document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSearch();else if(e.key==='/'&&!document.getElementById('search-overlay').classList.contains('open')){e.preventDefault();openSearch();}});
-  Promise.allSettled(['Teams','Scotch','Singles'].map(function(kind){return wbcaSearch.loadEntries(base,kind);})).then(function(results){registrationEntries=[];results.forEach(function(result){if(result.status==='fulfilled')registrationEntries=registrationEntries.concat(result.value);});render(divisionData);});
-  fetch(base+'/bracketbeast/tournament/53/divisions').then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;});}).then(function(data){divisionData=data;render(data);loadPlayers(data.divisions);}).catch(function(e){document.getElementById('list').innerHTML='<div class="error">Could not load divisions: '+esc(e.message)+'</div>';if(registrationEntries.length)render(divisionData);});
+  function validSearchCache(data){
+    return data&&data.version===1&&Array.isArray(data.players)&&data.players.length>0&&
+      data.players.every(function(p){return typeof p.name==='string'&&typeof p.division==='string';})&&
+      Array.isArray(data.entries)&&data.entries.length>0&&data.divisionData&&Array.isArray(data.divisionData.divisions);
+  }
+  function saveSearchCache(){
+    try{localStorage.setItem(SEARCH_CACHE_KEY,JSON.stringify({version:1,players:players,entries:registrationEntries,divisionData:divisionData}));}catch(e){/* Search also works when browser storage is unavailable. */}
+  }
+  function applySearchCache(data){
+    players=data.players;registrationEntries=data.entries;divisionData=data.divisionData;searchReady=true;
+    render(divisionData);
+    document.getElementById('search-note').textContent=players.length+' players and teams';
+    renderSearch();
+  }
+  function bracketSignature(data){
+    return (data.divisions||[]).map(function(d){return String(d.acronym||d.divisionId)+':'+(d.brackets||[]).map(function(b){return b.divisionBracketId;}).sort().join(',');}).sort().join('|');
+  }
+  function refreshDivisions(){
+    return fetch(base+'/bracketbeast/tournament/53/divisions').then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;});}).then(function(data){
+      var changed=bracketSignature(data)!==bracketSignature(divisionData);
+      divisionData=data;render(data);
+      if(!searchReady||changed)return loadPlayers(data.divisions);
+      else saveSearchCache();
+    }).catch(function(e){
+      if(!searchReady){document.getElementById('list').innerHTML='<div class="error">Could not load divisions: '+esc(e.message)+'</div>';}
+    });
+  }
+  function loadSearchData(){
+    var cached=null;
+    try{cached=JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY));}catch(e){}
+    if(validSearchCache(cached)){applySearchCache(cached);return refreshDivisions();}
+    // The small card manifest paints before the larger search snapshot starts.
+    return fetch('wbca_2026-divisions.json').then(function(r){if(!r.ok)throw new Error('Division snapshot unavailable');return r.json();}).then(function(data){
+      if(!data||!Array.isArray(data.divisions))throw new Error('Invalid division snapshot');
+      render(data);
+    }).catch(function(){/* The search snapshot can also provide the division cards. */}).then(function(){
+      return new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve);});});
+    }).then(function(){
+      return fetch('wbca_2026-search.json').then(function(r){if(!r.ok)throw new Error('Search snapshot unavailable');return r.json();});
+    }).then(function(data){
+      if(!validSearchCache(data))throw new Error('Invalid search snapshot');
+      applySearchCache(data);saveSearchCache();return refreshDivisions();
+    }).catch(function(){
+      // A missing snapshot falls back to the live sources.
+      return refreshDivisions();
+    });
+
+  }
+  loadSearchData();
 })();
 </script>
 </body>
