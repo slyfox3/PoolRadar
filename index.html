@@ -323,6 +323,7 @@ button { font-family: inherit; font-size: inherit; }
 .pse-item.active, .pse-item:hover { background: #1e293b; }
 .pse-item.is-fav .pse-name { color: #fbbf24; }
 .pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
+.pse-members { display: block; color: #94a3b8; font-size: 12px; margin-top: 3px; }
 .pse-meta { margin-left: auto; padding-left: 8px; color: #64748b; font-size: 12px; white-space: nowrap; }
 .pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
 .pse-section { padding: 12px 12px 4px; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -455,6 +456,7 @@ button { font-family: inherit; font-size: inherit; }
 <script src="bracket-algo.js"></script>
 <script src="stream-mappings.js"></script>
 <script src="bracketbeast.js"></script>
+<script src="wbca-search.js"></script>
 <script>
 (function() {
   'use strict';
@@ -2520,7 +2522,22 @@ button { font-family: inherit; font-size: inherit; }
         .then(function(data) {
           var sourceUrl = 'https://player.bracketbeast.com/tournament/' + ids[0]
             + '/divisions/' + ids[1] + '/brackets/' + ids[2];
-          return bracketBeastBuildResult(data, sourceUrl);
+          var result = bracketBeastBuildResult(data, sourceUrl);
+          var teamDivision = wbcaSearch.isTeamDivision(result.tournament.divisionName);
+          if (ids[0] !== '53' || (!teamDivision && !wbcaSearch.isScotchDivision(result.tournament.divisionName))) return result;
+          return wbcaSearch.loadEntries(BRACKETBEAST_PROXY.replace(/\/bracketbeast$/, ''), teamDivision ? 'Teams' : 'Scotch').then(function(entries) {
+            Object.keys(result.bracketByNum).forEach(function(num) {
+              var match = result.bracketByNum[num];
+              [match.p1, match.p2].forEach(function(p) {
+                if (p) p.searchNames = wbcaSearch.membersFor(p.name, result.tournament.divisionName, entries);
+              });
+            });
+            // Adapter cards and bracket nodes share their player objects.
+            return result;
+          }).catch(function() {
+            result.tournament.wbcaSearchUnavailable = true;
+            return result;
+          });
         });
       });
     }
@@ -3545,10 +3562,11 @@ button { font-family: inherit; font-size: inherit; }
   // Every player we can jump to: everyone with a match, plus the registered list
   function collectSearchablePlayers() {
     var byName = Object.create(null), out = [];
-    function add(name, rating, place, country, countryName) {
+    function add(name, rating, place, country, countryName, searchNames) {
       if (!name) return;
       var key = name.toLowerCase();
       if (byName[key]) {
+        if (searchNames && searchNames.length) byName[key].searchNames = searchNames;
         if (rating && !byName[key].rating) byName[key].rating = rating;
         if (place && !byName[key].place) byName[key].place = place;
         if (country && !byName[key].country) {
@@ -3560,14 +3578,15 @@ button { font-family: inherit; font-size: inherit; }
       byName[key] = {
         name: name, rating: rating || null, place: place || null,
         country: country || null, countryName: countryName || null,
+        searchNames: searchNames || [],
       };
       out.push(byName[key]);
     }
     if (currentMatches) {
       for (var i = 0; i < currentMatches.length; i++) {
         var m = currentMatches[i];
-        if (m.p1) add(m.p1.name, m.p1.rating, m.p1.place, m.p1.country, m.p1.countryName);
-        if (m.p2) add(m.p2.name, m.p2.rating, m.p2.place, m.p2.country, m.p2.countryName);
+        if (m.p1) add(m.p1.name, m.p1.rating, m.p1.place, m.p1.country, m.p1.countryName, m.p1.searchNames);
+        if (m.p2) add(m.p2.name, m.p2.rating, m.p2.place, m.p2.country, m.p2.countryName, m.p2.searchNames);
       }
     }
     if (currentPlayerList) {
@@ -3661,8 +3680,8 @@ button { font-family: inherit; font-size: inherit; }
     }
     var scored = [];
     for (var i = 0; i < players.length; i++) {
-      var lname = players[i].name.toLowerCase();
-      var words = lname.split(/\s+/);
+      var lname = [players[i].name].concat(players[i].searchNames || []).join(' ').toLowerCase();
+      var words = lname.split(/[\s/]+/);
       var score = 0, ok = true;
       for (var t = 0; t < toks.length; t++) {
         var tk = toks[t];
@@ -3726,6 +3745,8 @@ button { font-family: inherit; font-size: inherit; }
 
   function renderSearchResults() {
     var query = searchInputEl.value;
+    var unavailable = currentTournament && currentTournament.wbcaSearchUnavailable
+      ? '<div class="pse-empty">Full-name lookup is unavailable. Search by team name.</div>' : '';
     var toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     var all = buildSearchEntries(query);
     // Sections are labels, not targets, so they never enter the hit list.
@@ -3741,10 +3762,10 @@ button { font-family: inherit; font-size: inherit; }
     searchHits = all.filter(function(e) { return e.kind !== 'section'; });
     searchCursor = searchHits.length ? 0 : -1;
     if (!searchHits.length) {
-      searchResultsEl.innerHTML = '<div class="pse-empty">No player or country matches &ldquo;' + esc(query) + '&rdquo;</div>';
+      searchResultsEl.innerHTML = unavailable + '<div class="pse-empty">No player or country matches &ldquo;' + esc(query) + '&rdquo;</div>';
       return;
     }
-    var html = '', hitIdx = -1;
+    var html = unavailable, hitIdx = -1;
     for (var i = 0; i < all.length; i++) {
       var e = all[i];
       if (e.kind === 'section') {
@@ -3769,7 +3790,9 @@ button { font-family: inherit; font-size: inherit; }
       if (p.rating) meta.push('(' + p.rating + ')');
       if (p.place) meta.push('Place: ' + p.place);
       html += '<div class="pse-item' + active + (isFav ? ' is-fav' : '') + '" role="option" data-name="' + esc(p.name) + '">';
-      html += '<span class="pse-name">' + playerFlagHtml(p) + highlightName(p.name, toks) + '</span>';
+      html += '<span class="pse-name">' + playerFlagHtml(p) + highlightName(p.name, toks);
+      if (p.searchNames && p.searchNames.length) html += '<span class="pse-members">' + highlightName(p.searchNames.join(' / '), toks) + '</span>';
+      html += '</span>';
       if (meta.length) html += '<span class="pse-meta">' + esc(meta.join(' · ')) + '</span>';
       html += '</div>';
     }

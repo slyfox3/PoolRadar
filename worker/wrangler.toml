@@ -6,3 +6,6 @@ compatibility_date = "2026-08-01"
 #   wrangler secret put WNT_EMAIL
 #   wrangler secret put WNT_PASSWORD
 # and optionally WNT_SESSION to override with a raw wnt.live.sid cookie.
+# WBCA_TOKEN: add as a Secret in the Cloudflare Dashboard under
+# Workers & Pages > wnt-proxy > Settings > Variables and Secrets.
+# Use the JWT only, without "Bearer ". Replace it when the login expires.

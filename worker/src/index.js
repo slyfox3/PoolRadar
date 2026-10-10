@@ -9,10 +9,12 @@
  *   GET /wnt/event/<slug>  every stage and group of one event, merged
  *   GET /pbs/events        the PBS tournament calendar, scraped
  *   GET /pbs/event?path=…  a Pro Billiard Series page's CueScore locator
+ *   GET /wbca/entries     Western BCA entry players, with pagination/search
  *
  * Secrets (set with `wrangler secret put`, never in this file or wrangler.toml):
  *   WNT_EMAIL, WNT_PASSWORD  credentials to log in with
  *   WNT_SESSION              optional raw wnt.live.sid, overrides the above
+ *   WBCA_TOKEN               Western BCA bearer JWT (replace when expired)
  *
  * Mirrors wnt-dev-proxy.py route for route so local and deployed behave alike.
  */
@@ -21,6 +23,7 @@ const BASE = 'https://www.wntlivescores.com';
 const PBS_BASE = 'https://probilliardseries.com';
 const PBS_TRANSLATE_BASE = 'https://probilliardseries-com.translate.goog';
 const BRACKETBEAST_BASE = 'https://bracket-beast-prod-app.azurewebsites.net/api';
+const WBCA_BASE = 'https://api.members.westernbca.org/api/v1';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
@@ -39,6 +42,51 @@ const PBS_EVENTS_TTL = 600;
 const PBS_RESOLVE_TTL = 86400;
 const BRACKETBEAST_TTL = 20;
 const BRACKETBEAST_DIVISIONS_TTL = 600;
+const WBCA_ENTRIES_TTL = 60;
+
+// Only the entry fields PoolRadar needs cross the proxy boundary.
+function wbcaEntry(entry) {
+  const item = entry.orderItem || {};
+  const details = JSON.parse(entry.detailsJSON || '[]');
+  if (!Array.isArray(details)) throw new Error('Invalid Western BCA player data.');
+  const players = (type) => details.filter((p) => p.type === type).map((p) => ({
+    firstName: p.firstName || '', lastName: p.lastName || '',
+    fargoRate: p.fargoRate ?? null, robustness: p.robustness ?? null,
+  }));
+  return {
+    eventName: item.event?.name || null,
+    division: item.division?.name || null,
+    divisionType: item.divisionType ? {
+      name: item.divisionType.name || null,
+      eventType: item.divisionType.eventType || null,
+      fargoUp: item.divisionType.fargoUp ?? null,
+      fargoDown: item.divisionType.fargoDown ?? null,
+    } : null,
+    teamName: item.teamName || null,
+    players: players('player'), alternatePlayers: players('alternativePlayer'),
+  };
+}
+
+async function loadWbcaEntries(params, env) {
+  if (!env.WBCA_TOKEN) throw new AuthError('Set the WBCA_TOKEN Worker secret.');
+  const url = new URL(WBCA_BASE + '/eventEntries');
+  url.search = new URLSearchParams(params).toString();
+  const response = await fetch(url, {
+    headers: { Accept: 'application/json', Authorization: 'Bearer ' + env.WBCA_TOKEN.trim() },
+    redirect: 'manual',
+  });
+  if (response.status === 401 || response.status === 403) {
+    throw new AuthError('Western BCA rejected WBCA_TOKEN. Replace it with a current token from an authorised login.');
+  }
+  if (!response.ok) throw new Error('Western BCA returned ' + response.status);
+  const payload = await response.json();
+  if (!Array.isArray(payload.data?.data)) throw new Error('Unrecognised Western BCA entries response.');
+  return {
+    entries: payload.data.data.map(wbcaEntry),
+    total: payload.data.total ?? 0,
+    page: params.page, limit: params.limit,
+  };
+}
 
 async function loadBracketBeast(bracketId) {
   const bracketRes = await fetch(BRACKETBEAST_BASE + '/external/viewbracket', {
@@ -592,6 +640,16 @@ export default {
       } else if (url.pathname === '/bracketbeast/tournament/53/divisions') {
         payload = await loadBracketBeastDivisions(53);
         ttl = BRACKETBEAST_DIVISIONS_TTL;
+      } else if (url.pathname === '/wbca/entries') {
+        const page = url.searchParams.get('page') || '1';
+        const limit = url.searchParams.get('limit') || '50';
+        const search = url.searchParams.get('search') || 'general:';
+        if (!/^[1-9]\d{0,5}$/.test(page) || !/^[1-9]\d{0,2}$/.test(limit) ||
+            Number(limit) > 100 || search.length > 500) {
+          return json({ error: 'invalid WBCA pagination or search' }, 400, origin);
+        }
+        payload = await loadWbcaEntries({ page: Number(page), limit: Number(limit), search }, env);
+        ttl = WBCA_ENTRIES_TTL;
       } else {
         const m = /^\/wnt\/event\/([A-Za-z0-9._-]+)\/?$/.exec(url.pathname);
         if (!m) return json({ error: 'unknown route' }, 404, origin);

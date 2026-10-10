@@ -9,6 +9,7 @@ will:
     GET /pbs/events        -> the PBS tournament calendar, scraped
     GET /pbs/event?path=…  -> a Pro Billiard Series page's CueScore locator
     GET /bracketbeast/bracket?id=… -> a public Bracket Beast draw
+    GET /wbca/entries -> Western BCA players (requires WBCA_TOKEN env var)
 
 wntlivescores.com requires a session for everything, so supply one via the
 WNT_SID env var or a .wnt-session file next to this script. Both hold the raw
@@ -35,6 +36,7 @@ BASE = 'https://www.wntlivescores.com'
 PBS_BASE = 'https://probilliardseries.com'
 PBS_TRANSLATE_BASE = 'https://probilliardseries-com.translate.goog'
 BRACKETBEAST_BASE = 'https://bracket-beast-prod-app.azurewebsites.net/api'
+WBCA_BASE = 'https://api.members.westernbca.org/api/v1'
 UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/126.0 Safari/537.36')
 
@@ -45,6 +47,7 @@ PBS_EVENTS_TTL = 600
 PBS_RESOLVE_TTL = 86400
 BRACKETBEAST_TTL = 20
 BRACKETBEAST_DIVISIONS_TTL = 600
+WBCA_ENTRIES_TTL = 60
 # Whether an event has a bracket at all is settled for anything already played,
 # and an upcoming one gains its draw days ahead — so a day is generous either
 # way, and it is what keeps a repeat visit from re-asking about the same events.
@@ -57,6 +60,47 @@ MAX_STAGES = 6
 MAX_GROUPS = 32
 
 _cache = {}
+
+
+def wbca_entry(entry):
+    item = entry.get('orderItem') or {}
+    details = json.loads(entry.get('detailsJSON') or '[]')
+    if not isinstance(details, list):
+        raise ValueError('Invalid Western BCA player data.')
+
+    def players(kind):
+        return [{key: p.get(key) for key in ('firstName', 'lastName', 'fargoRate', 'robustness')}
+                for p in details if p.get('type') == kind]
+
+    division_type = item.get('divisionType')
+    return {
+        'eventName': (item.get('event') or {}).get('name'),
+        'division': (item.get('division') or {}).get('name'),
+        'divisionType': {key: division_type.get(key) for key in
+                         ('name', 'eventType', 'fargoUp', 'fargoDown')} if division_type else None,
+        'teamName': item.get('teamName'),
+        'players': players('player'), 'alternatePlayers': players('alternativePlayer'),
+    }
+
+
+def load_wbca_entries(params):
+    token = os.environ.get('WBCA_TOKEN', '').strip()
+    if not token:
+        raise WntAuthError('Set the WBCA_TOKEN environment variable.')
+    request = urllib.request.Request(WBCA_BASE + '/eventEntries?' + urllib.parse.urlencode(params),
+                                     headers={'Accept': 'application/json', 'Authorization': 'Bearer ' + token})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.load(response)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise WntAuthError('Western BCA rejected WBCA_TOKEN. Replace it with a current token.') from None
+        raise
+    data = payload.get('data') or {}
+    if not isinstance(data.get('data'), list):
+        raise ValueError('Unrecognised Western BCA entries response.')
+    return {'entries': [wbca_entry(e) for e in data['data']],
+            'total': data.get('total', 0), 'page': params['page'], 'limit': params['limit']}
 
 
 def load_bracket_beast(bracket_id):
@@ -424,9 +468,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         route = urllib.parse.urlparse(self.path)
-        if not route.path.startswith('/wnt/') and not route.path.startswith('/pbs/') and not route.path.startswith('/bracketbeast/'):
+        if not route.path.startswith(('/wnt/', '/pbs/', '/bracketbeast/', '/wbca/')):
             return super().do_GET()
         try:
+            if route.path == '/wbca/entries':
+                query = urllib.parse.parse_qs(route.query)
+                page = query.get('page', ['1'])[0]
+                limit = query.get('limit', ['50'])[0]
+                search = query.get('search', ['general:'])[0]
+                if (not re.fullmatch(r'[1-9]\d{0,5}', page) or
+                        not re.fullmatch(r'[1-9]\d{0,2}', limit) or int(limit) > 100 or len(search) > 500):
+                    return self._json({'error': 'invalid WBCA pagination or search'}, 400)
+                params = {'page': int(page), 'limit': int(limit), 'search': search}
+                return self._json(cached('wbca:' + urllib.parse.urlencode(params), WBCA_ENTRIES_TTL,
+                                         lambda: load_wbca_entries(params)))
             if route.path == '/bracketbeast/tournament/53/divisions':
                 data = cached('bracketbeast:53:divisions', BRACKETBEAST_DIVISIONS_TTL,
                               lambda: load_bracket_beast_divisions(53))

@@ -22,6 +22,7 @@
   <div class="search-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4.5-4.5"></path></svg><input class="search-input" id="search-input" placeholder="Search players…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"><button class="search-close" id="search-close" aria-label="Close">&times;</button></div>
   <div class="search-note" id="search-note">Loading player index…</div><div class="search-results" id="search-results"></div>
 </div></div>
+<script src="wbca-search.js"></script>
 <script>
 (function(){
   'use strict';
@@ -85,7 +86,7 @@
     var tokens=normal(query).trim().split(/\s+/).filter(Boolean),out=[];
     if(!tokens.length)return [];
     players.forEach(function(p){
-      var name=normal(p.name),words=name.split(/[\s/\\,&-]+/).filter(Boolean),score=0,ok=true;
+      var name=normal([p.name].concat(p.searchNames||[]).join(' ')),words=name.split(/[\s/\\,&-]+/).filter(Boolean),score=0,ok=true;
       tokens.forEach(function(token){
         if(!ok)return;
         if(name.indexOf(token)===0)return;
@@ -115,14 +116,26 @@
     if(!searchReady){result.innerHTML='<div class="search-empty"><span class="spinner"></span>Loading players…</div>';return;}
     if(!query.trim()){result.innerHTML='<div class="search-empty">Type a player’s first or last name</div>';return;}
     if(!searchHits.length){result.innerHTML='<div class="search-empty">No players found</div>';return;}
-    result.innerHTML=searchHits.map(function(p,i){return '<a class="search-result" data-index="'+i+'" href="index.html?bracketbeast='+encodeURIComponent(p.slug)+'"><div class="search-name">'+marked(p.name,query)+'</div><div class="search-division">'+esc(p.division)+'</div></a>';}).join('');
+    result.innerHTML=searchHits.map(function(p,i){var tag=p.slug?'a':'div';return '<'+tag+' class="search-result" data-index="'+i+'"'+(p.slug?' href="index.html?bracketbeast='+encodeURIComponent(p.slug)+'"':'')+'><div class="search-name">'+marked(p.name,query)+'</div>'+(p.searchNames&&p.searchNames.length?'<div class="search-name">'+marked(p.searchNames.join(' / '),query)+'</div>':'')+'<div class="search-division">'+esc(p.division)+(p.slug?'':' · Bracket not published yet')+'</div></'+tag+'>';}).join('');
   }
   function loadPlayers(divisions){
     var jobs=[];
+    var fullNames=Promise.allSettled([wbcaSearch.loadEntries(base),wbcaSearch.loadEntries(base,'Teams')]);
     (divisions||[]).forEach(function(d){(d.brackets||[]).forEach(function(b){jobs.push(fetch(base+'/bracketbeast/bracket?id='+encodeURIComponent(b.divisionBracketId)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(payload){
         var seen={},slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;(payload.bracket.rounds||[]).forEach(function(round){(round.matches||[]).forEach(function(m){[m.divisionPlayer1Name,m.divisionPlayer2Name].forEach(function(name){name=String(name||'').trim();var key=normal(name);if(name&&!seen[key]){seen[key]=true;players.push({name:name,division:d.name,slug:slug});}});});});
       }).catch(function(){return null;}));});});
-    Promise.all(jobs).then(function(){players.sort(function(a,b){return a.name.localeCompare(b.name)||a.division.localeCompare(b.division);});searchReady=true;document.getElementById('search-note').textContent=players.length+' players and teams across '+jobs.length+' brackets';renderSearch();});
+    Promise.all([Promise.all(jobs),fullNames]).then(function(results){
+      var entries=[],failed=[];
+      results[1].forEach(function(result,i){if(result.status==='fulfilled')entries=entries.concat(result.value);else failed.push(i?'Teams':'Scotch');});
+      wbcaSearch.enrich(players,entries);
+      wbcaSearch.registeredTeams(entries).forEach(function(team){
+        var cap=/\b(\d{3,4})\b/.exec(team.division);
+        var exists=players.some(function(p){var other=/\b(\d{3,4})\b/.exec(p.division);return wbcaSearch.isTeamDivision(p.division)&&normal(p.name).trim()===normal(team.name).trim()&&(!cap||other&&cap[1]===other[1]);});
+        if(!exists)players.push(team);
+      });
+      players.sort(function(a,b){return a.name.localeCompare(b.name)||a.division.localeCompare(b.division);});searchReady=true;
+      document.getElementById('search-note').textContent=players.length+' players and teams · '+jobs.length+' published brackets'+(failed.length?' · '+failed.join(' / ')+' full-name lookup unavailable':'');renderSearch();
+    });
   }
   function openSearch(initial){if(typeof initial!=='string')initial='';document.getElementById('search-overlay').classList.add('open');document.getElementById('search-input').value=initial;renderSearch();document.getElementById('search-input').focus();}
   function closeSearch(){document.getElementById('search-overlay').classList.remove('open');}
@@ -133,7 +146,7 @@
   document.getElementById('hero-search').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();openSearch(this.value);}});
   document.getElementById('search-input').addEventListener('keydown',function(e){
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(!searchHits.length)return;searchCursor=(searchCursor+(e.key==='ArrowDown'?1:-1)+searchHits.length)%searchHits.length;document.querySelectorAll('.search-result').forEach(function(el,i){el.classList.toggle('active',i===searchCursor);});}
-    if(e.key==='Enter'&&searchHits.length){var at=searchCursor<0?0:searchCursor;location.href='index.html?bracketbeast='+encodeURIComponent(searchHits[at].slug);}
+    if(e.key==='Enter'&&searchHits.length){var at=searchCursor<0?0:searchCursor;if(searchHits[at].slug)location.href='index.html?bracketbeast='+encodeURIComponent(searchHits[at].slug);}
   });
   document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSearch();else if(e.key==='/'&&!document.getElementById('search-overlay').classList.contains('open')){e.preventDefault();openSearch();}});
   fetch(base+'/bracketbeast/tournament/53/divisions').then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;});}).then(function(data){render(data);loadPlayers(data.divisions);}).catch(function(e){document.getElementById('list').innerHTML='<div class="error">Could not load divisions: '+esc(e.message)+'</div>';});
