@@ -2936,6 +2936,12 @@ button { font-family: inherit; font-size: inherit; }
       (wbcaSearch.isScotchDivision(currentTournament.divisionName) || wbcaSearch.isTeamDivision(currentTournament.divisionName));
   }
 
+  function isPlayerCardFav(p) {
+    return isPlayerFav(p) || (hasTeamRosterView() && (p.searchMembers || []).some(function(member) {
+      return isPlayerFav({ id: null, name: member.name });
+    }));
+  }
+
   function teamRosterNote(p) {
     if (!hasTeamRosterView() || !p.searchMembers || !p.searchMembers.length) return '';
     return '<div class="player-group-members">' + p.searchMembers.map(function(member) {
@@ -3076,8 +3082,8 @@ button { font-family: inherit; font-size: inherit; }
       var aElim = pa.player.place ? 1 : 0;
       var bElim = pb.player.place ? 1 : 0;
       if (aElim !== bElim) return aElim - bElim;
-      var aFav = isPlayerFav(pa.player) ? 0 : 1;
-      var bFav = isPlayerFav(pb.player) ? 0 : 1;
+      var aFav = isPlayerCardFav(pa.player) ? 0 : 1;
+      var bFav = isPlayerCardFav(pb.player) ? 0 : 1;
       if (aFav !== bFav) return aFav - bFav;
       if (aElim && bElim) {
         var aPlace = parseInt(pa.player.place, 10);
@@ -3093,7 +3099,7 @@ button { font-family: inherit; font-size: inherit; }
     for (var pi = 0; pi < playerOrder.length; pi++) {
       var name = playerOrder[pi];
       var pd = playerMap[name];
-      var isFav = isPlayerFav(pd.player);
+      var isFav = isPlayerCardFav(pd.player);
       // A pinned card sits outside the active filter, so say so on the card.
       var isPinned = (countryFilter || liveOnly) && !!pinnedPlayers[name];
       html += '<div class="player-group' + (isPinned ? ' is-pinned' : '') + '" id="pg-' + esc(pd.player.name).replace(/\s/g, '-').toLowerCase() + '">';
@@ -3112,7 +3118,7 @@ button { font-family: inherit; font-size: inherit; }
       html += '<div class="match-rows">';
       for (var mi = 0; mi < pd.matches.length; mi++) {
         var pm = pd.matches[mi];
-        var oppFav = isPlayerFav(pm.opp);
+        var oppFav = isPlayerCardFav(pm.opp);
         var hasScore = pm.myScore != null && pm.oppScore != null && (pm.myScore > 0 || pm.oppScore > 0);
         html += '<div class="match-row">';
         var pmLabel = bracketByNum[pm.num] && bracketByNum[pm.num].identifier;

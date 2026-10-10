@@ -116,7 +116,7 @@ const indexContext = { searchInputEl: { value: 'Augie' }, currentTournament: {},
   esc: (s) => String(s), highlightName: (name) => name, playerFlagHtml: () => '', isPlayerFav: () => false,
   wbcaSearch: lookup, currentSource: 'bracketbeast' };
 vm.createContext(indexContext);
-vm.runInContext(['hasTeamRosterView', 'playerFavBtn', 'teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink']
+vm.runInContext(['hasTeamRosterView', 'isPlayerCardFav', 'playerFavBtn', 'teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink', 'renderGroupedByPlayer']
   .map((name) => extract('index.html', name)).join('\n'), indexContext);
 indexContext.renderSearchResults();
 assert.match(indexResults.innerHTML, /Augie Gonzales \(541\)/);
@@ -135,9 +135,11 @@ assert.match(indexContext.teamRosterNote(ratedDoubles), /data-name="Mike Kurz"/)
 assert.ok(!indexContext.teamRosterNote(ratedDoubles).includes('data-name="Gonzales/Kurz"'));
 assert.equal((indexContext.teamRosterNote(ratedDoubles).match(/class="player-group-member"/g) || []).length, 2);
 indexContext.isPlayerFav = (p) => p.name === 'Augie Gonzales';
+assert.ok(indexContext.isPlayerCardFav(ratedDoubles));
 assert.match(indexContext.teamRosterNote(ratedDoubles), /data-action="remove-fav" data-name="Augie Gonzales"/);
 assert.match(indexContext.teamRosterNote(ratedDoubles), /data-action="add-fav" data-id="null" data-name="Mike Kurz"/);
 indexContext.isPlayerFav = () => false;
+assert.ok(!indexContext.isPlayerCardFav(ratedDoubles));
 assert.equal(ratedDoubles.name, 'Gonzales/Kurz');
 assert.match(indexContext.fmPlayerCell('fm-p1', ratedDoubles, false, false, false), />Gonzales\/Kurz<\/span>/);
 assert.ok(!indexContext.fmPlayerCell('fm-p1', ratedDoubles, false, false, false).includes('Augie'));
@@ -147,12 +149,35 @@ indexContext.buildSearchEntries = () => [{ kind: 'player', player: ratedDoubles 
 indexContext.renderSearchResults();
 assert.equal((indexResults.innerHTML.replace(/<[^>]*>/g, '').match(/Augie Gonzales/g) || []).length, 1);
 indexContext.currentTournament = { divisionName: 'Teams 1375 & Under' };
+indexContext.isPlayerFav = (p) => p.name === 'Alex Alternate';
+assert.ok(indexContext.isPlayerCardFav(ratedTeam));
+indexContext.isPlayerFav = () => false;
 assert.match(indexContext.teamRosterNote(ratedTeam), /Evan Test \(0\)/);
 assert.match(indexContext.teamRosterNote(ratedTeam), /Alex Alternate \(500\)/);
 indexContext.currentTournament = { divisionName: 'Funday Scotch Doubles' };
 assert.match(indexContext.teamRosterNote(ratedDoubles), /Augie Gonzales \(541\)/);
 indexContext.currentTournament = { divisionName: 'Singles' };
 assert.equal(indexContext.teamRosterNote(augie), '');
+indexContext.isPlayerFav = (p) => p.name === 'Alex Alternate';
+assert.ok(!indexContext.isPlayerCardFav(ratedTeam));
+
+// A favorited member puts their team first and highlights its card title.
+Object.assign(indexContext, { currentTournament: { divisionName: 'Scotch Doubles 1100 & Under' },
+  countryFilter: null, liveOnly: false, pinnedPlayers: {}, bracketByNum: {},
+  buildBlockerMap: () => ({}), showBlockers: false,
+  isPlayerFav: (p) => p.name === 'Augie Gonzales' });
+const cardMatches = [
+  { num: 1, isBye: true, p1: { ...ratedDoubles, name: 'Z Team' } },
+  { num: 2, isBye: true, p1: { name: 'A Team', searchMembers: [{ name: 'Other Player', rating: 400 }] } },
+];
+let cards = indexContext.renderGroupedByPlayer(cardMatches);
+assert.ok(cards.indexOf('id="pg-z-team"') < cards.indexOf('id="pg-a-team"'));
+assert.match(cards, /class="player-group-name is-fav">Z Team/);
+assert.ok(!cards.includes('data-name="Z Team"'));
+indexContext.isPlayerFav = () => false;
+cards = indexContext.renderGroupedByPlayer(cardMatches);
+assert.ok(cards.indexOf('id="pg-a-team"') < cards.indexOf('id="pg-z-team"'));
+assert.ok(!cards.includes('class="player-group-name is-fav"'));
 
 // Confirm card collection keeps full names and result activation retains the
 // bracket team name, which is what jumpToPlayer uses to find the card.
