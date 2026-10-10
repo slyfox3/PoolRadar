@@ -20,7 +20,8 @@ async function checkDivision(division, kind, teamName, players, alternates) {
     players, alternatePlayers: alternates };
   const payload = { bracket: { tournamentId: 53, divisionId: 777, divisionName: division,
     rounds: [{ roundName: '1', roundSequence: 1, isWinnerRound: true, matches: [{ id: 1,
-      matchName: 'W1-1', matchStatus: 'Playing', playSequence: 1,
+      matchName: 'W1-1', matchStatus: 'Scheduled', playSequence: 1,
+      locationsDescription: '64', startTime: '2026-10-11T17:45:00',
       divisionPlayerId1: 11, divisionPlayer1Name: teamName,
       divisionPlayerId2: 12, divisionPlayer2Name: 'Other Team' }] }] } };
   const elements = { 'player-list': { innerHTML: '' }, 'player-input': { value: players[0].firstName } };
@@ -42,6 +43,9 @@ async function checkDivision(division, kind, teamName, players, alternates) {
   c.renderResults();
   const resultHtml = elements['player-list'].innerHTML.replace(/<[^>]*>/g, '');
   assert.ok(resultHtml.includes(teamName));
+  assert.ok(elements['player-list'].innerHTML.includes('class="pse-schedule"'));
+  assert.ok(resultHtml.includes('T64'));
+  assert.ok(resultHtml.includes('Oct 11'));
   assert.ok(resultHtml.includes(String(players.reduce((sum, p) => sum + p.fargoRate, 0))));
   for (const member of players.concat(alternates)) assert.ok(resultHtml.includes(member.firstName + ' ' + member.lastName + ' (' + member.fargoRate + ')'));
   for (const member of players.concat(alternates)) {
@@ -54,6 +58,18 @@ async function checkDivision(division, kind, teamName, players, alternates) {
     }
   }
 }
+// Choose the earliest unstarted match, regardless of bracket traversal order.
+const schedulePlayer = { name: 'Chia/Yuan' };
+playerSearch.applySchedules([schedulePlayer], [
+  { p1: schedulePlayer, status: 'COMPLETED', tableName: '64', scheduledTime: '2026-10-10T16:00:00Z' },
+  { p1: schedulePlayer, status: 'NOT_STARTED', tableName: '8', scheduledTime: '2026-10-11T20:00:00Z' },
+  { p1: schedulePlayer, status: 'NOT_STARTED', tableName: '4', scheduledTime: '2026-10-11T17:45:00Z' },
+]);
+assert.equal(schedulePlayer.scheduledMatch.tableName, '4');
+assert.match(playerSearch.renderResults([{ kind: 'player', player: schedulePlayer }], {}), /pse-schedule/);
+playerSearch.applySchedules([schedulePlayer], []);
+assert.equal(schedulePlayer.scheduledMatch, undefined);
+
 (async () => {
   await checkDivision('Scotch Doubles 1000 & Under', 'Scotch', 'Gonzales/Kurz', [
     { firstName: 'Augie', lastName: 'Gonzales', fargoRate: 541 },

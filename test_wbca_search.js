@@ -207,7 +207,7 @@ assert.ok(!cards.includes('class="player-group-name is-fav"'));
 
 // Confirm card collection keeps full names and result activation retains the
 // bracket team name, which is what jumpToPlayer uses to find the card.
-const context = { currentMatches: [{ p1: { name: 'Chia/Yuan', searchNames: players[0].searchNames }, p2: null }],
+const context = { playerSearch, currentMatches: [{ p1: { name: 'Chia/Yuan', searchNames: players[0].searchNames }, p2: null }],
   currentPlayerList: null, currentTournament: null, jumpToPlayer: (name) => { context.jumped = name; } };
 vm.createContext(context);
 vm.runInContext(extract('index.html', 'collectSearchablePlayers') + '\n' + extract('index.html', 'activateSearchEntry'), context);
@@ -244,6 +244,15 @@ Object.assign(context, { wbcaSearch: lookup, currentTournament: { divisionName: 
   currentPlayerList: [{ name: 'Chia / Yuan', skill_level: 1060, searchMembers: aliasResults[0].searchMembers, searchNames: aliasResults[0].searchNames }] });
 assert.equal(context.collectSearchablePlayers().length, 1);
 assert.equal(context.collectSearchablePlayers()[0].name, 'Chia/Yuan');
+
+// By Player prefixes future match times with the assigned table.
+vm.runInContext(extract('index.html', 'addPlayerMatch'), indexContext);
+indexContext.matchTimeInfo = () => ({ title: 'Scheduled', label: '10:45am' });
+const futureMatch = { num: 99, status: 'NOT_STARTED', tableName: 'Table 4',
+  p1: { name: 'Chia/Yuan' }, p2: { name: 'Other Team' }, s1: null, s2: null,
+  scheduledTime: '2026-10-11T17:45:00Z' };
+assert.match(indexContext.renderGroupedByPlayer([futureMatch]), />T4 10:45am<\/span>/);
+assert.ok(!indexContext.renderGroupedByPlayer([{ ...futureMatch, tableName: null }]).includes('T4'));
 
 async function checkLoading() {
   let requested = [];

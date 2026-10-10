@@ -3153,7 +3153,8 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
             var calledTbl = pm.tableName ? 'T' + pm.tableName.replace(/^Table\s*/i, '') : '';
             html += '<span class="mr-sched mr-called" title="Players called to the table">' + esc(calledTbl) + ' ⏳</span>';
           } else if (schedInfo) {
-            html += '<span class="mr-sched" title="' + esc(schedInfo.title) + '">' + esc(schedInfo.label) + '</span>';
+            var scheduledTable = pm.tableName ? 'T' + String(pm.tableName).replace(/^Table\s*/i, '') + ' ' : '';
+            html += '<span class="mr-sched" title="' + esc(schedInfo.title) + '">' + esc(scheduledTable + schedInfo.label) + '</span>';
           } else {
             html += '<span class="mr-label mr-none">&mdash;</span><span></span><span></span><span></span>';
           }
@@ -3290,7 +3291,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       out.push({
         num: b.num, status: b.status, identifier: b.identifier, round: b.round,
         p1: b.p1, p2: b.p2, s1: null, s2: null, p1Won: false, p2Won: false,
-        scheduledTime: b.scheduledTime, startTime: b.startTime,
+        scheduledTime: b.scheduledTime, startTime: b.startTime, tableName: b.tableName,
         isBye: false, isForfeit: false, isPending: true,
       });
     }
@@ -3397,21 +3398,21 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       html += '<span class="fm-round">' + esc(currentSource === 'bracketbeast' ? matchLabel : roundLabel) + '</span>';
       html += '<span class="fm-add">' + (m.p1 ? playerFavBtn(m.p1) : '') + '</span>';
       var completed = m.status !== 'IN_PROGRESS';
+      var fmTable = m.tableName ? 'T' + String(m.tableName).replace(/^Table\s*/i, '') : '';
       html += m.p1 ? fmPlayerCell('fm-p1', m.p1, p1Fav, completed && p1Win, completed && p2Win)
                    : fmTbdCell('fm-p1', m.num, fmBMap, fmShort);
       if (m.isSplit) {
-        html += '<span class="fm-status"></span><span style="grid-column:span 3;justify-content:center">Split</span>';
+        html += '<span class="fm-status">' + esc(fmTable) + '</span><span style="grid-column:span 3;justify-content:center">Split</span>';
       } else if (m.isForfeit && m.status === 'COMPLETED') {
-        html += '<span class="fm-status"></span>';
+        html += '<span class="fm-status">' + esc(fmTable) + '</span>';
         html += '<span style="grid-column:span 3;justify-content:center;font-size:11px;font-weight:300;color:#64748b">forfeit</span>';
       } else if (m.status === 'IN_PROGRESS') {
-        var tbl = m.tableName ? 'T' + m.tableName.replace(/^Table\s*/i, '') : '';
-        html += '<span class="fm-status mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
+        html += '<span class="fm-status mr-live">' + esc(fmTable) + '\uD83D\uDD25</span>';
         html += '<span class="mr-s1 mr-live">' + (m.s1 != null ? m.s1 : '') + '</span>';
         html += '<span class="mr-sep mr-live">' + (m.s1 != null ? '-' : '') + '</span>';
         html += '<span class="mr-s2 mr-live">' + (m.s2 != null ? m.s2 : '') + '</span>';
       } else if (hasScore) {
-        html += '<span class="fm-status"></span>';
+        html += '<span class="fm-status">' + esc(fmTable) + '</span>';
         html += '<span class="mr-s1">' + m.s1 + '</span>';
         html += '<span class="mr-sep">-</span>';
         html += '<span class="mr-s2">' + m.s2 + '</span>';
@@ -3420,14 +3421,13 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
         if (m.calledToTable) {
           // Table in the same column an in-progress row uses, hourglass in the
           // same column its scheduled time would have used.
-          var fmTbl = m.tableName ? 'T' + m.tableName.replace(/^Table\s*/i, '') : '';
-          html += '<span class="fm-status mr-called" title="Players called to the table">' + esc(fmTbl) + '</span>';
+          html += '<span class="fm-status mr-called" title="Players called to the table">' + esc(fmTable) + '</span>';
           html += '<span class="mr-sched mr-called" title="Players called to the table">⏳</span>';
         } else if (fmSched) {
-          html += '<span class="fm-status"></span>';
+          html += '<span class="fm-status">' + esc(fmTable) + '</span>';
           html += '<span class="mr-sched" title="' + esc(fmSched.title) + '">' + esc(fmSched.label) + '</span>';
         } else {
-          html += '<span class="fm-status"></span>';
+          html += '<span class="fm-status">' + esc(fmTable) + '</span>';
           html += '<span class="mr-s1 mr-none">&mdash;</span><span class="mr-sep"></span><span class="mr-s2"></span>';
         }
       }
@@ -3625,6 +3625,8 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
         add(p.name, p.skill_level, null, null, null, p.searchNames, p.searchMembers);
       }
     }
+    var scheduledMatches = (currentMatches || []).concat(typeof bracketByNum === 'object' ? Object.values(bracketByNum) : []);
+    playerSearch.applySchedules(out, scheduledMatches);
     if (currentTournament && wbcaSearch.isScotchDivision(currentTournament.divisionName)) {
       out.forEach(function(p) { p.division = currentTournament.divisionName; });
       return wbcaSearch.uniqueSearchEntries(out);

@@ -21,6 +21,7 @@
 <button class="search-fab" id="search-fab" aria-label="Search players" title="Search players (/)" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4.5-4.5"></path></svg></button>
 <div id="player-search-mount"></div>
 <script src="wbca-search.js"></script>
+<script src="bracketbeast.js"></script>
 <script src="player-search.js"></script>
 <script>
 playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'search-overlay',inputId:'search-input',resultsId:'search-results',closeId:'search-close',hintId:'search-note'});
@@ -120,7 +121,14 @@ document.getElementById('search-note').hidden=false;
       return registrationEntries.length?Promise.resolve(registrationEntries.filter(function(e){return String(e.division).toLowerCase()===kind.toLowerCase();})):wbcaSearch.loadEntries(base,kind);
     }));
     (divisions||[]).forEach(function(d){(d.brackets||[]).forEach(function(b){jobs.push(fetch(base+'/bracketbeast/bracket?id='+encodeURIComponent(b.divisionBracketId)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(payload){
-        var seen={},slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;(payload.bracket.rounds||[]).forEach(function(round){(round.matches||[]).forEach(function(m){[m.divisionPlayer1Name,m.divisionPlayer2Name].forEach(function(name){name=String(name||'').trim();var key=normal(name);if(name&&!seen[key]){seen[key]=true;loadedPlayers.push({name:name,division:d.name,slug:slug});}});});});
+        var seen={},bracketPlayers=[],slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;
+        var result=bracketBeastBuildResult(payload);
+        var matches=Object.values(result.bracketByNum);
+        matches.forEach(function(m){[m.p1,m.p2].forEach(function(participant){
+          var name=participant&&String(participant.name||'').trim(),key=normal(name);
+          if(name&&!seen[key]){seen[key]=true;var player={name:name,division:d.name,slug:slug};bracketPlayers.push(player);loadedPlayers.push(player);}
+        });});
+        playerSearch.applySchedules(bracketPlayers,matches);
       }).catch(function(){bracketFailures++;return null;}));});});
     return Promise.all([Promise.all(jobs),fullNames]).then(function(results){
       var entries=[],failed=[];
@@ -182,15 +190,10 @@ document.getElementById('search-note').hidden=false;
     document.getElementById('search-note').textContent=players.length+' players and teams';
     renderSearch();
   }
-  function bracketSignature(data){
-    return (data.divisions||[]).map(function(d){return String(d.acronym||d.divisionId)+':'+(d.brackets||[]).map(function(b){return b.divisionBracketId;}).sort().join(',');}).sort().join('|');
-  }
   function refreshDivisions(){
     return fetch(base+'/bracketbeast/tournament/53/divisions').then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;});}).then(function(data){
-      var changed=bracketSignature(data)!==bracketSignature(divisionData);
       divisionData=data;render(data);
-      if(!searchReady||changed)return loadPlayers(data.divisions);
-      else saveSearchCache();
+      return loadPlayers(data.divisions);
     }).catch(function(e){
       if(!searchReady){document.getElementById('list').innerHTML='<div class="error">Could not load divisions: '+esc(e.message)+'</div>';}
     });

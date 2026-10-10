@@ -213,6 +213,7 @@
       if (!(existing.searchNames || []).length && (player.searchNames || []).length) existing.searchNames = player.searchNames;
       if (!(existing.searchMembers || []).length && (player.searchMembers || []).length) existing.searchMembers = player.searchMembers;
       if (existing.rating == null && player.rating != null) existing.rating = player.rating;
+      if (!existing.scheduledMatch && player.scheduledMatch) existing.scheduledMatch = player.scheduledMatch;
     });
     return unique;
   }

@@ -1269,6 +1269,10 @@ function setRows(rows) {
     const info = memberInfo.get(player.name.toLowerCase());
     if (info) { player.searchNames = info.searchNames; player.searchMembers = info.searchMembers; player.rating = info.rating; }
   }
+  playerSearch.applySchedules(state.players, state.rows.map(row => ({
+    p1: row.challenger1, p2: row.challenger2, status: row.status, isBye: row.is_bye,
+    tableName: row.table_name, scheduledTime: row.scheduled_time, identifier: row.identifier
+  })));
   state.countries = buildCountryView(state.players);
   state.playerBy = new Map(state.players.map(p => [p.name.toLowerCase(), p]));
   state.keep = new Map();

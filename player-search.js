@@ -35,6 +35,47 @@
     return scored.sort(function(a, b) { return a.score - b.score || a.player.name.localeCompare(b.player.name); })
       .map(function(result) { return result.player; });
   }
+  function applySchedules(players, matches) {
+    function nameKey(name) { return normal(name).trim().replace(/\s*\/\s*/g, '/'); }
+    var byName = new Map(players.map(function(player) { delete player.scheduledMatch; return [nameKey(player.name), player]; }));
+    matches.forEach(function(match) {
+      if (match.status !== 'NOT_STARTED' || match.isBye || match.is_bye || (!match.tableName && !match.scheduledTime)) return;
+      var time = match.scheduledTime ? Date.parse(match.scheduledTime) : Infinity;
+      if (isNaN(time)) time = Infinity;
+      [match.p1, match.p2].forEach(function(participant) {
+        if (!participant) return;
+        var player = byName.get(nameKey(participant.name));
+        if (!player) return;
+        var previous = player.scheduledMatch;
+        var previousTime = previous && previous.scheduledTime ? Date.parse(previous.scheduledTime) : Infinity;
+        if (isNaN(previousTime)) previousTime = Infinity;
+        if (!previous || time < previousTime) player.scheduledMatch = {
+          tableName: match.tableName || null, scheduledTime: match.scheduledTime || null, matchNumber: match.identifier || null
+        };
+      });
+    });
+    return players;
+  }
+  function scheduleLabel(schedule) {
+    if (!schedule) return '';
+    var parts = [];
+    if (schedule.tableName) parts.push('T' + String(schedule.tableName).replace(/^Table\s*/i, ''));
+    var date = new Date(schedule.scheduledTime);
+    if (schedule.scheduledTime && !isNaN(date.getTime())) {
+      var day = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      var time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        .replace(/\s*([AP])M$/i, function(_, p) { return p.toLowerCase() + 'm'; });
+      var today = new Date();
+      var sameDay = date.getFullYear() === today.getFullYear() &&
+        date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+      var tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      var nextDay = date.getFullYear() === tomorrow.getFullYear() &&
+        date.getMonth() === tomorrow.getMonth() && date.getDate() === tomorrow.getDate();
+      parts.push((sameDay ? 'Today' : nextDay ? 'Tomorrow' : day) + ', ' + time);
+    }
+    return parts.join(' · ');
+  }
   function renderResults(entries, options) {
     options = options || {};
     var tokens = String(options.query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -66,6 +107,8 @@
       } else if (!members.length && (player.searchNames || []).length) {
         row += '<span class="pse-members">' + highlight(player.searchNames.join(' / '), tokens) + '</span>';
       }
+      var scheduled = scheduleLabel(player.scheduledMatch);
+      if (scheduled) row += '<span class="pse-schedule">' + esc(scheduled) + '</span>';
       if (options.playerDetailsHtml) row += '<span class="pse-details">' + options.playerDetailsHtml(player) + '</span>';
       row += '</span>';
       var meta = options.playerMetaHtml ? options.playerMetaHtml(player) : (player.place ? esc('Place: ' + player.place) : '');
@@ -84,7 +127,7 @@
       (options.hintId ? '<div class="pse-hint" id="' + esc(options.hintId) + '" hidden></div>' : '') +
       '<div class="pse-results" id="' + esc(options.resultsId) + '" role="listbox"></div></div></div>';
   }
-  var api = { mountOverlay: mountOverlay, rankPlayers: rankPlayers, renderResults: renderResults };
+  var api = { mountOverlay: mountOverlay, rankPlayers: rankPlayers, applySchedules: applySchedules, scheduleLabel: scheduleLabel, renderResults: renderResults };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.playerSearch = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
