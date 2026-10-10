@@ -81,7 +81,7 @@
           var slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;
           var source='https://player.bracketbeast.com/tournament/'+TOURNAMENT_ID+'/divisions/'+d.divisionId+'/brackets/'+b.divisionBracketId;
           html+='<a class="btn" href="index.html?bracketbeast='+encodeURIComponent(slug)+'">Matches</a>'+
-            '<a class="btn graph" href="graph.html?bracketbeast='+encodeURIComponent(slug)+'">Smart Bracket</a>'+
+            '<a class="btn graph" href="graph.html?bracketbeast='+encodeURIComponent(slug)+'">Bracket</a>'+
             '<a class="btn source" target="_blank" rel="noopener" href="'+esc(source)+'">Bracket Beast ↗</a>';
         });
         html+='</div>';
