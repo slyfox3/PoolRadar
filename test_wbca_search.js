@@ -116,7 +116,7 @@ const indexContext = { searchInputEl: { value: 'Augie' }, currentTournament: {},
   esc: (s) => String(s), highlightName: (name) => name, playerFlagHtml: () => '', isPlayerFav: () => false,
   wbcaSearch: lookup, currentSource: 'bracketbeast' };
 vm.createContext(indexContext);
-vm.runInContext(['teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink']
+vm.runInContext(['hasTeamRosterView', 'playerFavBtn', 'teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink']
   .map((name) => extract('index.html', name)).join('\n'), indexContext);
 indexContext.renderSearchResults();
 assert.match(indexResults.innerHTML, /Augie Gonzales \(541\)/);
@@ -129,7 +129,15 @@ const ratedDoubles = { name: 'Gonzales/Kurz', searchMembers: [
   { name: 'Augie Gonzales', rating: 541 }, { name: 'Mike Kurz', rating: 496 },
 ] };
 indexContext.currentTournament = { divisionName: 'Scotch Doubles 1100 & Under' };
-assert.match(indexContext.teamRosterNote(ratedDoubles), /Augie Gonzales \(541\) \/ Mike Kurz \(496\)/);
+assert.match(indexContext.teamRosterNote(ratedDoubles), /Augie Gonzales \(541\)/);
+assert.match(indexContext.teamRosterNote(ratedDoubles), /data-name="Augie Gonzales"/);
+assert.match(indexContext.teamRosterNote(ratedDoubles), /data-name="Mike Kurz"/);
+assert.ok(!indexContext.teamRosterNote(ratedDoubles).includes('data-name="Gonzales/Kurz"'));
+assert.equal((indexContext.teamRosterNote(ratedDoubles).match(/class="player-group-member"/g) || []).length, 2);
+indexContext.isPlayerFav = (p) => p.name === 'Augie Gonzales';
+assert.match(indexContext.teamRosterNote(ratedDoubles), /data-action="remove-fav" data-name="Augie Gonzales"/);
+assert.match(indexContext.teamRosterNote(ratedDoubles), /data-action="add-fav" data-id="null" data-name="Mike Kurz"/);
+indexContext.isPlayerFav = () => false;
 assert.equal(ratedDoubles.name, 'Gonzales/Kurz');
 assert.match(indexContext.fmPlayerCell('fm-p1', ratedDoubles, false, false, false), />Gonzales\/Kurz<\/span>/);
 assert.ok(!indexContext.fmPlayerCell('fm-p1', ratedDoubles, false, false, false).includes('Augie'));

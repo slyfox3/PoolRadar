@@ -166,7 +166,10 @@ button { font-family: inherit; font-size: inherit; }
 .player-group-name { font-weight: 600; font-size: 14px; }
 .player-group-name.is-fav { color: #fbbf24; }
 .player-group-stats { font-size: 12px; color: #64748b; }
-.player-group-members { font-size: 12px; color: #94a3b8; line-height: 1.5; margin: -2px 0 8px; overflow-wrap: anywhere; }
+.player-group-members { font-size: 11px; color: #94a3b8; line-height: 1.5; margin: -2px 0 8px; overflow-wrap: anywhere; }
+.player-group-member { display: flex; align-items: baseline; gap: 4px; }
+.player-group-member .add-fav-btn, .player-group-member .remove-fav-btn { font-size: 12px; padding: 0; }
+.player-group-member.is-fav { color: #fbbf24; }
 .player-group-record { font-size: 12px; font-weight: 600; }
 .record-w { color: #4ade80; }
 .record-l { color: #f87171; }
@@ -2785,7 +2788,8 @@ button { font-family: inherit; font-size: inherit; }
     } else {
       links = ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a>';
     }
-    html += '<div class="match-title">' + esc(t.name) + links + '</div>';
+    var title = t.source === 'bracketbeast' && t.divisionName ? t.divisionName : t.name;
+    html += '<div class="match-title">' + esc(title) + links + '</div>';
     html += '<div class="match-meta">' + esc((t.source === 'wnt' || t.source === 'pbs') && t.dates ? t.dates : dateStr) + '</div>';
     if (venueStr) {
       var venueFavBtn = '';
@@ -2927,13 +2931,18 @@ button { font-family: inherit; font-size: inherit; }
     }
   }
 
+  function hasTeamRosterView() {
+    return currentSource === 'bracketbeast' && currentTournament &&
+      (wbcaSearch.isScotchDivision(currentTournament.divisionName) || wbcaSearch.isTeamDivision(currentTournament.divisionName));
+  }
+
   function teamRosterNote(p) {
-    if (currentSource !== 'bracketbeast' || !currentTournament ||
-        !(wbcaSearch.isScotchDivision(currentTournament.divisionName) || wbcaSearch.isTeamDivision(currentTournament.divisionName)) ||
-        !p.searchMembers || !p.searchMembers.length) return '';
+    if (!hasTeamRosterView() || !p.searchMembers || !p.searchMembers.length) return '';
     return '<div class="player-group-members">' + p.searchMembers.map(function(member) {
-      return esc(wbcaSearch.memberLabel(member));
-    }).join(' / ') + '</div>';
+      var player = { id: null, name: member.name };
+      return '<div class="player-group-member' + (isPlayerFav(player) ? ' is-fav' : '') + '">' +
+        playerFavBtn(player) + '<span>' + esc(wbcaSearch.memberLabel(member)) + '</span></div>';
+    }).join('') + '</div>';
   }
 
   // Scheduled/expected start of a match that has no score yet.
@@ -3089,7 +3098,7 @@ button { font-family: inherit; font-size: inherit; }
       var isPinned = (countryFilter || liveOnly) && !!pinnedPlayers[name];
       html += '<div class="player-group' + (isPinned ? ' is-pinned' : '') + '" id="pg-' + esc(pd.player.name).replace(/\s/g, '-').toLowerCase() + '">';
       html += '<div class="player-group-header">';
-      html += playerFavBtn(pd.player);
+      if (!hasTeamRosterView()) html += playerFavBtn(pd.player);
       html += '<span class="player-group-name' + (isFav ? ' is-fav' : '') + '">' + playerFlagHtml(pd.player) + esc(pd.player.name) + '</span>';
       if (pd.player.rating) html += '<span class="player-group-stats">(' + pd.player.rating + ')</span>';
       if (pd.player.place) html += '<span class="player-group-stats">Place: ' + esc(pd.player.place) + '</span>';
