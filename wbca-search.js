@@ -208,7 +208,11 @@
   function uniqueSearchEntries(players) {
     var unique = [];
     players.forEach(function(player) {
-      if (!unique.some(function(other) { return sameSearchEntry(other, player); })) unique.push(player);
+      var existing = unique.find(function(other) { return sameSearchEntry(other, player); });
+      if (!existing) { unique.push(player); return; }
+      if (!(existing.searchNames || []).length && (player.searchNames || []).length) existing.searchNames = player.searchNames;
+      if (!(existing.searchMembers || []).length && (player.searchMembers || []).length) existing.searchMembers = player.searchMembers;
+      if (existing.rating == null && player.rating != null) existing.rating = player.rating;
     });
     return unique;
   }

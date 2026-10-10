@@ -313,28 +313,6 @@ button { font-family: inherit; font-size: inherit; }
 .player-search-fab.visible { display: flex; }
 .player-search-fab:hover { background: #3b82f6; }
 .player-search-fab svg { width: 22px; height: 22px; }
-.player-search-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.94); z-index: 1001; display: none; padding: max(12px, env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
-.player-search-overlay.open { display: block; }
-.player-search-box { max-width: 520px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
-.player-search-bar { display: flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 6px 10px; flex-shrink: 0; }
-.player-search-bar .pse-icon { width: 16px; height: 16px; color: #64748b; flex-shrink: 0; }
-/* 16px keeps iOS Safari from zooming on focus */
-#player-search-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e2e8f0; font-size: 16px; padding: 8px 0; }
-.player-search-close { background: none; border: none; color: #94a3b8; font-size: 26px; line-height: 1; cursor: pointer; padding: 0 4px; min-width: 32px; }
-.player-search-close:hover { color: #e2e8f0; }
-.player-search-results { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
-.pse-item { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: #e2e8f0; font-size: 15px; }
-.pse-item.active, .pse-item:hover { background: #1e293b; }
-.pse-item.is-fav .pse-name { color: #fbbf24; }
-.pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
-.pse-members { display: block; color: #94a3b8; font-size: 12px; margin-top: 3px; }
-.pse-meta { margin-left: auto; padding-left: 8px; color: #64748b; font-size: 12px; white-space: nowrap; }
-.pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
-.pse-section { padding: 12px 12px 4px; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-/* Country rows pick a whole country; player rows jump to one card. */
-.pse-item.pse-country .pse-name { font-weight: 600; }
-.pse-item.pse-country .pse-flag { font-size: 23.4px; line-height: 1; }
-.pse-item.pse-country .pse-chevron { color: #475569; font-size: 13px; padding-left: 6px; }
 .player-list-item.registered-team { display: block; white-space: normal; }
 .registered-team-title { display: flex; align-items: center; gap: 4px; }
 .player-list-item.highlight { animation: card-blink 1s ease-in-out 3; border-radius: 4px; }
@@ -350,6 +328,7 @@ button { font-family: inherit; font-size: inherit; }
 /* WNT-only: players called to a table but not yet under way. */
 .mr-called { color: #fbbf24; }
 </style>
+<link rel="stylesheet" href="player-search.css">
 </head>
 <body>
 
@@ -448,21 +427,16 @@ button { font-family: inherit; font-size: inherit; }
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
 </button>
 
-<div class="player-search-overlay" id="player-search-overlay" role="dialog" aria-modal="true" aria-label="Search players">
-  <div class="player-search-box">
-    <div class="player-search-bar">
-      <svg class="pse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
-      <input type="text" id="player-search-input" placeholder="Search players…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" aria-label="Player name" aria-autocomplete="list" aria-controls="player-search-results">
-      <button class="player-search-close" id="player-search-close" aria-label="Close search">&times;</button>
-    </div>
-    <div class="player-search-results" id="player-search-results" role="listbox"></div>
-  </div>
-</div>
+<div id="player-search-mount"></div>
 
 <script src="bracket-algo.js"></script>
 <script src="stream-mappings.js"></script>
 <script src="bracketbeast.js"></script>
 <script src="wbca-search.js"></script>
+<script src="player-search.js"></script>
+<script>
+playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search-overlay',inputId:'player-search-input',resultsId:'player-search-results',closeId:'player-search-close'});
+</script>
 <script>
 (function() {
   'use strict';
@@ -3651,6 +3625,10 @@ button { font-family: inherit; font-size: inherit; }
         add(p.name, p.skill_level, null, null, null, p.searchNames, p.searchMembers);
       }
     }
+    if (currentTournament && wbcaSearch.isScotchDivision(currentTournament.divisionName)) {
+      out.forEach(function(p) { p.division = currentTournament.divisionName; });
+      return wbcaSearch.uniqueSearchEntries(out);
+    }
     return out;
   }
 
@@ -3662,9 +3640,7 @@ button { font-family: inherit; font-size: inherit; }
     if (!hasPlayers) closeSearch();
   }
 
-  function reEsc(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
+
 
   // Countries represented in the loaded event, biggest delegation first.
   // Codes with no flag (WNT's 'unknown') are not countries anyone can filter by.
@@ -3729,43 +3705,10 @@ button { font-family: inherit; font-size: inherit; }
 
   // Prefix matches rank above mid-word ones; every token must match somewhere
   function rankPlayers(query, players) {
-    players = players || collectSearchablePlayers();
-    var toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    if (!toks.length) {
-      return players.slice().sort(function(a, b) { return a.name.localeCompare(b.name); });
-    }
-    var scored = [];
-    for (var i = 0; i < players.length; i++) {
-      var lname = [players[i].name].concat(players[i].searchNames || []).join(' ').toLowerCase();
-      var words = lname.split(/[\s/]+/);
-      var score = 0, ok = true;
-      for (var t = 0; t < toks.length; t++) {
-        var tk = toks[t];
-        if (lname.indexOf(tk) === 0) continue;
-        var wordHit = false;
-        for (var w = 0; w < words.length; w++) {
-          if (words[w].indexOf(tk) === 0) { wordHit = true; break; }
-        }
-        if (wordHit) { score += 1; continue; }
-        if (lname.indexOf(tk) !== -1) { score += 3; continue; }
-        ok = false;
-        break;
-      }
-      if (ok) scored.push({ p: players[i], score: score });
-    }
-    scored.sort(function(a, b) { return a.score - b.score || a.p.name.localeCompare(b.p.name); });
-    return scored.map(function(s) { return s.p; });
+    return playerSearch.rankPlayers(query, players || collectSearchablePlayers());
   }
 
-  function highlightName(name, toks) {
-    if (!toks.length) return esc(name);
-    var parts = name.split(new RegExp('(' + toks.map(reEsc).join('|') + ')', 'ig'));
-    var out = '';
-    for (var i = 0; i < parts.length; i++) {
-      out += (i % 2 === 1) ? '<mark>' + esc(parts[i]) + '</mark>' : esc(parts[i]);
-    }
-    return out;
-  }
+
 
   // Results are a flat list of entries so one cursor walks countries and
   // players alike: country entries filter the grid, player entries jump.
@@ -3803,7 +3746,6 @@ button { font-family: inherit; font-size: inherit; }
     var query = searchInputEl.value;
     var unavailable = currentTournament && currentTournament.wbcaSearchUnavailable
       ? '<div class="pse-empty">Full-name lookup is unavailable. Search by team name.</div>' : '';
-    var toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     var all = buildSearchEntries(query);
     // Sections are labels, not targets, so they never enter the hit list.
     var selectable = all.filter(function(e) { return e.kind !== 'section'; });
@@ -3817,49 +3759,11 @@ button { font-family: inherit; font-size: inherit; }
     }
     searchHits = all.filter(function(e) { return e.kind !== 'section'; });
     searchCursor = searchHits.length ? 0 : -1;
-    if (!searchHits.length) {
-      searchResultsEl.innerHTML = unavailable + '<div class="pse-empty">No player or country matches &ldquo;' + esc(query) + '&rdquo;</div>';
-      return;
-    }
-    var html = unavailable, hitIdx = -1;
-    for (var i = 0; i < all.length; i++) {
-      var e = all[i];
-      if (e.kind === 'section') {
-        html += '<div class="pse-section">' + esc(e.label) + '</div>';
-        continue;
-      }
-      hitIdx++;
-      var active = hitIdx === 0 ? ' active' : '';
-      if (e.kind === 'country') {
-        var c = e.country;
-        html += '<div class="pse-item pse-country' + active + '" role="option" data-country="' + esc(c.code) + '">';
-        html += countryFlagHtml(c.code, c.name, 'pse-flag');
-        html += '<span class="pse-name">' + highlightName(c.name, toks) + '</span>';
-        html += '<span class="pse-meta">' + c.players.length + ' player' + (c.players.length === 1 ? '' : 's') + '</span>';
-        html += '<span class="pse-chevron">&#9656;</span>';
-        html += '</div>';
-        continue;
-      }
-      var p = e.player;
-      var isFav = isPlayerFav({ id: null, name: p.name });
-      var meta = [];
-      if (p.place) meta.push('Place: ' + p.place);
-      html += '<div class="pse-item' + active + (isFav ? ' is-fav' : '') + '" role="option" data-name="' + esc(p.name) + '">';
-      html += '<span class="pse-name">' + playerFlagHtml(p) + highlightName(p.name, toks);
-      if (p.rating != null) html += ' (' + esc(p.rating) + ')';
-      if (p.searchMembers && p.searchMembers.length && !(p.searchMembers.length === 1 && p.searchMembers[0].name === p.name)) {
-        html += '<span class="pse-members">' + p.searchMembers.map(function(member) { return highlightName(wbcaSearch.memberLabel(member), toks); }).join(' / ') + '</span>';
-      } else if ((!p.searchMembers || !p.searchMembers.length) && p.searchNames && p.searchNames.length) {
-        html += '<span class="pse-members">' + highlightName(p.searchNames.join(' / '), toks) + '</span>';
-      }
-      html += '</span>';
-      if (meta.length) html += '<span class="pse-meta">' + esc(meta.join(' · ')) + '</span>';
-      html += '</div>';
-    }
-    if (capped) {
-      html += '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + selectable.length + ' &mdash; keep typing to narrow</div>';
-    }
-    searchResultsEl.innerHTML = html;
+    searchResultsEl.innerHTML = unavailable + playerSearch.renderResults(all, {
+      query: query, capped: capped, total: selectable.length,
+      flagHtml: countryFlagHtml,
+      isFavorite: function(p) { return isPlayerFav({ id: null, name: p.name }); }
+    });
     searchResultsEl.scrollTop = 0;
   }
 

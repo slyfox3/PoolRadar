@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const lookup = require('./wbca-search.js');
+const playerSearch = require('./player-search.js');
 
 const entry = {
   eventName: '2026 Western BCA 9-Ball Championship', division: 'Scotch',
@@ -96,7 +97,7 @@ function extract(html, name) {
 }
 const players = lookup.enrich([{ name: 'Chia/Yuan', division, slug: 'sd1100' }], [entry]).concat(registered);
 for (const html of ['wbca_2026.html', 'index.html']) {
-  const context = { players, normal: (s) => String(s).toLowerCase(),
+  const context = { players, playerSearch, normal: (s) => String(s).toLowerCase(),
     collectSearchablePlayers: () => players };
   vm.createContext(context);
   vm.runInContext(extract(html, 'rankPlayers'), context);
@@ -110,46 +111,46 @@ for (const html of ['wbca_2026.html', 'index.html']) {
 }
 
 const elements = { 'search-input': { value: 'Evan' }, 'search-results': { innerHTML: '' } };
-const renderContext = { searchReady: true, players, normal: (s) => String(s).toLowerCase(), wbcaSearch: lookup,
+const renderContext = { playerSearch, searchReady: true, players, normal: (s) => String(s).toLowerCase(), wbcaSearch: lookup,
   marked: (name) => name, esc: (s) => s, document: { getElementById: (id) => elements[id] } };
 vm.createContext(renderContext);
 vm.runInContext(extract('wbca_2026.html', 'rankPlayers') + '\n' + extract('wbca_2026.html', 'renderSearch'), renderContext);
 renderContext.renderSearch();
-assert.match(elements['search-results'].innerHTML, /Test Team/);
-assert.match(elements['search-results'].innerHTML, /Bracket not published yet/);
+assert.match(elements['search-results'].innerHTML.replace(/<[^>]*>/g, ''), /Test Team/);
+assert.match(elements['search-results'].innerHTML.replace(/<[^>]*>/g, ''), /Bracket not published yet/);
 assert.ok(!elements['search-results'].innerHTML.includes('bracketbeast=null'));
 renderContext.players = [augie];
 elements['search-input'].value = 'Augie';
 renderContext.renderSearch();
-assert.match(elements['search-results'].innerHTML, /Augie Gonzales \(541\)/);
+assert.match(elements['search-results'].innerHTML.replace(/<[^>]*>/g, ''), /Augie Gonzales \(541\)/);
 assert.equal((elements['search-results'].innerHTML.match(/Augie Gonzales/g) || []).length, 1);
 renderContext.players = [ratedTeam];
 elements['search-input'].value = 'Evan';
 renderContext.renderSearch();
-assert.match(elements['search-results'].innerHTML, /Evan Test \(0\)/);
-assert.match(elements['search-results'].innerHTML, /Alex Alternate \(500\)/);
+assert.match(elements['search-results'].innerHTML.replace(/<[^>]*>/g, ''), /Evan Test \(0\)/);
+assert.match(elements['search-results'].innerHTML.replace(/<[^>]*>/g, ''), /Alex Alternate \(500\)/);
 renderContext.players = [summedTeam];
 renderContext.renderSearch();
-assert.match(elements['search-results'].innerHTML, /Test Team \(1200\)/);
+assert.match(elements['search-results'].innerHTML.replace(/<[^>]*>/g, ''), /Test Team \(1200\)/);
 
 const indexResults = { innerHTML: '', scrollTop: 0 };
-const indexContext = { searchInputEl: { value: 'Augie' }, currentTournament: {}, searchResultsEl: indexResults,
+const indexContext = { playerSearch, searchInputEl: { value: 'Augie' }, currentTournament: {}, searchResultsEl: indexResults,
   buildSearchEntries: () => [{ kind: 'player', player: augie }], SEARCH_RESULT_CAP: 200,
-  esc: (s) => String(s), highlightName: (name) => name, playerFlagHtml: () => '', isPlayerFav: () => false,
+  esc: (s) => String(s), highlightName: (name) => name, playerFlagHtml: () => '', countryFlagHtml: () => '', isPlayerFav: () => false,
   wbcaSearch: lookup, currentSource: 'bracketbeast' };
 vm.createContext(indexContext);
 vm.runInContext(['hasTeamRosterView', 'isPlayerCardFav', 'playerFavBtn', 'teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink', 'renderGroupedByPlayer']
   .map((name) => extract('index.html', name)).join('\n'), indexContext);
 indexContext.renderSearchResults();
-assert.match(indexResults.innerHTML, /Augie Gonzales \(541\)/);
+assert.match(indexResults.innerHTML.replace(/<[^>]*>/g, ''), /Augie Gonzales \(541\)/);
 assert.equal((indexResults.innerHTML.replace(/<[^>]*>/g, '').match(/Augie Gonzales/g) || []).length, 1);
 indexContext.buildSearchEntries = () => [{ kind: 'player', player: ratedTeam }];
 indexContext.renderSearchResults();
-assert.match(indexResults.innerHTML, /Evan Test \(0\)/);
-assert.match(indexResults.innerHTML, /Alex Alternate \(500\)/);
+assert.match(indexResults.innerHTML.replace(/<[^>]*>/g, ''), /Evan Test \(0\)/);
+assert.match(indexResults.innerHTML.replace(/<[^>]*>/g, ''), /Alex Alternate \(500\)/);
 indexContext.buildSearchEntries = () => [{ kind: 'player', player: summedDoubles }];
 indexContext.renderSearchResults();
-assert.match(indexResults.innerHTML, /Chia\/Yuan \(1060\)/);
+assert.match(indexResults.innerHTML.replace(/<[^>]*>/g, ''), /Chia\/Yuan \(1060\)/);
 const ratedDoubles = { name: 'Gonzales/Kurz', searchMembers: [
   { name: 'Augie Gonzales', rating: 541 }, { name: 'Mike Kurz', rating: 496 },
 ] };
@@ -236,6 +237,13 @@ for (const [tier, expected] of Object.entries({ Iron: [0,383], Bronze: [384,432]
 }
 assert.equal(lookup.registeredPlayers('Singles Unclassified', tierEntries).length, 2);
 assert.equal(lookup.registeredPlayers('Singles Gold', [{ ...tierEntries[6], divisionType: { name: 'Elite' } }]).length, 0);
+
+// Index search merges registration aliases into the bracket team result.
+Object.assign(context, { wbcaSearch: lookup, currentTournament: { divisionName: division },
+  currentMatches: [{ p1: aliasResults[0], p2: null }],
+  currentPlayerList: [{ name: 'Chia / Yuan', skill_level: 1060, searchMembers: aliasResults[0].searchMembers, searchNames: aliasResults[0].searchNames }] });
+assert.equal(context.collectSearchablePlayers().length, 1);
+assert.equal(context.collectSearchablePlayers()[0].name, 'Chia/Yuan');
 
 async function checkLoading() {
   let requested = [];

@@ -1,0 +1,28 @@
+/* Shared by the match and bracket pages. */
+.pse-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.94); z-index: 1001; display: none; padding: max(12px, env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
+.pse-overlay.open { display: block; }
+.pse-box { max-width: 520px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+.pse-bar { display: flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 6px 10px; flex-shrink: 0; }
+.pse-icon { width: 16px; height: 16px; color: #64748b; flex-shrink: 0; }
+/* 16px prevents iPhone Safari from zooming when the input receives focus. */
+.pse-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e2e8f0; font-size: 16px; padding: 8px 0; font-family: inherit; }
+.pse-close { background: none; border: none; color: #94a3b8; font-size: 26px; line-height: 1; cursor: pointer; padding: 0 4px; min-width: 32px; }
+.pse-close:hover { color: #e2e8f0; }
+.pse-hint { flex-shrink: 0; padding: 8px 12px 2px; color: #475569; font-size: 11px; }
+.pse-results { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
+.pse-item { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: #e2e8f0; font-size: 15px; text-decoration: none; }
+.pse-item.active, .pse-item:hover { background: #1e293b; }
+.pse-item.is-fav .pse-name { color: #fbbf24; }
+.pse-name { min-width: 0; overflow-wrap: anywhere; }
+.pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
+.pse-members { display: block; color: #94a3b8; font-size: 12px; margin-top: 3px; white-space: normal; }
+.pse-meta { margin-left: auto; padding-left: 8px; flex-shrink: 0; color: #64748b; font-size: 12px; white-space: nowrap; }
+.pse-meta .fw { color: #4ade80; }
+.pse-meta .fl { color: #f87171; }
+.pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
+.pse-section { padding: 12px 12px 4px; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.pse-item.pse-country .pse-name { font-weight: 600; }
+.pse-item.pse-country .pse-flag { font-size: 23.4px; line-height: 1; margin-right: 0; }
+.pse-chevron { color: #475569; font-size: 13px; padding-left: 6px; }
+
+.pse-details { display: block; color: #64748b; font-size: 12px; margin-top: 3px; }

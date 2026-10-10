@@ -71,40 +71,6 @@ a:hover { text-decoration: underline; }
 .focus-back-dismiss:hover { color: #e2e8f0; background: #334155; }
 .native-zoom { color: #94a3b8; font-size: 12px; flex-shrink: 0; }
 
-.gs-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.94); z-index: 1001; display: none;
-  padding: max(12px, env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
-.gs-overlay.open { display: block; }
-.gs-box { max-width: 520px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
-.gs-bar { display: flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #334155;
-  border-radius: 10px; padding: 6px 10px; flex-shrink: 0; }
-.pse-icon { width: 16px; height: 16px; color: #64748b; flex-shrink: 0; }
-/* 16px keeps iOS Safari from zooming the page on focus */
-#player-input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: #e2e8f0;
-  font-size: 16px; padding: 8px 0; font-family: inherit; }
-.gs-close { background: none; border: none; color: #94a3b8; font-size: 26px; line-height: 1;
-  cursor: pointer; padding: 0 4px; min-width: 32px; }
-.gs-close:hover { color: #e2e8f0; }
-.gs-hint { flex-shrink: 0; padding: 8px 12px 2px; color: #475569; font-size: 11px; }
-
-.pse-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 6px; }
-.pse-item { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 12px;
-  border-radius: 8px; cursor: pointer; color: #e2e8f0; font-size: 15px; }
-.pse-item.active, .pse-item:hover { background: #1e293b; }
-.pse-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pse-name mark { background: none; color: #60a5fa; font-weight: 700; }
-/* Monospace so the runs line up down the list and are scannable as a column */
-.pse-meta { margin-left: auto; padding-left: 10px; flex-shrink: 0; white-space: nowrap;
-  font: 12px/1 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 1px; }
-.pse-meta .fw { color: #4ade80; }
-.pse-meta .fl { color: #f87171; }
-.pse-empty { padding: 18px 12px; text-align: center; color: #64748b; font-size: 14px; }
-/* Country rows lead the list and stand apart from the names under them. */
-.pse-section { padding: 12px 12px 4px; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-.pse-item.pse-country .pse-name { font-weight: 600; }
-.pse-item.pse-country .pse-flag { font-size: 23.4px; line-height: 1; margin-right: 0; }
-.pse-item.pse-country .pse-meta { font-family: inherit; letter-spacing: 0; color: #64748b; font-size: 12px; }
-.pse-chevron { color: #475569; font-size: 13px; padding-left: 6px; }
-
 /* Row gap smaller than the column gap: two lines of legend should read as one
    block, and a full 14px between them looks like two separate bars. */
 .legend { display: flex; gap: 6px 14px; padding: 8px 16px; background: #0f172a; border-bottom: 1px solid #334155; font-size: 11px; color: #64748b; flex-wrap: wrap; }
@@ -333,6 +299,7 @@ a:hover { text-decoration: underline; }
   .url-input, .select-input { font-size: 16px; }
 }
 </style>
+<link rel="stylesheet" href="player-search.css">
 </head>
 <body>
 
@@ -394,20 +361,7 @@ a:hover { text-decoration: underline; }
   </div>
 </div>
 
-<div class="gs-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-label="Find a player or a country">
-  <div class="gs-box">
-    <div class="gs-bar">
-      <svg class="pse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.7-4.7"/></svg>
-      <input type="text" id="player-input" placeholder="Player or country…" autocomplete="off"
-             autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go"
-             aria-label="Player or country" aria-autocomplete="list" aria-controls="player-list">
-      <button class="gs-close" id="search-close" aria-label="Close search">&times;</button>
-    </div>
-    <div class="gs-hint" id="search-hint" hidden></div>
-    <div class="pse-list" id="player-list" role="listbox"></div>
-  </div>
-</div>
+<div id="player-search-mount"></div>
 
 <!-- The draw, indexed both ways, shared with index.html rather than written
      again here: its followTo() and this page's hop() were the same eight lines
@@ -418,6 +372,11 @@ a:hover { text-decoration: underline; }
      module, so its globals are already there when the one below starts. -->
 <script src="bracket-algo.js"></script>
 <script src="bracketbeast.js"></script>
+<script src="wbca-search.js"></script>
+<script src="player-search.js"></script>
+<script>
+playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'search-overlay',inputId:'player-input',resultsId:'player-list',closeId:'search-close',hintId:'search-hint'});
+</script>
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
@@ -821,7 +780,18 @@ async function fetchBracketBeast(path) {
   if (!response.ok) throw new Error(payload.message || payload.error || ('HTTP ' + response.status));
   const sourceUrl = 'https://player.bracketbeast.com/tournament/' + ids[0] +
     '/divisions/' + ids[1] + '/brackets/' + ids[2];
-  return bracketBeastBuildResult(payload, sourceUrl);
+  const result = bracketBeastBuildResult(payload, sourceUrl);
+  if (ids[0] === '53') {
+    const division = result.tournament.divisionName;
+    const kind = wbcaSearch.isTeamDivision(division) ? 'Teams' : (wbcaSearch.isScotchDivision(division) ? 'Scotch' : 'Singles');
+    try {
+      const entries = await wbcaSearch.loadEntries(BRACKETBEAST_PROXY.replace(/\/bracketbeast$/, ''), kind);
+      const players = [...new Set(Object.values(result.bracketByNum).flatMap(r => [r.p1, r.p2]).filter(Boolean))];
+      players.forEach(p => { p.division = division; });
+      wbcaSearch.enrich(players, entries);
+    } catch (err) { result.tournament.wbcaSearchUnavailable = true; }
+  }
+  return result;
 }
 
 function bracketBeastRows(result) {
@@ -1289,6 +1259,16 @@ function setRows(rows) {
   state.rows = rows || [];
   state.index = state.rows.length ? buildBracketIndex(state.rows.map(canonRow)) : null;
   state.players = state.index ? buildPlayerView(state.index) : [];
+  const memberInfo = new Map();
+  for (const row of state.rows) {
+    for (const player of [row.challenger1, row.challenger2]) {
+      if (player && (player.searchNames || []).length) memberInfo.set(player.name.toLowerCase(), player);
+    }
+  }
+  for (const player of state.players) {
+    const info = memberInfo.get(player.name.toLowerCase());
+    if (info) { player.searchNames = info.searchNames; player.searchMembers = info.searchMembers; player.rating = info.rating; }
+  }
   state.countries = buildCountryView(state.players);
   state.playerBy = new Map(state.players.map(p => [p.name.toLowerCase(), p]));
   state.keep = new Map();
@@ -1837,7 +1817,7 @@ const COUNTRY_SEARCH_ALIASES = {
   ru: ['russia'],
 };
 
-function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 
 // A country is a hit on a prefix of its name, of any word in its name, or of
 // any alias. Two characters is enough — "li" should reach Lithuania — but a
@@ -1870,32 +1850,10 @@ function rankCountries(query) {
 }
 
 function rankPlayers(query, players) {
-  players = players || state.players;
-  const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  if (!toks.length) return players.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const scored = [];
-  for (const p of players) {
-    const lname = p.name.toLowerCase();
-    const words = lname.split(/\s+/);
-    let score = 0, ok = true;
-    for (const tk of toks) {
-      if (lname.indexOf(tk) === 0) continue;
-      if (words.some(w => w.indexOf(tk) === 0)) { score += 1; continue; }
-      if (lname.indexOf(tk) !== -1) { score += 3; continue; }
-      ok = false;
-      break;
-    }
-    if (ok) scored.push({ p, score });
-  }
-  scored.sort((a, b) => a.score - b.score || a.p.name.localeCompare(b.p.name));
-  return scored.map(s => s.p);
+  return playerSearch.rankPlayers(query, players || state.players);
 }
 
-function highlightName(name, toks) {
-  if (!toks.length) return esc(name);
-  const parts = name.split(new RegExp('(' + toks.map(reEsc).join('|') + ')', 'ig'));
-  return parts.map((p, i) => (i % 2 === 1 ? '<mark>' + esc(p) + '</mark>' : esc(p))).join('');
-}
+
 
 // A flag for the dropdown. Ordinary HTML here — unlike the diagram labels, this
 // is not going through Mermaid, so esc() is the right escape.
@@ -1944,7 +1902,6 @@ function renderResults() {
   const list = $('player-list');
   if (!state.rows.length) { list.innerHTML = ''; return; }
   const query = $('player-input').value;
-  const toks = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   let all = buildSearchEntries(query);
   // Section headings are labels, not targets, so they never enter the hit list
   // and never count against the cap.
@@ -1956,35 +1913,10 @@ function renderResults() {
   }
   searchHits = all.filter(e => e.kind !== 'section');
   searchCursor = searchHits.length ? 0 : -1;
-  if (!searchHits.length) {
-    list.innerHTML = '<div class="pse-empty">No player or country matches &ldquo;' + esc(query) + '&rdquo;</div>';
-    return;
-  }
-  let html = '', hit = -1;
-  for (const e of all) {
-    if (e.kind === 'section') { html += '<div class="pse-section">' + esc(e.label) + '</div>'; continue; }
-    const active = ++hit === 0 ? ' active' : '';
-    if (e.kind === 'country') {
-      const c = e.country;
-      html += '<div class="pse-item pse-country' + active + '" role="option" data-country="' + esc(c.code) + '">' +
-        searchFlagHtml(c.code, c.name, 'pse-flag') +
-        '<span class="pse-name">' + highlightName(c.name, toks) + '</span>' +
-        '<span class="pse-meta">' + c.players.length + ' player' + (c.players.length === 1 ? '' : 's') + '</span>' +
-        '<span class="pse-chevron">&#9656;</span></div>';
-      continue;
-    }
-    const p = e.player;
-    html += '<div class="pse-item' + active + '" role="option" data-name="' + esc(p.name) + '">' +
-      '<span class="pse-name">' + searchFlagHtml(p.country, p.countryName, 'pf') +
-      highlightName(p.name, toks) + '</span>' +
-      '<span class="pse-meta">' + p.form.map(ch =>
-        '<span class="f' + ch.toLowerCase() + '">' + ch + '</span>').join('') + '</span></div>';
-  }
-  if (capped) {
-    html += '<div class="pse-empty">Showing ' + searchHits.length + ' of ' + selectable.length +
-      ' &mdash; keep typing to narrow</div>';
-  }
-  list.innerHTML = html;
+  list.innerHTML = playerSearch.renderResults(all, {
+    query, capped, total: selectable.length, flagHtml: searchFlagHtml,
+    playerMetaHtml: p => p.form.map(ch => '<span class="f' + ch.toLowerCase() + '">' + ch + '</span>').join('')
+  });
   list.scrollTop = 0;
 }
 
@@ -3063,7 +2995,10 @@ async function load(source, slug) {
       setStatus('No bracket found for "' + esc(slug) + '".', true);
       return;
     }
-    const name = state.tournament ? state.tournament.name : slug;
+    const name = state.tournament
+      ? (state.source === 'bracketbeast' && state.tournament.divisionName
+          ? state.tournament.divisionName : state.tournament.name)
+      : slug;
     document.title = name + ' — Bracket Graph';
     const sourceParam = state.source === 'wnt' ? 'wnt' : (state.source === 'pbs' ? 'pbs' : (state.source === 'bracketbeast' ? 'bracketbeast' : 'digitalpool'));
     $('back-link').href = 'index.html?' + sourceParam + '=' + encodeURIComponent(slug);
