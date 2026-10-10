@@ -63,6 +63,25 @@ const ratedTeam = lookup.registeredTeams([{ ...teamEntry,
 assert.equal(lookup.memberLabel(ratedTeam.searchMembers[0]), 'Evan Test (0)');
 assert.equal(lookup.memberLabel(ratedTeam.searchMembers[1]), 'Darla Example');
 assert.equal(lookup.memberLabel(ratedTeam.searchMembers[2]), 'Alex Alternate (500)');
+assert.equal(ratedTeam.rating, null, 'missing member rating does not produce a partial total');
+assert.equal(lookup.teamRating([]), null);
+assert.equal(lookup.teamRating([{ rating: 0 }, { rating: 0 }]), 0);
+assert.equal(lookup.teamRating([{ rating: 528 }, { rating: 532 }]), 1060);
+const summedDoubles = lookup.enrich([{ name: 'Chia/Yuan', division }], [{ ...entry,
+  players: [{ firstName: 'Brian', lastName: 'Chia', fargoRate: 528 }, { firstName: 'Arnie', lastName: 'Yuan', fargoRate: 532 }] }])[0];
+assert.equal(summedDoubles.rating, 1060);
+const summedTeam = lookup.registeredTeams([{ ...teamEntry,
+  players: [{ firstName: 'Evan', lastName: 'Test', fargoRate: 400 }, { firstName: 'Darla', lastName: 'Example', fargoRate: 500 },
+    { firstName: 'Third', lastName: 'Player', fargoRate: 300 }],
+  alternatePlayers: [{ firstName: 'Alex', lastName: 'Alternate', fargoRate: 600 }] }])[0];
+assert.equal(summedTeam.rating, 1200, 'team total sums only three primary players');
+assert.equal(summedTeam.searchMembers.length, 4, 'alternate remains in the displayed roster');
+assert.ok(summedTeam.searchMembers[3].isAlternate);
+assert.equal(lookup.teamRating(summedTeam.searchMembers.concat({ name: 'Missing alternate', rating: null, isAlternate: true })), 1200);
+assert.equal(lookup.enrich([{ name: summedTeam.name, division: summedTeam.division }], [{ ...teamEntry,
+  players: [{ firstName: 'Evan', lastName: 'Test', fargoRate: 400 }, { firstName: 'Darla', lastName: 'Example', fargoRate: 500 },
+    { firstName: 'Third', lastName: 'Player', fargoRate: 300 }], alternatePlayers: [{ firstName: 'Alex', lastName: 'Alternate', fargoRate: 600 }],
+}])[0].rating, 1200);
 for (const value of ['', ' ', 'invalid']) {
   assert.equal(lookup.memberInfoFor('Augie Gonzales', 'Funday Seniors', [{ ...augieEntry,
     players: [{ ...augieEntry.players[0], fargoRate: value }] }])[0].rating, null);
@@ -109,6 +128,9 @@ elements['search-input'].value = 'Evan';
 renderContext.renderSearch();
 assert.match(elements['search-results'].innerHTML, /Evan Test \(0\)/);
 assert.match(elements['search-results'].innerHTML, /Alex Alternate \(500\)/);
+renderContext.players = [summedTeam];
+renderContext.renderSearch();
+assert.match(elements['search-results'].innerHTML, /Test Team \(1200\)/);
 
 const indexResults = { innerHTML: '', scrollTop: 0 };
 const indexContext = { searchInputEl: { value: 'Augie' }, currentTournament: {}, searchResultsEl: indexResults,
@@ -125,6 +147,9 @@ indexContext.buildSearchEntries = () => [{ kind: 'player', player: ratedTeam }];
 indexContext.renderSearchResults();
 assert.match(indexResults.innerHTML, /Evan Test \(0\)/);
 assert.match(indexResults.innerHTML, /Alex Alternate \(500\)/);
+indexContext.buildSearchEntries = () => [{ kind: 'player', player: summedDoubles }];
+indexContext.renderSearchResults();
+assert.match(indexResults.innerHTML, /Chia\/Yuan \(1060\)/);
 const ratedDoubles = { name: 'Gonzales/Kurz', searchMembers: [
   { name: 'Augie Gonzales', rating: 541 }, { name: 'Mike Kurz', rating: 496 },
 ] };

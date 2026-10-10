@@ -2537,7 +2537,8 @@ button { font-family: inherit; font-size: inherit; }
                 if (p) {
                   p.searchMembers = wbcaSearch.memberInfoFor(p.name, result.tournament.divisionName, entries);
                   p.searchNames = p.searchMembers.map(function(member) { return member.name; });
-                  if (!teamDivision && !scotchDivision && p.searchMembers.length === 1) p.rating = p.searchMembers[0].rating;
+                  if (teamDivision || scotchDivision) p.rating = wbcaSearch.teamRating(p.searchMembers);
+                  else if (p.searchMembers.length === 1) p.rating = p.searchMembers[0].rating;
                 }
               });
             });
@@ -3106,7 +3107,7 @@ button { font-family: inherit; font-size: inherit; }
       html += '<div class="player-group-header">';
       if (!hasTeamRosterView()) html += playerFavBtn(pd.player);
       html += '<span class="player-group-name' + (isFav ? ' is-fav' : '') + '">' + playerFlagHtml(pd.player) + esc(pd.player.name) + '</span>';
-      if (pd.player.rating) html += '<span class="player-group-stats">(' + pd.player.rating + ')</span>';
+      if (pd.player.rating != null) html += '<span class="player-group-stats">(' + pd.player.rating + ')</span>';
       if (pd.player.place) html += '<span class="player-group-stats">Place: ' + esc(pd.player.place) + '</span>';
       if (isPinned) {
         html += '<button class="pin-tag" data-action="unpin" data-name="' + esc(pd.player.name) +

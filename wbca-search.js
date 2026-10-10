@@ -22,15 +22,21 @@
     return /\bteams?\b/i.test(String(division || ''));
   }
   function fullMembers(entry, includeAlternates) {
+    var primaryCount = (entry.players || []).length;
     var members = (entry.players || []).concat(includeAlternates ? (entry.alternatePlayers || []) : []);
-    return members.map(function(p) {
+    return members.map(function(p, index) {
       var name = ((p.firstName || '').trim() + ' ' + (p.lastName || '').trim()).trim();
       var rating = p.fargoRate == null || String(p.fargoRate).trim() === '' ? null : Number(p.fargoRate);
-      return { name: name, rating: rating != null && isFinite(rating) ? rating : null };
+      return { name: name, rating: rating != null && isFinite(rating) ? rating : null, isAlternate: index >= primaryCount };
     }).filter(function(p) { return p.name; });
   }
   function memberLabel(member) {
     return member.name + (member.rating == null ? '' : ' (' + member.rating + ')');
+  }
+  function teamRating(members) {
+    members = members.filter(function(member) { return !member.isAlternate; });
+    if (!members.length || members.some(function(member) { return typeof member.rating !== 'number' || !isFinite(member.rating); })) return null;
+    return members.reduce(function(total, member) { return total + member.rating; }, 0);
   }
   function memberInfoFor(name, division, entries) {
     var teams = isTeamDivision(division);
@@ -73,7 +79,8 @@
       var members = memberInfoFor(p.name, p.division, entries);
       p.searchMembers = members;
       p.searchNames = members.map(function(member) { return member.name; });
-      if (!isTeamDivision(p.division) && !isScotchDivision(p.division) && members.length === 1) p.rating = members[0].rating;
+      if (isTeamDivision(p.division) || isScotchDivision(p.division)) p.rating = teamRating(members);
+      else if (members.length === 1) p.rating = members[0].rating;
     });
     return players;
   }
@@ -90,7 +97,10 @@
         }
       });
     });
-    return Object.keys(byTeam).map(function(key) { return byTeam[key]; });
+    return Object.keys(byTeam).map(function(key) {
+      byTeam[key].rating = teamRating(byTeam[key].searchMembers);
+      return byTeam[key];
+    });
   }
   function loadEntries(base, division) {
     division = division || 'Scotch';
@@ -117,7 +127,7 @@
     return loads[cacheKey];
   }
   root.wbcaSearch = { isScotchDivision: isScotchDivision, isTeamDivision: isTeamDivision,
-    membersFor: membersFor, memberInfoFor: memberInfoFor, memberLabel: memberLabel,
+    membersFor: membersFor, memberInfoFor: memberInfoFor, memberLabel: memberLabel, teamRating: teamRating,
     enrich: enrich, registeredTeams: registeredTeams, loadEntries: loadEntries };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.wbcaSearch;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
