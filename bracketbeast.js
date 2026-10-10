@@ -19,6 +19,14 @@
              rating: null, place: null, country: null, countryName: null };
   }
 
+  // Bracket Beast sends UTC timestamps without a zone suffix. Mark them as
+  // UTC so Date parses the same instant in every browser timezone; retain any
+  // explicit zone supplied by the API.
+  function utcTime(value) {
+    if (!value) return null;
+    return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : value + 'Z';
+  }
+
   function buildResult(payload, sourceUrl) {
     var data = payload.bracket || payload;
     var meta = payload.tournament || {};
@@ -74,6 +82,8 @@
     for (var j = 0; j < raw.length; j++) {
       var m = raw[j].match, r = raw[j].round;
       var status = statusOf(m);
+      var started = utcTime(m.startTime);
+      var ended = utcTime(m.endTime);
       var p1 = player(m.divisionPlayerId1, m.divisionPlayer1Name);
       var p2 = player(m.divisionPlayerId2, m.divisionPlayer2Name);
       var p1Won = m.matchStatus === 'WinnerPlayer1' || m.matchStatus === 'ForfeitPlayer2';
@@ -89,8 +99,8 @@
         p1: p1, p2: p2, s1: m.divisionPlayerId1Score, s2: m.divisionPlayerId2Score,
         p1Won: p1Won, p2Won: p2Won,
         winnerTo: winnerTo[m.id] || null, loserTo: m.consolationMatchId || null,
-        scheduledTime: status === 'NOT_STARTED' ? m.startTime : null,
-        startTime: status === 'NOT_STARTED' ? null : m.startTime,
+        scheduledTime: status === 'NOT_STARTED' ? started : null,
+        startTime: status === 'NOT_STARTED' ? null : started,
         tableName: m.locationsDescription || null,
       };
       anyLive = anyLive || status === 'IN_PROGRESS';
@@ -106,9 +116,9 @@
         s2: status === 'NOT_STARTED' ? null : m.divisionPlayerId2Score,
         p1Won: p1Won, p2Won: p2Won, status: status, videoUrl: null,
         tableName: m.locationsDescription || null,
-        startTime: status === 'NOT_STARTED' ? null : m.startTime,
-        scheduledTime: status === 'NOT_STARTED' ? m.startTime : null,
-        updatedAt: m.endTime || null, round: roundNumber,
+        startTime: status === 'NOT_STARTED' ? null : started,
+        scheduledTime: status === 'NOT_STARTED' ? started : null,
+        updatedAt: ended, round: roundNumber,
         identifier: m.matchName || r.roundName || null,
         isForfeit: /^Forfeit/.test(m.matchStatus || ''), isBye: isBye,
       });
