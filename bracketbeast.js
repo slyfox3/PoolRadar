@@ -6,8 +6,13 @@
   var TERMINAL = { WinnerPlayer1: 1, WinnerPlayer2: 1, ForfeitPlayer1: 1,
                    ForfeitPlayer2: 1, Bye: 1 };
 
+  function statusCode(m) {
+    var forfeit = /^Forfeit:\s*Player\s*([12])$/i.exec(m.matchStatus || '');
+    return forfeit ? 'ForfeitPlayer' + forfeit[1] : m.matchStatus;
+  }
+
   function statusOf(m) {
-    if (TERMINAL[m.matchStatus]) return 'COMPLETED';
+    if (TERMINAL[statusCode(m)]) return 'COMPLETED';
     if (m.matchStatus === 'Playing' || m.matchStatus === 'ResultPending' ||
         m.matchStatus === 'Disputed') return 'IN_PROGRESS';
     return 'NOT_STARTED';
@@ -81,13 +86,13 @@
     var matches = [], bracketByNum = {}, anyLive = false, allDone = raw.length > 0;
     for (var j = 0; j < raw.length; j++) {
       var m = raw[j].match, r = raw[j].round;
-      var status = statusOf(m);
+      var status = statusOf(m), code = statusCode(m);
       var started = utcTime(m.startTime);
       var ended = utcTime(m.endTime);
       var p1 = player(m.divisionPlayerId1, m.divisionPlayer1Name);
       var p2 = player(m.divisionPlayerId2, m.divisionPlayer2Name);
-      var p1Won = m.matchStatus === 'WinnerPlayer1' || m.matchStatus === 'ForfeitPlayer2';
-      var p2Won = m.matchStatus === 'WinnerPlayer2' || m.matchStatus === 'ForfeitPlayer1';
+      var p1Won = code === 'WinnerPlayer1' || code === 'ForfeitPlayer2';
+      var p2Won = code === 'WinnerPlayer2' || code === 'ForfeitPlayer1';
       var isBye = m.matchStatus === 'Bye';
       var finalNo = /^F(\d+)$/i.exec(r.roundName || '');
       var roundNumber = r.isWinnerRound
@@ -120,10 +125,46 @@
         scheduledTime: status === 'NOT_STARTED' ? started : null,
         updatedAt: ended, round: roundNumber,
         identifier: m.matchName || r.roundName || null,
-        isForfeit: /^Forfeit/.test(m.matchStatus || ''), isBye: isBye,
+        isForfeit: /^Forfeit/.test(code || ''), isBye: isBye,
       });
     }
 
+    // Operators can advance a participant before recording the feeder's
+    // result. Their presence in the winner/loser destination settles that
+    // feeder; use stable participant IDs rather than names or current scores.
+    function advancedSide(source, destNum) {
+      var dest = bracketByNum[destNum];
+      if (!dest) return 0;
+      var ids = [dest.p1 && dest.p1.id, dest.p2 && dest.p2.id];
+      var first = ids.indexOf(source.p1.id) !== -1;
+      var second = ids.indexOf(source.p2.id) !== -1;
+      return first === second ? 0 : first ? 1 : 2;
+    }
+    Object.keys(bracketByNum).forEach(function(num) {
+      var row = bracketByNum[num];
+      if (row.is_bye || row.status === 'COMPLETED' || !row.p1 || !row.p2) return;
+      var winner = advancedSide(row, row.winnerTo);
+      var loser = advancedSide(row, row.loserTo);
+      if (winner && loser && winner === loser) return; // conflicting destinations
+      winner = winner || (loser ? 3 - loser : 0);
+      if (!winner) return;
+      row.status = 'COMPLETED';
+      row.p1Won = winner === 1;
+      row.p2Won = winner === 2;
+      row.inferredWinnerFromAdvancement = true;
+    });
+    matches.forEach(function(match) {
+      var row = bracketByNum[match.num];
+      if (!row.inferredWinnerFromAdvancement) return;
+      match.status = row.status;
+      match.p1Won = row.p1Won;
+      match.p2Won = row.p2Won;
+      match.s1 = row.s1;
+      match.s2 = row.s2;
+      match.inferredWinnerFromAdvancement = true;
+    });
+    anyLive = Object.keys(bracketByNum).some(function(num) { return bracketByNum[num].status === 'IN_PROGRESS'; });
+    allDone = raw.length > 0 && Object.keys(bracketByNum).every(function(num) { return bracketByNum[num].status === 'COMPLETED'; });
     var eventStatus = anyLive ? 'IN_PROGRESS' : (allDone ? 'COMPLETED' : 'NOT_STARTED');
     var sourceIds = String(sourceUrl || '').match(/\/tournament\/(\d+)\/divisions\/(\d+)\/brackets\/(\d+)/);
     var tournament = {
@@ -141,6 +182,84 @@
     return { matches: matches, tournament: tournament, bracketByNum: bracketByNum };
   }
 
+  // Infer an overdue match only after reserving tables for published live
+  // matches and the earliest ready overdue matches across the tournament.
+  function inferInProgress(result, otherResults, now) {
+    now = now == null ? Date.now() : now;
+    function tables(row) {
+      var label = String(row.tableName || ''), found = [];
+      label.split(/[,/&]+/).forEach(function(part) {
+        var range = /^\s*(?:Table\s*)?(\d+)\s*-\s*(\d+)\s*$/i.exec(part);
+        if (range && Number(range[2]) >= Number(range[1]) && Number(range[2]) - Number(range[1]) < 50) {
+          for (var n = Number(range[1]); n <= Number(range[2]); n++) found.push(String(n));
+        } else (part.match(/\d+/g) || []).forEach(function(number) { found.push(String(Number(number))); });
+      });
+      return Array.from(new Set(found));
+    }
+    function playerKeys(row) {
+      var names = [];
+      [row.p1, row.p2].forEach(function(player) {
+        if (!player) return;
+        names.push(player.name);
+        (player.searchMembers || []).forEach(function(member) { names.push(member.name); });
+      });
+      return Array.from(new Set(names.filter(Boolean).map(function(name) {
+        return String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+          .split('/').map(function(part) { return part.trim(); }).sort().join('/');
+      })));
+    }
+    var rows = [], occupied = new Set(), occupiedPlayers = new Set(), candidates = [], inferred = new Set();
+    [result].concat(otherResults || []).forEach(function(bracket) {
+      Object.keys(bracket.bracketByNum || {}).forEach(function(num) {
+        var row = bracket.bracketByNum[num];
+        var status = row.inferredInProgress ? row.publishedStatus : row.status;
+        var assigned = tables(row);
+        var key = String(row.num);
+        rows.push({ row: row, status: status, tables: assigned, players: playerKeys(row), key: key });
+      });
+    });
+    rows.forEach(function(item) {
+      if (item.status === 'IN_PROGRESS') {
+        item.tables.forEach(function(table) { occupied.add(table); });
+        item.players.forEach(function(player) { occupiedPlayers.add(player); });
+      }
+      var time = Date.parse(item.row.scheduledTime);
+      if (item.status === 'NOT_STARTED' && !item.row.is_bye && item.row.p1 && item.row.p2 &&
+          item.tables.length && isFinite(time) && time <= now) {
+        item.time = time; candidates.push(item);
+      }
+    });
+    candidates.sort(function(a, b) { return a.time - b.time || Number(a.key) - Number(b.key); });
+    candidates.forEach(function(item) {
+      if (item.tables.some(function(table) { return occupied.has(table); }) ||
+          item.players.some(function(player) { return occupiedPlayers.has(player); })) return;
+      inferred.add(item.key);
+      item.tables.forEach(function(table) { occupied.add(table); });
+      item.players.forEach(function(player) { occupiedPlayers.add(player); });
+    });
+    var count = 0;
+    Object.keys(result.bracketByNum || {}).forEach(function(num) {
+      var row = result.bracketByNum[num];
+      if (row.inferredInProgress) { row.status = row.publishedStatus; delete row.inferredInProgress; delete row.publishedStatus; }
+      if (!inferred.has(String(row.num)) || row.status !== 'NOT_STARTED') return;
+      row.publishedStatus = row.status; row.status = 'IN_PROGRESS'; row.inferredInProgress = true; count++;
+    });
+    (result.matches || []).forEach(function(match) {
+      if (match.inferredInProgress) { match.status = match.publishedStatus; delete match.inferredInProgress; delete match.publishedStatus; }
+      var row = result.bracketByNum[match.num];
+      if (!row || !row.inferredInProgress) return;
+      match.publishedStatus = match.status; match.status = 'IN_PROGRESS'; match.inferredInProgress = true;
+    });
+    if (result.tournament) {
+      if (count) result.tournament.status = 'IN_PROGRESS';
+      else if (result.tournament.status === 'IN_PROGRESS' && !rows.some(function(item) { return item.status === 'IN_PROGRESS' && result.bracketByNum[item.key]; })) {
+        result.tournament.status = (result.matches || []).every(function(match) { return match.status === 'COMPLETED'; }) ? 'COMPLETED' : 'NOT_STARTED';
+      }
+    }
+    return count;
+  }
+
   root.bracketBeastBuildResult = buildResult;
-  if (typeof module !== 'undefined' && module.exports) module.exports = { buildResult: buildResult, statusOf: statusOf };
+  root.bracketBeastInferInProgress = inferInProgress;
+  if (typeof module !== 'undefined' && module.exports) module.exports = { buildResult: buildResult, statusOf: statusOf, inferInProgress: inferInProgress };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

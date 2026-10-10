@@ -2470,6 +2470,39 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
     updateSearchFab();
   }
 
+  var beastTableSnapshots = {};
+  function inferBracketBeastTables(result, tournamentId, bracketId) {
+    var now = Date.now();
+    var overdue = Object.values(result.bracketByNum || {}).some(function(row) {
+      return row.status === 'NOT_STARTED' && row.p1 && row.p2 && !row.is_bye && row.tableName &&
+        row.scheduledTime && Date.parse(row.scheduledTime) <= now;
+    });
+    if (!overdue) return Promise.resolve(result);
+    var key = String(tournamentId), cached = beastTableSnapshots[key];
+    if (!cached || now - cached.time > 30000) {
+      cached = { time: now, promise: fetch(BRACKETBEAST_PROXY + '/tournament/' + encodeURIComponent(tournamentId) + '/divisions')
+        .then(function(response) { if (!response.ok) throw new Error('Could not check table occupancy.'); return response.json(); })
+        .then(function(data) {
+          var brackets = [];
+          (data.divisions || []).forEach(function(division) {
+            (division.brackets || []).forEach(function(bracket) { brackets.push(bracket.divisionBracketId); });
+          });
+          return Promise.all(brackets.map(function(id) {
+            if (String(id) === String(bracketId)) return { id: id, result: result };
+            return fetch(BRACKETBEAST_PROXY + '/bracket?id=' + encodeURIComponent(id)).then(function(response) {
+              if (!response.ok) throw new Error('Could not check table occupancy.');
+              return response.json();
+            }).then(function(payload) { return { id: id, result: bracketBeastBuildResult(payload) }; });
+          }));
+        }) };
+      beastTableSnapshots[key] = cached;
+    }
+    return cached.promise.then(function(snapshots) {
+      bracketBeastInferInProgress(result, snapshots.filter(function(snapshot) { return String(snapshot.id) !== String(bracketId); }).map(function(snapshot) { return snapshot.result; }), Date.now());
+      return result;
+    }).catch(function() { delete beastTableSnapshots[key]; return result; });
+  }
+
   // Every source resolves to the same {matches, tournament, bracketByNum}.
   function fetchForSource(slug, source) {
     if (source === 'wnt') return fetchWntMatches(slug);
@@ -2519,27 +2552,29 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
           var sourceUrl = 'https://player.bracketbeast.com/tournament/' + ids[0]
             + '/divisions/' + ids[1] + '/brackets/' + ids[2];
           var result = bracketBeastBuildResult(data, sourceUrl);
-          var teamDivision = wbcaSearch.isTeamDivision(result.tournament.divisionName);
-          var scotchDivision = wbcaSearch.isScotchDivision(result.tournament.divisionName);
-          if (ids[0] !== '53') return result;
-          return wbcaSearch.loadEntries(base, teamDivision ? 'Teams' : (scotchDivision ? 'Scotch' : 'Singles')).then(function(entries) {
-            result.players = wbcaSearch.registeredPlayers(result.tournament.divisionName, entries);
-            Object.keys(result.bracketByNum).forEach(function(num) {
-              var match = result.bracketByNum[num];
-              [match.p1, match.p2].forEach(function(p) {
-                if (p) {
-                  p.searchMembers = wbcaSearch.memberInfoFor(p.name, result.tournament.divisionName, entries);
-                  p.searchNames = p.searchMembers.map(function(member) { return member.name; });
-                  if (teamDivision || scotchDivision) p.rating = wbcaSearch.teamRating(p.searchMembers);
-                  else if (p.searchMembers.length === 1) p.rating = p.searchMembers[0].rating;
-                }
+          return inferBracketBeastTables(result, ids[0], ids[2]).then(function(result) {
+            var teamDivision = wbcaSearch.isTeamDivision(result.tournament.divisionName);
+            var scotchDivision = wbcaSearch.isScotchDivision(result.tournament.divisionName);
+            if (ids[0] !== '53') return result;
+            return wbcaSearch.loadEntries(base, teamDivision ? 'Teams' : (scotchDivision ? 'Scotch' : 'Singles')).then(function(entries) {
+              result.players = wbcaSearch.registeredPlayers(result.tournament.divisionName, entries);
+              Object.keys(result.bracketByNum).forEach(function(num) {
+                var match = result.bracketByNum[num];
+                [match.p1, match.p2].forEach(function(p) {
+                  if (p) {
+                    p.searchMembers = wbcaSearch.memberInfoFor(p.name, result.tournament.divisionName, entries);
+                    p.searchNames = p.searchMembers.map(function(member) { return member.name; });
+                    if (teamDivision || scotchDivision) p.rating = wbcaSearch.teamRating(p.searchMembers);
+                    else if (p.searchMembers.length === 1) p.rating = p.searchMembers[0].rating;
+                  }
+                });
               });
+              // Adapter cards and bracket nodes share their player objects.
+              return result;
+            }).catch(function() {
+              result.tournament.wbcaSearchUnavailable = true;
+              return result;
             });
-            // Adapter cards and bracket nodes share their player objects.
-            return result;
-          }).catch(function() {
-            result.tournament.wbcaSearchUnavailable = true;
-            return result;
           });
         });
       });
@@ -2569,7 +2604,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
     }
 
     var ck = cacheKey(slug, currentSource);
-    if (cache[ck] && cache[ck].type === 'matches') {
+    if (cache[ck] && cache[ck].type === 'matches' && currentSource !== 'bracketbeast') {
       currentMatches = cache[ck].matches;
       currentTournament = cache[ck].tournament;
       currentPlayerList = cache[ck].players || null;
@@ -2583,7 +2618,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       document.getElementById('detail-section').classList.remove('hidden');
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
-      if (currentTournament.status === 'IN_PROGRESS') {
+      if (shouldRefreshDetail()) {
         startDetailTimer();
         if (!currentPlayerList && currentSource === 'digitalpool') {
           fetchPlayerList(slug).then(function(players) {
@@ -2626,7 +2661,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       document.getElementById('feed-section').classList.add('feed-section-collapsed');
       deferLoadFeed();
       // Start auto-refresh if in progress
-      if (currentTournament.status === 'IN_PROGRESS') {
+      if (shouldRefreshDetail()) {
         startDetailTimer();
       }
       // Fetch registered players for all events. WNT publishes no separate
@@ -2809,7 +2844,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       html += '<div class="match-meta">Tournament Director: ' + tdFavBtn + esc(tdName) + '</div>';
     }
     html += '<div class="match-actions">';
-    if (t.status === 'IN_PROGRESS') {
+    if (shouldRefreshDetail()) {
       html += '<span class="refresh-timer">&#8635; <span id="countdown">' + detailCountdown + '</span>s</span>';
     }
     html += '</div></div>';
@@ -3011,6 +3046,11 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
 
   function renderGroupedByPlayer(matches) {
     // Build per-player match lists
+    if (currentSource === 'bracketbeast') {
+      matches = matches.concat(pendingHalfFilled(matches).filter(function(m) {
+        return !!m.scheduledTime;
+      }));
+    }
     var playerMap = {};
     var playerOrder = [];
     var inflightCount = 0;
@@ -3025,8 +3065,20 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
         continue;
       }
       if (m.status === 'IN_PROGRESS') inflightCount++;
-      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime, m.calledToTable);
-      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime, m.calledToTable);
+      addPlayerMatch(playerMap, playerOrder, m.p1, m.p2, m.s1, m.s2, m.p1Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime, m.calledToTable, m.inferredInProgress);
+      addPlayerMatch(playerMap, playerOrder, m.p2, m.p1, m.s2, m.s1, m.p2Won, m.num, m.status, m.videoUrl, m.isSplit, m.tableName, m.inferredVideoUrl, m.isForfeit, m.scheduledTime, m.startTime, m.calledToTable, m.inferredInProgress);
+    }
+
+    if (currentSource === 'bracketbeast') {
+      playerOrder.forEach(function(name) {
+        playerMap[name].matches.sort(function(a, b) {
+          var aTime = Date.parse(a.scheduledTime || a.startTime);
+          var bTime = Date.parse(b.scheduledTime || b.startTime);
+          if (!isFinite(aTime)) aTime = Infinity;
+          if (!isFinite(bTime)) bTime = Infinity;
+          return aTime - bTime || a.num - b.num;
+        });
+      });
     }
 
     var bMap = buildBlockerMap(bracketByNum);
@@ -3115,14 +3167,18 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       html += '<div class="match-rows">';
       for (var mi = 0; mi < pd.matches.length; mi++) {
         var pm = pd.matches[mi];
-        var oppFav = isPlayerCardFav(pm.opp);
+        var oppFav = pm.opp && isPlayerCardFav(pm.opp);
         var hasScore = pm.myScore != null && pm.oppScore != null && (pm.myScore > 0 || pm.oppScore > 0);
         html += '<div class="match-row">';
         var pmLabel = bracketByNum[pm.num] && bracketByNum[pm.num].identifier;
         html += '<span class="match-num">' + esc(pmLabel || ('#' + pm.num)) + '</span>';
         html += '<span class="match-vs-label">vs</span>';
-        html += playerFavBtn(pm.opp);
-        html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + playerFlagHtml(pm.opp) + esc(pm.opp.name) + (pm.opp.rating != null ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
+        if (pm.opp) {
+          html += playerFavBtn(pm.opp);
+          html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + playerFlagHtml(pm.opp) + esc(pm.opp.name) + (pm.opp.rating != null ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
+        } else {
+          html += '<span></span><span class="match-opponent mr-none" title="Waiting for the feeding match to finish">TBD</span>';
+        }
         if (pm.isSplit) {
           html += '<span></span><span style="grid-column:span 3">Split</span>';
         } else if (pm.isForfeit && pm.status === 'COMPLETED' && (pm.won !== undefined)) {
@@ -3131,7 +3187,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
           html += '<span style="grid-column:span 3;text-align:center;font-size:11px;font-weight:300;color:#64748b">' + (pm.won ? 'walkover' : 'forfeit') + '</span>';
         } else if (pm.status === 'IN_PROGRESS') {
           var tbl = pm.tableName ? 'T' + pm.tableName.replace(/^Table\s*/i, '') : '';
-          html += '<span class="mr-label mr-live">' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
+          html += '<span class="mr-label mr-live"' + (pm.inferredInProgress ? ' title="Estimated from schedule, table and player availability"' : '') + '>' + (tbl ? tbl : '') + '\uD83D\uDD25</span>';
           html += '<span class="mr-s1 mr-live">' + (pm.myScore != null ? pm.myScore : '') + '</span>';
           html += '<span class="mr-sep mr-live">' + (pm.myScore != null ? '-' : '') + '</span>';
           html += '<span class="mr-s2 mr-live">' + (pm.oppScore != null ? pm.oppScore : '') + '</span>';
@@ -3258,13 +3314,14 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
     return html;
   }
 
-  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl, isForfeit, scheduledTime, startTime, calledToTable) {
+  function addPlayerMatch(map, order, player, opp, myScore, oppScore, won, num, status, videoUrl, isSplit, tableName, inferredVideoUrl, isForfeit, scheduledTime, startTime, calledToTable, inferredInProgress) {
+    if (!player) return;
     var key = player.name;
     if (!map[key]) {
       map[key] = { player: player, matches: [], wins: 0, losses: 0 };
       order.push(key);
     }
-    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl, isForfeit: isForfeit, scheduledTime: scheduledTime, startTime: startTime, calledToTable: calledToTable });
+    map[key].matches.push({ opp: opp, myScore: myScore, oppScore: oppScore, won: won, num: num, status: status, videoUrl: videoUrl, isSplit: isSplit, tableName: tableName, inferredVideoUrl: inferredVideoUrl, isForfeit: isForfeit, scheduledTime: scheduledTime, startTime: startTime, calledToTable: calledToTable, inferredInProgress: inferredInProgress });
     if (status === 'COMPLETED') {
       if (won) map[key].wins++;
       else map[key].losses++;
@@ -3289,7 +3346,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       if (known[b.num] || b.is_bye || b.status === 'COMPLETED') continue;
       if (!b.p1 === !b.p2) continue; // need exactly one side filled
       out.push({
-        num: b.num, status: b.status, identifier: b.identifier, round: b.round,
+        num: b.num, status: currentSource === 'bracketbeast' ? 'NOT_STARTED' : b.status, identifier: b.identifier, round: b.round,
         p1: b.p1, p2: b.p2, s1: null, s2: null, p1Won: false, p2Won: false,
         scheduledTime: b.scheduledTime, startTime: b.startTime, tableName: b.tableName,
         isBye: false, isForfeit: false, isPending: true,
@@ -3407,7 +3464,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
         html += '<span class="fm-status">' + esc(fmTable) + '</span>';
         html += '<span style="grid-column:span 3;justify-content:center;font-size:11px;font-weight:300;color:#64748b">forfeit</span>';
       } else if (m.status === 'IN_PROGRESS') {
-        html += '<span class="fm-status mr-live">' + esc(fmTable) + '\uD83D\uDD25</span>';
+        html += '<span class="fm-status mr-live"' + (m.inferredInProgress ? ' title="Estimated from schedule, table and player availability"' : '') + '>' + esc(fmTable) + '\uD83D\uDD25</span>';
         html += '<span class="mr-s1 mr-live">' + (m.s1 != null ? m.s1 : '') + '</span>';
         html += '<span class="mr-sep mr-live">' + (m.s1 != null ? '-' : '') + '</span>';
         html += '<span class="mr-s2 mr-live">' + (m.s2 != null ? m.s2 : '') + '</span>';
@@ -3989,6 +4046,11 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
   var lastRefreshTime = 0;
   var REFRESH_INTERVAL = 60;
 
+  function shouldRefreshDetail() {
+    return currentTournament && (currentTournament.status === 'IN_PROGRESS' ||
+      (currentSource === 'bracketbeast' && currentTournament.status !== 'COMPLETED' && currentMatches && currentMatches.length));
+  }
+
   function startDetailTimer() {
     clearDetailTimer();
     lastRefreshTime = Date.now();
@@ -4041,7 +4103,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       applyVideoMatches();
       cache[cacheKey(slug, source)] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum, players: currentPlayerList };
       renderDetail();
-      if (currentTournament.status !== 'IN_PROGRESS') clearDetailTimer();
+      if (!shouldRefreshDetail()) clearDetailTimer();
       ensureVideosForMatches(currentMatches, currentTournament);
     }).catch(function() { /* silent retry next cycle */ });
   }

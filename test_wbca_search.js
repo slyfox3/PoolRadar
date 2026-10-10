@@ -139,7 +139,7 @@ const indexContext = { playerSearch, searchInputEl: { value: 'Augie' }, currentT
   esc: (s) => String(s), highlightName: (name) => name, playerFlagHtml: () => '', countryFlagHtml: () => '', isPlayerFav: () => false,
   wbcaSearch: lookup, currentSource: 'bracketbeast' };
 vm.createContext(indexContext);
-vm.runInContext(['hasTeamRosterView', 'isPlayerCardFav', 'playerFavBtn', 'teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink', 'renderGroupedByPlayer']
+vm.runInContext(['hasTeamRosterView', 'isPlayerCardFav', 'playerFavBtn', 'teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink', 'pendingHalfFilled', 'renderGroupedByPlayer']
   .map((name) => extract('index.html', name)).join('\n'), indexContext);
 indexContext.renderSearchResults();
 assert.match(indexResults.innerHTML.replace(/<[^>]*>/g, ''), /Augie Gonzales \(541\)/);
@@ -253,6 +253,43 @@ const futureMatch = { num: 99, status: 'NOT_STARTED', tableName: 'Table 4',
   scheduledTime: '2026-10-11T17:45:00Z' };
 assert.match(indexContext.renderGroupedByPlayer([futureMatch]), />T4 10:45am<\/span>/);
 assert.ok(!indexContext.renderGroupedByPlayer([{ ...futureMatch, tableName: null }]).includes('T4'));
+const inferredCard = indexContext.renderGroupedByPlayer([{ ...futureMatch, status: 'IN_PROGRESS', inferredInProgress: true }]);
+assert.ok(inferredCard.includes('🔥'));
+assert.ok(inferredCard.includes('Estimated from schedule, table and player availability'));
+
+// Opponent rows follow time, including completed matches with actual start times.
+const timedCards = indexContext.renderGroupedByPlayer([
+  { ...futureMatch, num: 1, p2: { name: 'Late Opponent' }, scheduledTime: '2026-10-11T19:00:00Z' },
+  { ...futureMatch, num: 3, p2: { name: 'Early Opponent' }, scheduledTime: '2026-10-11T17:00:00Z' },
+  { ...futureMatch, num: 2, p2: { name: 'Middle Opponent' }, status: 'COMPLETED', scheduledTime: null,
+    startTime: '2026-10-11T18:00:00Z', s1: 5, s2: 3, p1Won: true },
+]);
+const playerCardStart = timedCards.indexOf('id="pg-chia/yuan"');
+const playerCard = timedCards.slice(playerCardStart, timedCards.indexOf('<div class="player-group"', playerCardStart));
+assert.ok(playerCard.indexOf('Early Opponent') < playerCard.indexOf('Middle Opponent'));
+assert.ok(playerCard.indexOf('Middle Opponent') < playerCard.indexOf('Late Opponent'));
+
+// Scheduled matches waiting for a feeder show TBD on the decided player's card.
+indexContext.bracketByNum = {
+  100: { num: 100, identifier: 'L4-1', status: 'NOT_STARTED', p1: null,
+    p2: futureMatch.p1, tableName: 'Table 39', scheduledTime: '2020-10-10T23:15:00Z' },
+  101: { num: 101, identifier: 'L4-2', status: 'NOT_STARTED', p1: { name: 'Waiting Team' },
+    p2: null, tableName: '40', scheduledTime: '2020-10-10T23:15:00Z' },
+  102: { num: 102, status: 'NOT_STARTED', p1: { name: 'Unscheduled Team' }, p2: null },
+};
+const pendingCards = indexContext.renderGroupedByPlayer([futureMatch]);
+assert.equal((pendingCards.match(/>TBD<\/span>/g) || []).length, 2);
+assert.match(pendingCards, />L4-1<\/span>/);
+assert.match(pendingCards, />T39 10:45am<\/span>/);
+assert.match(pendingCards, />T40 10:45am<\/span>/);
+assert.ok(!pendingCards.includes('🔥'), 'overdue TBD opponents stay pending');
+assert.ok(!pendingCards.includes('id="pg-tbd"'), 'TBD is not a player card');
+assert.ok(!pendingCards.includes('id="pg-unscheduled-team"'));
+indexContext.liveOnly = true;
+assert.ok(!indexContext.renderGroupedByPlayer([futureMatch]).includes('class="player-group"'),
+  'TBD opponents do not enter the live filter');
+indexContext.liveOnly = false;
+indexContext.bracketByNum = {};
 
 async function checkLoading() {
   let requested = [];
