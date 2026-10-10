@@ -166,6 +166,7 @@ button { font-family: inherit; font-size: inherit; }
 .player-group-name { font-weight: 600; font-size: 14px; }
 .player-group-name.is-fav { color: #fbbf24; }
 .player-group-stats { font-size: 12px; color: #64748b; }
+.player-group-members { font-size: 12px; color: #94a3b8; line-height: 1.5; margin: -2px 0 8px; overflow-wrap: anywhere; }
 .player-group-record { font-size: 12px; font-weight: 600; }
 .record-w { color: #4ade80; }
 .record-l { color: #f87171; }
@@ -2524,12 +2525,17 @@ button { font-family: inherit; font-size: inherit; }
             + '/divisions/' + ids[1] + '/brackets/' + ids[2];
           var result = bracketBeastBuildResult(data, sourceUrl);
           var teamDivision = wbcaSearch.isTeamDivision(result.tournament.divisionName);
-          if (ids[0] !== '53' || (!teamDivision && !wbcaSearch.isScotchDivision(result.tournament.divisionName))) return result;
-          return wbcaSearch.loadEntries(BRACKETBEAST_PROXY.replace(/\/bracketbeast$/, ''), teamDivision ? 'Teams' : 'Scotch').then(function(entries) {
+          var scotchDivision = wbcaSearch.isScotchDivision(result.tournament.divisionName);
+          if (ids[0] !== '53') return result;
+          return wbcaSearch.loadEntries(BRACKETBEAST_PROXY.replace(/\/bracketbeast$/, ''), teamDivision ? 'Teams' : (scotchDivision ? 'Scotch' : 'Singles')).then(function(entries) {
             Object.keys(result.bracketByNum).forEach(function(num) {
               var match = result.bracketByNum[num];
               [match.p1, match.p2].forEach(function(p) {
-                if (p) p.searchNames = wbcaSearch.membersFor(p.name, result.tournament.divisionName, entries);
+                if (p) {
+                  p.searchMembers = wbcaSearch.memberInfoFor(p.name, result.tournament.divisionName, entries);
+                  p.searchNames = p.searchMembers.map(function(member) { return member.name; });
+                  if (!teamDivision && !scotchDivision && p.searchMembers.length === 1) p.rating = p.searchMembers[0].rating;
+                }
               });
             });
             // Adapter cards and bracket nodes share their player objects.
@@ -2921,6 +2927,15 @@ button { font-family: inherit; font-size: inherit; }
     }
   }
 
+  function teamRosterNote(p) {
+    if (currentSource !== 'bracketbeast' || !currentTournament ||
+        !(wbcaSearch.isScotchDivision(currentTournament.divisionName) || wbcaSearch.isTeamDivision(currentTournament.divisionName)) ||
+        !p.searchMembers || !p.searchMembers.length) return '';
+    return '<div class="player-group-members">' + p.searchMembers.map(function(member) {
+      return esc(wbcaSearch.memberLabel(member));
+    }).join(' / ') + '</div>';
+  }
+
   // Scheduled/expected start of a match that has no score yet.
   // "10:00am" today, "Sun 10:00am" within a week, "Aug 9 10:00am" beyond.
   function matchTimeInfo(m) {
@@ -3084,6 +3099,7 @@ button { font-family: inherit; font-size: inherit; }
       }
       html += '</div>';
 
+      html += teamRosterNote(pd.player);
       html += '<div class="match-rows">';
       for (var mi = 0; mi < pd.matches.length; mi++) {
         var pm = pd.matches[mi];
@@ -3094,7 +3110,7 @@ button { font-family: inherit; font-size: inherit; }
         html += '<span class="match-num">' + esc(pmLabel || ('#' + pm.num)) + '</span>';
         html += '<span class="match-vs-label">vs</span>';
         html += playerFavBtn(pm.opp);
-        html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + playerFlagHtml(pm.opp) + esc(pm.opp.name) + (pm.opp.rating ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
+        html += '<span class="match-opponent match-opponent-link' + (oppFav ? ' is-fav' : '') + '" data-player="pg-' + esc(pm.opp.name).replace(/\s/g, '-').toLowerCase() + '">' + playerFlagHtml(pm.opp) + esc(pm.opp.name) + (pm.opp.rating != null ? ' <span class="match-opp-rating">(' + pm.opp.rating + ')</span>' : '') + '</span>';
         if (pm.isSplit) {
           html += '<span></span><span style="grid-column:span 3">Split</span>';
         } else if (pm.isForfeit && pm.status === 'COMPLETED' && (pm.won !== undefined)) {
@@ -3185,7 +3201,7 @@ button { font-family: inherit; font-size: inherit; }
   function blockerPlayerLink(p) {
     if (!p) return 'TBD';
     var pgId = 'pg-' + esc(p.name).replace(/\s/g, '-').toLowerCase();
-    return '<span class="match-opponent-link" data-player="' + pgId + '" style="cursor:pointer">' + playerFlagHtml(p) + esc(p.name) + (p.rating ? ' (' + p.rating + ')' : '') + '</span>';
+    return '<span class="match-opponent-link" data-player="' + pgId + '" style="cursor:pointer">' + playerFlagHtml(p) + esc(p.name) + (p.rating != null ? ' (' + p.rating + ')' : '') + '</span>';
   }
 
   function blockerPlayerLabel(bl) {
@@ -3329,7 +3345,7 @@ button { font-family: inherit; font-size: inherit; }
     return '<span class="' + cls + ' match-opponent-link' + (isFav ? ' is-fav' : '') +
       (isWinner ? ' fm-winner' : '') + (isLoser ? ' fm-loser' : '') +
       '" data-player="' + pgId + '">' + playerFlagHtml(p) + esc(p.name) +
-      (p.rating ? ' <span class="fm-rating">(' + p.rating + ')</span>' : '') + '</span>';
+      (p.rating != null ? ' <span class="fm-rating">(' + p.rating + ')</span>' : '') + '</span>';
   }
 
   function renderFlatMatches(matches) {
@@ -3562,12 +3578,13 @@ button { font-family: inherit; font-size: inherit; }
   // Every player we can jump to: everyone with a match, plus the registered list
   function collectSearchablePlayers() {
     var byName = Object.create(null), out = [];
-    function add(name, rating, place, country, countryName, searchNames) {
+    function add(name, rating, place, country, countryName, searchNames, searchMembers) {
       if (!name) return;
       var key = name.toLowerCase();
       if (byName[key]) {
         if (searchNames && searchNames.length) byName[key].searchNames = searchNames;
-        if (rating && !byName[key].rating) byName[key].rating = rating;
+        if (searchMembers && searchMembers.length) byName[key].searchMembers = searchMembers;
+        if (rating != null && byName[key].rating == null) byName[key].rating = rating;
         if (place && !byName[key].place) byName[key].place = place;
         if (country && !byName[key].country) {
           byName[key].country = country;
@@ -3576,17 +3593,18 @@ button { font-family: inherit; font-size: inherit; }
         return;
       }
       byName[key] = {
-        name: name, rating: rating || null, place: place || null,
+        name: name, rating: rating == null ? null : rating, place: place || null,
         country: country || null, countryName: countryName || null,
         searchNames: searchNames || [],
+        searchMembers: searchMembers || [],
       };
       out.push(byName[key]);
     }
     if (currentMatches) {
       for (var i = 0; i < currentMatches.length; i++) {
         var m = currentMatches[i];
-        if (m.p1) add(m.p1.name, m.p1.rating, m.p1.place, m.p1.country, m.p1.countryName, m.p1.searchNames);
-        if (m.p2) add(m.p2.name, m.p2.rating, m.p2.place, m.p2.country, m.p2.countryName, m.p2.searchNames);
+        if (m.p1) add(m.p1.name, m.p1.rating, m.p1.place, m.p1.country, m.p1.countryName, m.p1.searchNames, m.p1.searchMembers);
+        if (m.p2) add(m.p2.name, m.p2.rating, m.p2.place, m.p2.country, m.p2.countryName, m.p2.searchNames, m.p2.searchMembers);
       }
     }
     if (currentPlayerList) {
@@ -3787,11 +3805,15 @@ button { font-family: inherit; font-size: inherit; }
       var p = e.player;
       var isFav = isPlayerFav({ id: null, name: p.name });
       var meta = [];
-      if (p.rating) meta.push('(' + p.rating + ')');
       if (p.place) meta.push('Place: ' + p.place);
       html += '<div class="pse-item' + active + (isFav ? ' is-fav' : '') + '" role="option" data-name="' + esc(p.name) + '">';
       html += '<span class="pse-name">' + playerFlagHtml(p) + highlightName(p.name, toks);
-      if (p.searchNames && p.searchNames.length) html += '<span class="pse-members">' + highlightName(p.searchNames.join(' / '), toks) + '</span>';
+      if (p.rating != null) html += ' (' + esc(p.rating) + ')';
+      if (p.searchMembers && p.searchMembers.length && !(p.searchMembers.length === 1 && p.searchMembers[0].name === p.name)) {
+        html += '<span class="pse-members">' + p.searchMembers.map(function(member) { return highlightName(wbcaSearch.memberLabel(member), toks); }).join(' / ') + '</span>';
+      } else if ((!p.searchMembers || !p.searchMembers.length) && p.searchNames && p.searchNames.length) {
+        html += '<span class="pse-members">' + highlightName(p.searchNames.join(' / '), toks) + '</span>';
+      }
       html += '</span>';
       if (meta.length) html += '<span class="pse-meta">' + esc(meta.join(' · ')) + '</span>';
       html += '</div>';

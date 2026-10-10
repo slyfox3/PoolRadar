@@ -1,4 +1,4 @@
-// Full-name lookup for the 2026 Western BCA Scotch Doubles and Teams entries.
+// Full names and Fargo ratings from the 2026 Western BCA entries.
 (function(root) {
   'use strict';
   var loads = Object.create(null);
@@ -21,30 +21,42 @@
   function isTeamDivision(division) {
     return /\bteams?\b/i.test(String(division || ''));
   }
-  function fullNames(entry, includeAlternates) {
+  function fullMembers(entry, includeAlternates) {
     var members = (entry.players || []).concat(includeAlternates ? (entry.alternatePlayers || []) : []);
-    return members.map(function(p) { return ((p.firstName || '').trim() + ' ' + (p.lastName || '').trim()).trim(); }).filter(Boolean);
+    return members.map(function(p) {
+      var name = ((p.firstName || '').trim() + ' ' + (p.lastName || '').trim()).trim();
+      var rating = p.fargoRate == null || String(p.fargoRate).trim() === '' ? null : Number(p.fargoRate);
+      return { name: name, rating: rating != null && isFinite(rating) ? rating : null };
+    }).filter(function(p) { return p.name; });
   }
-  function membersFor(name, division, entries) {
+  function memberLabel(member) {
+    return member.name + (member.rating == null ? '' : ' (' + member.rating + ')');
+  }
+  function memberInfoFor(name, division, entries) {
     var teams = isTeamDivision(division);
+    var singles = !teams && !isScotchDivision(division);
     var funday = /^funday scotch doubles$/i.test(String(division || '').trim());
+    if (singles) funday = /^funday\b/i.test(String(division || '').trim());
     var cap = /^scotch doubles\s+(\d+)\b/i.exec(String(division || '').trim());
     if (teams) cap = /\b(\d{3,4})\b/.exec(String(division));
-    if (!teams && !funday && !cap) return [];
+    if (!singles && !teams && !funday && !cap) return [];
     var key = teamKey(name), candidates = Object.create(null), moved = Object.create(null);
     (entries || []).forEach(function(entry) {
-      if (teams) {
+      if (singles) {
+        if (!/^singles$/i.test(entry.division || '') || (entry.players || []).length !== 1) return;
+      } else if (teams) {
         if (!/^teams$/i.test(entry.division || '') || !(entry.players || []).length) return;
       } else if (!/^scotch$/i.test(entry.division || '') || (entry.players || []).length !== 2) return;
       if (funday) {
         if (!/2026.*fun\s*day/i.test(entry.eventName || '')) return;
       } else if (!/2026.*9.ball/i.test(entry.eventName || '')) return;
       var pair = entry.players.map(function(p) { return p.lastName; }).join('/');
-      if (teams ? normal(name).trim() !== normal(entry.teamName).trim()
+      if (singles ? normal(name).trim() !== normal(fullMembers(entry)[0].name).trim()
+                 : teams ? normal(name).trim() !== normal(entry.teamName).trim()
                 : !teamMatches(key, entry.teamName) && !teamMatches(key, pair)) return;
-      var names = fullNames(entry, teams);
+      var members = fullMembers(entry, teams);
       var target = funday || !cap || Number(entry.divisionType && entry.divisionType.fargoUp) === Number(cap[1]) ? candidates : moved;
-      target[names.map(normal).sort().join('|')] = names;
+      target[members.map(function(p) { return normal(p.name); }).sort().join('|')] = members;
     });
     // Entries retain their registration cap after some teams change division.
     // Use an exact pair from another cap only when it is unambiguous.
@@ -53,8 +65,16 @@
     // Identical surnames can belong to different pairs. Do not guess.
     return keys.length === 1 ? candidates[keys[0]] : [];
   }
+  function membersFor(name, division, entries) {
+    return memberInfoFor(name, division, entries).map(function(p) { return p.name; });
+  }
   function enrich(players, entries) {
-    players.forEach(function(p) { p.searchNames = membersFor(p.name, p.division, entries); });
+    players.forEach(function(p) {
+      var members = memberInfoFor(p.name, p.division, entries);
+      p.searchMembers = members;
+      p.searchNames = members.map(function(member) { return member.name; });
+      if (!isTeamDivision(p.division) && !isScotchDivision(p.division) && members.length === 1) p.rating = members[0].rating;
+    });
     return players;
   }
   function registeredTeams(entries) {
@@ -62,8 +82,13 @@
     (entries || []).forEach(function(entry) {
       if (!/^teams$/i.test(entry.division || '') || !/2026.*9.ball/i.test(entry.eventName || '') || !entry.teamName) return;
       var division = 'Teams ' + ((entry.divisionType || {}).name || ''), key = normal(entry.teamName).trim() + '|' + normal(division);
-      if (!byTeam[key]) byTeam[key] = { name: entry.teamName.trim(), division: division, slug: null, searchNames: [] };
-      fullNames(entry, true).forEach(function(name) { if (byTeam[key].searchNames.indexOf(name) < 0) byTeam[key].searchNames.push(name); });
+      if (!byTeam[key]) byTeam[key] = { name: entry.teamName.trim(), division: division, slug: null, searchNames: [], searchMembers: [] };
+      fullMembers(entry, true).forEach(function(member) {
+        if (byTeam[key].searchNames.indexOf(member.name) < 0) {
+          byTeam[key].searchNames.push(member.name);
+          byTeam[key].searchMembers.push(member);
+        }
+      });
     });
     return Object.keys(byTeam).map(function(key) { return byTeam[key]; });
   }
@@ -92,6 +117,7 @@
     return loads[cacheKey];
   }
   root.wbcaSearch = { isScotchDivision: isScotchDivision, isTeamDivision: isTeamDivision,
-    membersFor: membersFor, enrich: enrich, registeredTeams: registeredTeams, loadEntries: loadEntries };
+    membersFor: membersFor, memberInfoFor: memberInfoFor, memberLabel: memberLabel,
+    enrich: enrich, registeredTeams: registeredTeams, loadEntries: loadEntries };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.wbcaSearch;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

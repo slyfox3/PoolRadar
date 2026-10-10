@@ -116,17 +116,22 @@
     if(!searchReady){result.innerHTML='<div class="search-empty"><span class="spinner"></span>Loading players…</div>';return;}
     if(!query.trim()){result.innerHTML='<div class="search-empty">Type a player’s first or last name</div>';return;}
     if(!searchHits.length){result.innerHTML='<div class="search-empty">No players found</div>';return;}
-    result.innerHTML=searchHits.map(function(p,i){var tag=p.slug?'a':'div';return '<'+tag+' class="search-result" data-index="'+i+'"'+(p.slug?' href="index.html?bracketbeast='+encodeURIComponent(p.slug)+'"':'')+'><div class="search-name">'+marked(p.name,query)+'</div>'+(p.searchNames&&p.searchNames.length?'<div class="search-name">'+marked(p.searchNames.join(' / '),query)+'</div>':'')+'<div class="search-division">'+esc(p.division)+(p.slug?'':' · Bracket not published yet')+'</div></'+tag+'>';}).join('');
+    result.innerHTML=searchHits.map(function(p,i){
+      var tag=p.slug?'a':'div',members=p.searchMembers||[];
+      var roster=members.length?members.map(function(member){return marked(wbcaSearch.memberLabel(member),query);}).join(' / '):marked((p.searchNames||[]).join(' / '),query);
+      var showRoster=members.length?!(members.length===1&&members[0].name===p.name):(p.searchNames||[]).length>0;
+      return '<'+tag+' class="search-result" data-index="'+i+'"'+(p.slug?' href="index.html?bracketbeast='+encodeURIComponent(p.slug)+'"':'')+'><div class="search-name">'+marked(p.name,query)+(p.rating==null?'':' ('+esc(p.rating)+')')+'</div>'+(showRoster?'<div class="search-name">'+roster+'</div>':'')+'<div class="search-division">'+esc(p.division)+(p.slug?'':' · Bracket not published yet')+'</div></'+tag+'>';
+    }).join('');
   }
   function loadPlayers(divisions){
     var jobs=[];
-    var fullNames=Promise.allSettled([wbcaSearch.loadEntries(base),wbcaSearch.loadEntries(base,'Teams')]);
+    var fullNames=Promise.allSettled([wbcaSearch.loadEntries(base),wbcaSearch.loadEntries(base,'Teams'),wbcaSearch.loadEntries(base,'Singles')]);
     (divisions||[]).forEach(function(d){(d.brackets||[]).forEach(function(b){jobs.push(fetch(base+'/bracketbeast/bracket?id='+encodeURIComponent(b.divisionBracketId)).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(payload){
         var seen={},slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;(payload.bracket.rounds||[]).forEach(function(round){(round.matches||[]).forEach(function(m){[m.divisionPlayer1Name,m.divisionPlayer2Name].forEach(function(name){name=String(name||'').trim();var key=normal(name);if(name&&!seen[key]){seen[key]=true;players.push({name:name,division:d.name,slug:slug});}});});});
       }).catch(function(){return null;}));});});
     Promise.all([Promise.all(jobs),fullNames]).then(function(results){
       var entries=[],failed=[];
-      results[1].forEach(function(result,i){if(result.status==='fulfilled')entries=entries.concat(result.value);else failed.push(i?'Teams':'Scotch');});
+      results[1].forEach(function(result,i){if(result.status==='fulfilled')entries=entries.concat(result.value);else failed.push(['Scotch','Teams','Singles'][i]);});
       wbcaSearch.enrich(players,entries);
       wbcaSearch.registeredTeams(entries).forEach(function(team){
         var cap=/\b(\d{3,4})\b/.exec(team.division);

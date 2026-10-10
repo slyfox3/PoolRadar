@@ -49,6 +49,24 @@ assert.equal(registered.length, 1);
 assert.equal(registered[0].slug, null);
 assert.equal(registered[0].name, 'Test Team');
 assert.equal(registered[0].searchNames.length, 3);
+const augie = { name: 'Augie Gonzales', division: 'Funday Seniors', slug: 'fs' };
+const augieEntry = { eventName: '2026 Fall Fun Day', division: 'Singles',
+  players: [{ firstName: 'Augie', lastName: 'Gonzales', fargoRate: '541' }] };
+lookup.enrich([augie], [augieEntry]);
+assert.equal(augie.rating, 541);
+assert.equal(lookup.memberLabel(augie.searchMembers[0]), 'Augie Gonzales (541)');
+assert.deepEqual(lookup.memberInfoFor('Augie Gonzales', 'Singles', [augieEntry]), []);
+const ratedTeam = lookup.registeredTeams([{ ...teamEntry,
+  players: [{ firstName: 'Evan', lastName: 'Test', fargoRate: 0 },
+    { firstName: 'Darla', lastName: 'Example', fargoRate: null }],
+  alternatePlayers: [{ firstName: 'Alex', lastName: 'Alternate', fargoRate: '500' }] }])[0];
+assert.equal(lookup.memberLabel(ratedTeam.searchMembers[0]), 'Evan Test (0)');
+assert.equal(lookup.memberLabel(ratedTeam.searchMembers[1]), 'Darla Example');
+assert.equal(lookup.memberLabel(ratedTeam.searchMembers[2]), 'Alex Alternate (500)');
+for (const value of ['', ' ', 'invalid']) {
+  assert.equal(lookup.memberInfoFor('Augie Gonzales', 'Funday Seniors', [{ ...augieEntry,
+    players: [{ ...augieEntry.players[0], fargoRate: value }] }])[0].rating, null);
+}
 
 function extract(html, name) {
   const source = fs.readFileSync(html, 'utf8');
@@ -73,7 +91,7 @@ for (const html of ['wbca_2026.html', 'index.html']) {
 }
 
 const elements = { 'search-input': { value: 'Evan' }, 'search-results': { innerHTML: '' } };
-const renderContext = { searchReady: true, players, normal: (s) => String(s).toLowerCase(),
+const renderContext = { searchReady: true, players, normal: (s) => String(s).toLowerCase(), wbcaSearch: lookup,
   marked: (name) => name, esc: (s) => s, document: { getElementById: (id) => elements[id] } };
 vm.createContext(renderContext);
 vm.runInContext(extract('wbca_2026.html', 'rankPlayers') + '\n' + extract('wbca_2026.html', 'renderSearch'), renderContext);
@@ -81,6 +99,52 @@ renderContext.renderSearch();
 assert.match(elements['search-results'].innerHTML, /Test Team/);
 assert.match(elements['search-results'].innerHTML, /Bracket not published yet/);
 assert.ok(!elements['search-results'].innerHTML.includes('bracketbeast=null'));
+renderContext.players = [augie];
+elements['search-input'].value = 'Augie';
+renderContext.renderSearch();
+assert.match(elements['search-results'].innerHTML, /Augie Gonzales \(541\)/);
+assert.equal((elements['search-results'].innerHTML.match(/Augie Gonzales/g) || []).length, 1);
+renderContext.players = [ratedTeam];
+elements['search-input'].value = 'Evan';
+renderContext.renderSearch();
+assert.match(elements['search-results'].innerHTML, /Evan Test \(0\)/);
+assert.match(elements['search-results'].innerHTML, /Alex Alternate \(500\)/);
+
+const indexResults = { innerHTML: '', scrollTop: 0 };
+const indexContext = { searchInputEl: { value: 'Augie' }, currentTournament: {}, searchResultsEl: indexResults,
+  buildSearchEntries: () => [{ kind: 'player', player: augie }], SEARCH_RESULT_CAP: 200,
+  esc: (s) => String(s), highlightName: (name) => name, playerFlagHtml: () => '', isPlayerFav: () => false,
+  wbcaSearch: lookup, currentSource: 'bracketbeast' };
+vm.createContext(indexContext);
+vm.runInContext(['teamRosterNote', 'renderSearchResults', 'fmPlayerCell', 'blockerPlayerLink']
+  .map((name) => extract('index.html', name)).join('\n'), indexContext);
+indexContext.renderSearchResults();
+assert.match(indexResults.innerHTML, /Augie Gonzales \(541\)/);
+assert.equal((indexResults.innerHTML.replace(/<[^>]*>/g, '').match(/Augie Gonzales/g) || []).length, 1);
+indexContext.buildSearchEntries = () => [{ kind: 'player', player: ratedTeam }];
+indexContext.renderSearchResults();
+assert.match(indexResults.innerHTML, /Evan Test \(0\)/);
+assert.match(indexResults.innerHTML, /Alex Alternate \(500\)/);
+const ratedDoubles = { name: 'Gonzales/Kurz', searchMembers: [
+  { name: 'Augie Gonzales', rating: 541 }, { name: 'Mike Kurz', rating: 496 },
+] };
+indexContext.currentTournament = { divisionName: 'Scotch Doubles 1100 & Under' };
+assert.match(indexContext.teamRosterNote(ratedDoubles), /Augie Gonzales \(541\) \/ Mike Kurz \(496\)/);
+assert.equal(ratedDoubles.name, 'Gonzales/Kurz');
+assert.match(indexContext.fmPlayerCell('fm-p1', ratedDoubles, false, false, false), />Gonzales\/Kurz<\/span>/);
+assert.ok(!indexContext.fmPlayerCell('fm-p1', ratedDoubles, false, false, false).includes('Augie'));
+assert.match(indexContext.fmPlayerCell('fm-p1', ratedDoubles, false, false, false), /data-player="pg-gonzales\/kurz"/);
+assert.ok(!indexContext.blockerPlayerLink(ratedDoubles).includes('Augie'));
+indexContext.buildSearchEntries = () => [{ kind: 'player', player: ratedDoubles }];
+indexContext.renderSearchResults();
+assert.equal((indexResults.innerHTML.replace(/<[^>]*>/g, '').match(/Augie Gonzales/g) || []).length, 1);
+indexContext.currentTournament = { divisionName: 'Teams 1375 & Under' };
+assert.match(indexContext.teamRosterNote(ratedTeam), /Evan Test \(0\)/);
+assert.match(indexContext.teamRosterNote(ratedTeam), /Alex Alternate \(500\)/);
+indexContext.currentTournament = { divisionName: 'Funday Scotch Doubles' };
+assert.match(indexContext.teamRosterNote(ratedDoubles), /Augie Gonzales \(541\)/);
+indexContext.currentTournament = { divisionName: 'Singles' };
+assert.equal(indexContext.teamRosterNote(augie), '');
 
 // Confirm card collection keeps full names and result activation retains the
 // bracket team name, which is what jumpToPlayer uses to find the card.
