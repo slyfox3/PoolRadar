@@ -40,7 +40,7 @@
   }
   function eventType(name){
     name=String(name||'').toLowerCase();
-    if(/\bfunday\b/.test(name))return {rank:3,label:'Funday'};
+    if(/\bfunday\b/.test(name))return {rank:-1,label:'Funday'};
     if(/\b(single|singles)\b/.test(name))return {rank:0,label:'Singles'};
     if(/\b(double|doubles)\b/.test(name))return {rank:1,label:'Doubles'};
     if(/\b(team|teams)\b/.test(name))return {rank:2,label:'Teams'};
