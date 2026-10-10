@@ -214,6 +214,15 @@ assert.equal(context.collectSearchablePlayers()[0].searchNames[1], 'Arnie Yuan')
 context.activateSearchEntry({ kind: 'player', player: context.collectSearchablePlayers()[0] });
 assert.equal(context.jumped, 'Chia/Yuan');
 
+// Bracket and registration spell the same doubles team differently.
+const teamAliases = ['Chia/Yuan', ' Chia / Yuan ', 'Yuan/Chia', 'Chia-Yuan', 'Yuan-Chia'];
+const aliasResults = lookup.enrich(teamAliases.map(name => ({ name, division, slug: 'sd1100' })), [entry]);
+assert.equal(lookup.uniqueSearchEntries(aliasResults).length, 1);
+assert.equal(lookup.uniqueSearchEntries(aliasResults)[0].name, 'Chia/Yuan');
+assert.equal(lookup.uniqueSearchEntries([aliasResults[0], { ...aliasResults[1], division: 'Funday Scotch Doubles' }]).length, 2);
+assert.equal(lookup.uniqueSearchEntries([aliasResults[0], { ...aliasResults[1], searchMembers: [{ name: 'Other Chia' }, { name: 'Different Yuan' }] }]).length, 2);
+assert.ok(lookup.sameSearchEntry({ name: 'Chia/Yuan', division }, { name: ' Chia / Yuan ', division }));
+
 // Singles tiers use inclusive boundaries and never turn a missing rating into Iron.
 const tierRatings = [0, 383, 384, 432, 433, 483, 484, 534, 535, 599, null, 600];
 const tierEntries = tierRatings.map((rating, i) => ({ eventName: entry.eventName, division: 'Singles',

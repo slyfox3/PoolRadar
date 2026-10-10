@@ -149,11 +149,12 @@
         var bracket=published&&published.brackets&&published.brackets[0];
         var slug=bracket?(String(published.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+published.divisionId+'/'+bracket.divisionBracketId):division.acronym;
         wbcaSearch.registeredPlayers(division.name,entries).forEach(function(p){
-          if(!players.some(function(other){return normal(other.name).trim()===normal(p.name).trim()&&normal(other.division).trim()===normal(division.name).trim();})){
+          if(!players.some(function(other){return wbcaSearch.sameSearchEntry(other,{name:p.name,division:division.name,searchMembers:p.searchMembers});})){
             players.push({name:p.name,division:division.name,slug:slug,rating:p.skill_level,searchNames:p.searchNames,searchMembers:p.searchMembers||[]});
           }
         });
       });
+      players=wbcaSearch.uniqueSearchEntries(players);
       players.sort(function(a,b){return a.name.localeCompare(b.name)||a.division.localeCompare(b.division);});searchReady=true;
       document.getElementById('search-note').textContent=players.length+' players and teams · '+jobs.length+' published brackets'+(failed.length?' · '+failed.join(' / ')+' full-name lookup unavailable':'');renderSearch();
     });

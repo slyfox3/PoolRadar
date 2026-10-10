@@ -194,12 +194,30 @@
     });
     return Object.keys(byName).map(function(key) { return byName[key]; });
   }
+  function sameSearchEntry(a, b) {
+    if (divisionKey(a.division) !== divisionKey(b.division)) return false;
+    if (!isScotchDivision(a.division)) return normal(a.name).trim() === normal(b.name).trim();
+    function membersKey(player) {
+      return (player.searchMembers || []).filter(function(member) { return !member.isAlternate; })
+        .map(function(member) { return normal(member.name).trim(); }).sort().join('|');
+    }
+    var aMembers = membersKey(a), bMembers = membersKey(b);
+    if (aMembers && bMembers) return aMembers === bMembers;
+    return teamMatches(teamKey(a.name), b.name) || teamMatches(teamKey(b.name), a.name);
+  }
+  function uniqueSearchEntries(players) {
+    var unique = [];
+    players.forEach(function(player) {
+      if (!unique.some(function(other) { return sameSearchEntry(other, player); })) unique.push(player);
+    });
+    return unique;
+  }
   function rosterSlug(division) {
     var cap = /\b(\d{3,4})\b/.exec(String(division || ''));
     return cap ? 'team' + cap[1] : 'team';
   }
   root.wbcaSearch = { isScotchDivision: isScotchDivision, isTeamDivision: isTeamDivision,
     membersFor: membersFor, memberInfoFor: memberInfoFor, memberLabel: memberLabel, teamRating: teamRating,
-    enrich: enrich, registeredTeams: registeredTeams, rosterSlug: rosterSlug, registeredDivisions: registeredDivisions, registeredPlayers: registeredPlayers, loadEntries: loadEntries };
+    enrich: enrich, sameSearchEntry: sameSearchEntry, uniqueSearchEntries: uniqueSearchEntries, registeredTeams: registeredTeams, rosterSlug: rosterSlug, registeredDivisions: registeredDivisions, registeredPlayers: registeredPlayers, loadEntries: loadEntries };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.wbcaSearch;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
