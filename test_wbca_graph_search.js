@@ -45,7 +45,7 @@ async function checkDivision(division, kind, teamName, players, alternates) {
   assert.ok(resultHtml.includes(teamName));
   assert.ok(elements['player-list'].innerHTML.includes('class="pse-schedule"'));
   assert.ok(resultHtml.includes('T64'));
-  assert.ok(resultHtml.includes('Oct 11'));
+  assert.match(resultHtml, /T64 · (Today|Tomorrow|Oct 11),/);
   assert.ok(resultHtml.includes(String(players.reduce((sum, p) => sum + p.fargoRate, 0))));
   for (const member of players.concat(alternates)) assert.ok(resultHtml.includes(member.firstName + ' ' + member.lastName + ' (' + member.fargoRate + ')'));
   for (const member of players.concat(alternates)) {
