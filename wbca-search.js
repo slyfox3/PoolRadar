@@ -126,8 +126,80 @@
     }).catch(function(error) { delete loads[cacheKey]; throw error; });
     return loads[cacheKey];
   }
+  var singlesTiers = [
+    { tier: 'Platinum', min: 535, max: 599 },
+    { tier: 'Gold', min: 484, max: 534 },
+    { tier: 'Silver', min: 433, max: 483 },
+    { tier: 'Bronze', min: 384, max: 432 },
+    { tier: 'Iron', min: 0, max: 383 },
+  ];
+  function singlesDivision(rating) {
+    var tier = singlesTiers.find(function(t) { return typeof rating === 'number' && rating >= t.min && rating <= t.max; });
+    return tier ? { name: 'Singles ' + tier.tier, acronym: 'singles-' + tier.tier.toLowerCase(), ratingRange: tier.min + '–' + tier.max }
+      : { name: 'Singles Unclassified', acronym: 'singles-unclassified' };
+  }
+  function entryDivision(entry) {
+    var type = entry.divisionType || {}, name = String(type.name || '').trim();
+    if (!/2026/.test(entry.eventName || '')) return null;
+    if (/fun\s*day/i.test(entry.eventName || '')) {
+      if (/^scotch$/i.test(entry.division)) return { name: 'Funday Scotch Doubles', acronym: 'fsd' };
+      if (/queen/i.test(name)) return { name: 'Funday Queen of the Hill', acronym: 'qoh' };
+      if (/senior/i.test(name)) return { name: 'Funday Seniors', acronym: 'fs' };
+      if (/bank/i.test(name)) return { name: 'Funday 9Ball Banks', acronym: 'f9b' };
+      if (/10\s*ball/i.test(name)) return { name: 'Funday 10Ball', acronym: 'f10' };
+      return { name: 'Funday ' + name, acronym: 'funday-' + normal(name).replace(/[^a-z0-9]+/g, '-') };
+    }
+    if (!/9.ball/i.test(entry.eventName || '')) return null;
+    if (/^teams$/i.test(entry.division)) return { name: 'Teams ' + name, acronym: 'team' + type.fargoUp };
+    if (/^scotch$/i.test(entry.division)) return { name: 'Scotch Doubles ' + type.fargoUp + ' & Under', acronym: 'sd' + type.fargoUp };
+    if (/^singles$/i.test(entry.division) && name === 'Divisional Singles') {
+      var member = fullMembers(entry, false)[0];
+      return singlesDivision(member ? member.rating : null);
+    }
+    if (/^singles$/i.test(entry.division)) return { name: 'Singles ' + name,
+      acronym: 'singles-' + normal(name).replace(/[^a-z0-9]+/g, '-') };
+    return null;
+  }
+  function divisionKey(name) { return normal(name).trim().replace(/[^a-z0-9]+/g, ''); }
+  function registeredDivisions(entries) {
+    var divisions = Object.create(null);
+    (entries || []).forEach(function(entry) {
+      var d = entryDivision(entry);
+      if (!d) return;
+      if (!divisions[d.acronym]) divisions[d.acronym] = Object.assign({ brackets: [], entryCount: 0 }, d);
+      divisions[d.acronym].entryCount++;
+    });
+    return Object.keys(divisions).map(function(key) { return divisions[key]; });
+  }
+  function registeredPlayers(division, entries) {
+    var byName = Object.create(null);
+    var teamDivision = isTeamDivision(division) || isScotchDivision(division);
+    (entries || []).forEach(function(entry) {
+      var d = entryDivision(entry);
+      if (!d || divisionKey(d.name) !== divisionKey(division)) return;
+      var members = fullMembers(entry, true);
+      if (teamDivision) {
+        var name = String(entry.teamName || '').trim();
+        if (!name && isScotchDivision(division)) name = (entry.players || []).map(function(p) { return p.lastName; }).join('/');
+        if (!name) return;
+        var key = normal(name).trim();
+        if (!byName[key]) byName[key] = { id: null, name: name, skill_level: teamRating(members),
+          searchNames: members.map(function(member) { return member.name; }), searchMembers: members };
+      } else {
+        members.forEach(function(member) {
+          var key = normal(member.name).trim();
+          if (!byName[key]) byName[key] = { id: null, name: member.name, skill_level: member.rating, searchNames: [] };
+        });
+      }
+    });
+    return Object.keys(byName).map(function(key) { return byName[key]; });
+  }
+  function rosterSlug(division) {
+    var cap = /\b(\d{3,4})\b/.exec(String(division || ''));
+    return cap ? 'team' + cap[1] : 'team';
+  }
   root.wbcaSearch = { isScotchDivision: isScotchDivision, isTeamDivision: isTeamDivision,
     membersFor: membersFor, memberInfoFor: memberInfoFor, memberLabel: memberLabel, teamRating: teamRating,
-    enrich: enrich, registeredTeams: registeredTeams, loadEntries: loadEntries };
+    enrich: enrich, registeredTeams: registeredTeams, rosterSlug: rosterSlug, registeredDivisions: registeredDivisions, registeredPlayers: registeredPlayers, loadEntries: loadEntries };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.wbcaSearch;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

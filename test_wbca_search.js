@@ -207,12 +207,26 @@ assert.ok(!cards.includes('class="player-group-name is-fav"'));
 // Confirm card collection keeps full names and result activation retains the
 // bracket team name, which is what jumpToPlayer uses to find the card.
 const context = { currentMatches: [{ p1: { name: 'Chia/Yuan', searchNames: players[0].searchNames }, p2: null }],
-  currentPlayerList: null, jumpToPlayer: (name) => { context.jumped = name; } };
+  currentPlayerList: null, currentTournament: null, jumpToPlayer: (name) => { context.jumped = name; } };
 vm.createContext(context);
 vm.runInContext(extract('index.html', 'collectSearchablePlayers') + '\n' + extract('index.html', 'activateSearchEntry'), context);
 assert.equal(context.collectSearchablePlayers()[0].searchNames[1], 'Arnie Yuan');
 context.activateSearchEntry({ kind: 'player', player: context.collectSearchablePlayers()[0] });
 assert.equal(context.jumped, 'Chia/Yuan');
+
+// Singles tiers use inclusive boundaries and never turn a missing rating into Iron.
+const tierRatings = [0, 383, 384, 432, 433, 483, 484, 534, 535, 599, null, 600];
+const tierEntries = tierRatings.map((rating, i) => ({ eventName: entry.eventName, division: 'Singles',
+  divisionType: { name: 'Divisional Singles' }, players: [{ firstName: 'Tier', lastName: String(i), fargoRate: rating }] }));
+for (const [tier, expected] of Object.entries({ Iron: [0,383], Bronze: [384,432], Silver: [433,483], Gold: [484,534], Platinum: [535,599] })) {
+  const roster = lookup.registeredPlayers('Singles ' + tier, tierEntries);
+  assert.deepEqual(roster.map(p => p.skill_level), expected);
+  const division = lookup.registeredDivisions(tierEntries).find(d => d.name === 'Singles ' + tier);
+  assert.equal(division.acronym, 'singles-' + tier.toLowerCase());
+  assert.equal(division.entryCount, 2);
+}
+assert.equal(lookup.registeredPlayers('Singles Unclassified', tierEntries).length, 2);
+assert.equal(lookup.registeredPlayers('Singles Gold', [{ ...tierEntries[6], divisionType: { name: 'Elite' } }]).length, 0);
 
 async function checkLoading() {
   let requested = [];

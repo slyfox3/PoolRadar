@@ -30,6 +30,7 @@
   var remote='https://wnt-proxy.slyfox3.workers.dev';
   var base=(location.hostname==='localhost'||location.hostname==='127.0.0.1')?'':remote;
   var players=[],searchReady=false,searchCursor=-1,searchHits=[];
+  var divisionData={divisions:[]},registrationEntries=[];
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function dateLabel(s){if(!s)return 'Date TBA';var d=new Date(s+'T12:00:00');return d.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});}
   function medalRank(name){
@@ -46,7 +47,13 @@
     return {rank:4,label:'Other'};
   }
   function render(data){
-    var divisions=(data.divisions||[]).slice().sort(function(a,b){
+    var divisions=(data.divisions||[]).map(function(d){return Object.assign({},d);});
+    wbcaSearch.registeredDivisions(registrationEntries).forEach(function(roster){
+      var published=divisions.find(function(d){return String(d.acronym||'').toLowerCase()===roster.acronym || normal(d.name).replace(/[^a-z0-9]+/g,'')===normal(roster.name).replace(/[^a-z0-9]+/g,'');});
+      if(published){published.entryCount=roster.entryCount;published.ratingRange=roster.ratingRange;}
+      else divisions.push(roster);
+    });
+    divisions.sort(function(a,b){
       var ae=eventType(a.name).rank,be=eventType(b.name).rank;
       if(ae!==be)return ae-be;
       var ar=medalRank(a.name),br=medalRank(b.name);
@@ -63,10 +70,12 @@
       }
       var brackets=d.brackets||[];
       html+='<article class="card"><h2>'+esc(String(d.name||'').trim())+'</h2>'+
-        '<div class="details">'+esc(dateLabel(d.startDate))+
+        '<div class="details">'+(d.entryCount?d.entryCount+' entries':esc(dateLabel(d.startDate)))+
+        (d.ratingRange?' · Fargo '+esc(d.ratingRange):'')+
         (d.expectedNumberOfPlayers?' · '+d.expectedNumberOfPlayers+'-player':'')+'</div>';
-      if(brackets.length){
+      if(brackets.length||d.entryCount){
         html+='<div class="actions">';
+        if(!brackets.length)html+='<a class="btn" href="index.html?bracketbeast='+encodeURIComponent(d.acronym)+'">Registered Players</a>';
         brackets.forEach(function(b){
           var slug=String(d.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+d.divisionId+'/'+b.divisionBracketId;
           var source='https://player.bracketbeast.com/tournament/'+TOURNAMENT_ID+'/divisions/'+d.divisionId+'/brackets/'+b.divisionBracketId;
@@ -75,6 +84,7 @@
             '<a class="btn source" target="_blank" rel="noopener" href="'+esc(source)+'">Bracket Beast ↗</a>';
         });
         html+='</div>';
+        if(!brackets.length)html+='<div class="empty">Bracket not published yet</div>';
       }else html+='<div class="empty">Bracket not published yet</div>';
       html+='</article>';
     });
@@ -117,10 +127,11 @@
     if(!query.trim()){result.innerHTML='<div class="search-empty">Type a player’s first or last name</div>';return;}
     if(!searchHits.length){result.innerHTML='<div class="search-empty">No players found</div>';return;}
     result.innerHTML=searchHits.map(function(p,i){
-      var tag=p.slug?'a':'div',members=p.searchMembers||[];
+      var href=p.slug?'index.html?bracketbeast='+encodeURIComponent(p.slug):(wbcaSearch.isTeamDivision(p.division)?'index.html?bracketbeast='+encodeURIComponent(wbcaSearch.rosterSlug(p.division)):'');
+      var tag=href?'a':'div',members=p.searchMembers||[];
       var roster=members.length?members.map(function(member){return marked(wbcaSearch.memberLabel(member),query);}).join(' / '):marked((p.searchNames||[]).join(' / '),query);
       var showRoster=members.length?!(members.length===1&&members[0].name===p.name):(p.searchNames||[]).length>0;
-      return '<'+tag+' class="search-result" data-index="'+i+'"'+(p.slug?' href="index.html?bracketbeast='+encodeURIComponent(p.slug)+'"':'')+'><div class="search-name">'+marked(p.name,query)+(p.rating==null?'':' ('+esc(p.rating)+')')+'</div>'+(showRoster?'<div class="search-name">'+roster+'</div>':'')+'<div class="search-division">'+esc(p.division)+(p.slug?'':' · Bracket not published yet')+'</div></'+tag+'>';
+      return '<'+tag+' class="search-result" data-index="'+i+'"'+(href?' href="'+esc(href)+'"':'')+'><div class="search-name">'+marked(p.name,query)+(p.rating==null?'':' ('+esc(p.rating)+')')+'</div>'+(showRoster?'<div class="search-name">'+roster+'</div>':'')+'<div class="search-division">'+esc(p.division)+(p.slug?'':' · Bracket not published yet')+'</div></'+tag+'>';
     }).join('');
   }
   function loadPlayers(divisions){
@@ -133,10 +144,15 @@
       var entries=[],failed=[];
       results[1].forEach(function(result,i){if(result.status==='fulfilled')entries=entries.concat(result.value);else failed.push(['Scotch','Teams','Singles'][i]);});
       wbcaSearch.enrich(players,entries);
-      wbcaSearch.registeredTeams(entries).forEach(function(team){
-        var cap=/\b(\d{3,4})\b/.exec(team.division);
-        var exists=players.some(function(p){var other=/\b(\d{3,4})\b/.exec(p.division);return wbcaSearch.isTeamDivision(p.division)&&normal(p.name).trim()===normal(team.name).trim()&&(!cap||other&&cap[1]===other[1]);});
-        if(!exists)players.push(team);
+      wbcaSearch.registeredDivisions(entries).forEach(function(division){
+        var published=(divisions||[]).find(function(d){return normal(d.name).replace(/[^a-z0-9]+/g,'')===normal(division.name).replace(/[^a-z0-9]+/g,'');});
+        var bracket=published&&published.brackets&&published.brackets[0];
+        var slug=bracket?(String(published.acronym||'').toLowerCase()||TOURNAMENT_ID+'/'+published.divisionId+'/'+bracket.divisionBracketId):division.acronym;
+        wbcaSearch.registeredPlayers(division.name,entries).forEach(function(p){
+          if(!players.some(function(other){return normal(other.name).trim()===normal(p.name).trim()&&normal(other.division).trim()===normal(division.name).trim();})){
+            players.push({name:p.name,division:division.name,slug:slug,rating:p.skill_level,searchNames:p.searchNames,searchMembers:p.searchMembers||[]});
+          }
+        });
       });
       players.sort(function(a,b){return a.name.localeCompare(b.name)||a.division.localeCompare(b.division);});searchReady=true;
       document.getElementById('search-note').textContent=players.length+' players and teams · '+jobs.length+' published brackets'+(failed.length?' · '+failed.join(' / ')+' full-name lookup unavailable':'');renderSearch();
@@ -151,10 +167,11 @@
   document.getElementById('hero-search').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();openSearch(this.value);}});
   document.getElementById('search-input').addEventListener('keydown',function(e){
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(!searchHits.length)return;searchCursor=(searchCursor+(e.key==='ArrowDown'?1:-1)+searchHits.length)%searchHits.length;document.querySelectorAll('.search-result').forEach(function(el,i){el.classList.toggle('active',i===searchCursor);});}
-    if(e.key==='Enter'&&searchHits.length){var at=searchCursor<0?0:searchCursor;if(searchHits[at].slug)location.href='index.html?bracketbeast='+encodeURIComponent(searchHits[at].slug);}
+    if(e.key==='Enter'&&searchHits.length){var at=searchCursor<0?0:searchCursor;var result=document.querySelector('.search-result[data-index="'+at+'"]');if(result&&result.href)location.href=result.href;}
   });
   document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSearch();else if(e.key==='/'&&!document.getElementById('search-overlay').classList.contains('open')){e.preventDefault();openSearch();}});
-  fetch(base+'/bracketbeast/tournament/53/divisions').then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;});}).then(function(data){render(data);loadPlayers(data.divisions);}).catch(function(e){document.getElementById('list').innerHTML='<div class="error">Could not load divisions: '+esc(e.message)+'</div>';});
+  Promise.allSettled(['Teams','Scotch','Singles'].map(function(kind){return wbcaSearch.loadEntries(base,kind);})).then(function(results){registrationEntries=[];results.forEach(function(result){if(result.status==='fulfilled')registrationEntries=registrationEntries.concat(result.value);});render(divisionData);});
+  fetch(base+'/bracketbeast/tournament/53/divisions').then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.message||d.error||('HTTP '+r.status));return d;});}).then(function(data){divisionData=data;render(data);loadPlayers(data.divisions);}).catch(function(e){document.getElementById('list').innerHTML='<div class="error">Could not load divisions: '+esc(e.message)+'</div>';if(registrationEntries.length)render(divisionData);});
 })();
 </script>
 </body>

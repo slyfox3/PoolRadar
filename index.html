@@ -25,7 +25,7 @@
 // to prevent the tournament list table header from flashing before JS takes over.
 // Uses a class on <html> so the init code can remove it later when navigating back.
 var _qs = new URLSearchParams(window.location.search);
-if (_qs.has('digitalpool') || _qs.has('wnt')) {
+if (_qs.has('digitalpool') || _qs.has('wnt') || _qs.has('bracketbeast')) {
   document.documentElement.classList.add('slug-loading');
 }
 </script>
@@ -335,6 +335,8 @@ button { font-family: inherit; font-size: inherit; }
 .pse-item.pse-country .pse-name { font-weight: 600; }
 .pse-item.pse-country .pse-flag { font-size: 23.4px; line-height: 1; }
 .pse-item.pse-country .pse-chevron { color: #475569; font-size: 13px; padding-left: 6px; }
+.player-list-item.registered-team { display: block; white-space: normal; }
+.registered-team-title { display: flex; align-items: center; gap: 4px; }
 .player-list-item.highlight { animation: card-blink 1s ease-in-out 3; border-radius: 4px; }
 /* Country flag — emoji, so no assets. Nudged down to sit on the text baseline. */
 .pf { margin-right: 4px; font-size: 14.3px; line-height: 1; vertical-align: -0.06em; }
@@ -2501,6 +2503,15 @@ button { font-family: inherit; font-size: inherit; }
     if (source === 'bracketbeast') {
       if (!BRACKETBEAST_PROXY) return Promise.reject(new Error('No Bracket Beast proxy configured.'));
       var target = String(slug).split('/');
+      var base = BRACKETBEAST_PROXY.replace(/\/bracketbeast$/, '');
+      function rosterResult(division) {
+        var kind = wbcaSearch.isTeamDivision(division.name) ? 'Teams' : (wbcaSearch.isScotchDivision(division.name) ? 'Scotch' : 'Singles');
+        return wbcaSearch.loadEntries(base, kind).then(function(entries) {
+          return { matches: [], bracketByNum: {}, players: wbcaSearch.registeredPlayers(division.name, entries),
+            tournament: { source: 'bracketbeast', name: division.name, divisionName: division.name, slug: slug,
+              status: 'NOT_STARTED', sourceUrl: 'https://player.bracketbeast.com/tournament/53/divisions', rosterOnly: true } };
+        });
+      }
       var resolved = target.length === 3 && target.every(function(id) { return /^\d+$/.test(id); })
         ? Promise.resolve(target)
         : fetch(BRACKETBEAST_PROXY + '/tournament/53/divisions').then(function(r) {
@@ -2512,10 +2523,17 @@ button { font-family: inherit; font-size: inherit; }
               return String(d.acronym || '').toLowerCase() === alias;
             });
             var bracket = division && division.brackets && division.brackets[0];
-            if (!division || !bracket) throw new Error('Unknown Bracket Beast division alias: ' + slug);
-            return [String(division.tournamentId || 53), String(division.divisionId), String(bracket.divisionBracketId)];
+            if (bracket) return [String(division.tournamentId || 53), String(division.divisionId), String(bracket.divisionBracketId)];
+            if (division) return rosterResult(division);
+            return Promise.all(['Teams', 'Scotch', 'Singles'].map(function(kind) { return wbcaSearch.loadEntries(base, kind); })).then(function(groups) {
+              var entries = [].concat.apply([], groups);
+              var registered = wbcaSearch.registeredDivisions(entries).find(function(d) { return d.acronym === alias; });
+              if (!registered) throw new Error('Unknown Bracket Beast division alias: ' + slug);
+              return rosterResult(registered);
+            });
           });
       return resolved.then(function(ids) {
+        if (!Array.isArray(ids)) return ids;
         return fetch(BRACKETBEAST_PROXY + '/bracket?id=' + encodeURIComponent(ids[2]))
         .then(function(r) {
           return r.json().then(function(data) {
@@ -2530,7 +2548,8 @@ button { font-family: inherit; font-size: inherit; }
           var teamDivision = wbcaSearch.isTeamDivision(result.tournament.divisionName);
           var scotchDivision = wbcaSearch.isScotchDivision(result.tournament.divisionName);
           if (ids[0] !== '53') return result;
-          return wbcaSearch.loadEntries(BRACKETBEAST_PROXY.replace(/\/bracketbeast$/, ''), teamDivision ? 'Teams' : (scotchDivision ? 'Scotch' : 'Singles')).then(function(entries) {
+          return wbcaSearch.loadEntries(base, teamDivision ? 'Teams' : (scotchDivision ? 'Scotch' : 'Singles')).then(function(entries) {
+            result.players = wbcaSearch.registeredPlayers(result.tournament.divisionName, entries);
             Object.keys(result.bracketByNum).forEach(function(num) {
               var match = result.bracketByNum[num];
               [match.p1, match.p2].forEach(function(p) {
@@ -2611,19 +2630,19 @@ button { font-family: inherit; font-size: inherit; }
       var fetchMs = Math.round(performance.now() - fetchT0);
       if (result.matches.length === 0) {
         dismissLoadingToast();
-        if (currentSource !== 'digitalpool') {
+        if (currentSource !== 'digitalpool' && !result.players) {
           showStatus('No matches published yet for this event.', 'info');
           return;
         }
-        loadPlayerList(slug);
-        return;
+        if (currentSource === 'digitalpool') { loadPlayerList(slug); return; }
       }
       currentMatches = result.matches;
       currentTournament = result.tournament;
+      currentPlayerList = result.players || null;
       bracketByNum = result.bracketByNum || {};
 
       applyVideoMatches();
-      cache[ck] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum };
+      cache[ck] = { type: 'matches', matches: result.matches, tournament: result.tournament, bracketByNum: result.bracketByNum, players: currentPlayerList };
       updateLoadingToast('Loaded ' + result.matches.length + ' matches in ' + fetchMs + ' ms');
       applyCountryFromUrl(wantCountry);
       renderDetail();
@@ -2785,7 +2804,7 @@ button { font-family: inherit; font-size: inherit; }
         + ' <a class="btn btn-link" href="graph.html?pbs=' + encodeURIComponent(t.slug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
     } else if (t.source === 'bracketbeast') {
       links = ' <a class="btn btn-link" href="' + esc(t.sourceUrl) + '" target="_blank" rel="noopener">Bracket Beast &rarr;</a>'
-        + ' <a class="btn btn-link" href="graph.html?bracketbeast=' + encodeURIComponent(currentSlug) + '" target="_blank" rel="noopener">Graph &rarr;</a>';
+        + (t.rosterOnly ? '' : ' <a class="btn btn-link" href="graph.html?bracketbeast=' + encodeURIComponent(currentSlug) + '" target="_blank" rel="noopener">Graph &rarr;</a>');
     } else {
       links = ' <a class="btn btn-link" href="https://digitalpool.com/tournaments/' + encodeURIComponent(t.slug) + '/bracket" target="_blank">Bracket &rarr;</a> <a class="btn btn-link" href="https://slyfox3.github.io/TournamentPerf/?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">TournamentPerf &rarr;</a> <a class="btn btn-link" href="graph.html?digitalpool=' + encodeURIComponent(t.slug) + '" target="_blank">Graph &rarr;</a>';
     }
@@ -2902,14 +2921,17 @@ button { font-family: inherit; font-size: inherit; }
       for (var pi = 0; pi < sorted.length; pi++) {
         var p = sorted[pi];
         var pid = p.player_id || (p.player ? p.player.id : null);
-        var pObj = { id: p.id, name: p.name, playerId: pid };
-        var isFav = isPlayerFav(pObj);
-        html += '<div class="player-list-item" id="' + playerListAnchorId(p.name) + '">';
-        html += isFav
+        var pObj = { id: p.id, name: p.name, playerId: pid, searchMembers: p.searchMembers };
+        var rosterNote = teamRosterNote(p);
+        var isFav = isPlayerCardFav(pObj);
+        html += '<div class="player-list-item' + (rosterNote ? ' registered-team' : '') + '" id="' + playerListAnchorId(p.name) + '">';
+        if (rosterNote) html += '<div class="registered-team-title">';
+        if (!rosterNote) html += isFav
           ? '<button class="remove-fav-btn" data-action="remove-fav" data-name="' + esc(p.name) + '" title="Remove favorite">&#9733;</button>'
           : '<button class="add-fav-btn" data-action="add-fav" data-id="' + p.id + '" data-name="' + esc(p.name) + '" title="Add favorite">&#9734;</button>';
         html += '<span class="match-opponent-link" data-player="pg-' + esc(p.name).replace(/\s/g, '-').toLowerCase() + '" style="cursor:pointer' + (isFav ? ';color:#fbbf24' : '') + '">' + esc(p.name) + '</span>';
-        if (p.skill_level) html += ' <span class="match-opp-rating">(' + p.skill_level + ')</span>';
+        if (p.skill_level != null) html += ' <span class="match-opp-rating">(' + p.skill_level + ')</span>';
+        if (rosterNote) html += '</div>' + rosterNote;
         html += '</div>';
       }
       html += '</div></div></div>';
@@ -3539,7 +3561,7 @@ button { font-family: inherit; font-size: inherit; }
   };
 
   function reRenderCurrentView() {
-    if (currentMatches && currentMatches.length > 0) renderDetail();
+    if (currentMatches && (currentMatches.length > 0 || (currentTournament && currentTournament.source === 'bracketbeast'))) renderDetail();
     else if (currentPlayerList) renderPlayerList(currentPlayerList);
   }
 
@@ -3626,7 +3648,7 @@ button { font-family: inherit; font-size: inherit; }
     if (currentPlayerList) {
       for (var j = 0; j < currentPlayerList.length; j++) {
         var p = currentPlayerList[j];
-        add(p.name, p.skill_level, null, null, null);
+        add(p.name, p.skill_level, null, null, null, p.searchNames, p.searchMembers);
       }
     }
     return out;
@@ -4107,6 +4129,7 @@ button { font-family: inherit; font-size: inherit; }
       if (currentSlug !== slug) return;
       currentMatches = result.matches;
       currentTournament = result.tournament;
+      if (source === 'bracketbeast') currentPlayerList = result.players || null;
       bracketByNum = result.bracketByNum || {};
 
       applyVideoMatches();
@@ -4382,7 +4405,7 @@ button { font-family: inherit; font-size: inherit; }
   // =====================================================
   renderFavs();
   initDateInputs();
-  var hasSlug = new URLSearchParams(window.location.search).has('digitalpool');
+  var hasSlug = new URLSearchParams(window.location.search).has('digitalpool') || new URLSearchParams(window.location.search).has('bracketbeast');
   if (hasSlug) {
     document.getElementById('feed-section').classList.add('feed-section-collapsed');
     document.documentElement.classList.remove('slug-loading');
