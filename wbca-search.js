@@ -2,6 +2,41 @@
 (function(root) {
   'use strict';
   var loads = Object.create(null);
+  var SEARCH_CACHE_KEY = 'poolradar_wbca_2026_search_v1';
+  var snapshotLoad;
+  function validEntrySnapshot(data) {
+    return data && data.version === 1 && Array.isArray(data.entries) && data.entries.length > 0 &&
+      data.entries.every(function(entry) {
+        return entry && /2026/.test(entry.eventName || '') &&
+          /^(Scotch|Teams|Singles)$/i.test(entry.division || '') && Array.isArray(entry.players);
+      }) && ['Scotch', 'Teams', 'Singles'].every(function(kind) {
+        return data.entries.some(function(entry) { return normal(entry.division) === normal(kind); });
+      });
+  }
+  function cachedEntrySnapshot() {
+    if (typeof root.document === 'undefined') return null;
+    try {
+      var data = JSON.parse(root.localStorage.getItem(SEARCH_CACHE_KEY));
+      return validEntrySnapshot(data) ? data : null;
+    } catch (error) { return null; }
+  }
+  function bundledEntrySnapshot() {
+    if (!snapshotLoad) {
+      snapshotLoad = fetch('wbca_2026-search.json').then(function(response) {
+        if (!response.ok) throw new Error('WBCA entries snapshot unavailable.');
+        return response.json();
+      }).then(function(data) {
+        if (!validEntrySnapshot(data)) throw new Error('Invalid WBCA entries snapshot.');
+        // Save the complete search snapshot so the event landing page can
+        // reuse it too. Storage failure does not prevent names and ratings.
+        if (Array.isArray(data.players) && data.divisionData && Array.isArray(data.divisionData.divisions)) {
+          try { root.localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(data)); } catch (error) {}
+        }
+        return data;
+      }).catch(function() { return null; });
+    }
+    return snapshotLoad;
+  }
   function normal(value) {
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
@@ -105,6 +140,10 @@
   function loadEntries(base, division) {
     division = division || 'Scotch';
     var cacheKey = base + '|' + division;
+    var cached = cachedEntrySnapshot();
+    if (cached) return Promise.resolve(cached.entries.filter(function(entry) {
+      return normal(entry.division) === normal(division);
+    }));
     if (loads[cacheKey]) return loads[cacheKey];
     function page(number) {
       var query = new URLSearchParams({ search: 'general:,year:2026,division:' + division, page: number, limit: 100 });
@@ -116,13 +155,18 @@
         });
       });
     }
-    loads[cacheKey] = page(1).then(function(first) {
+    function liveEntries() { return page(1).then(function(first) {
       var count = Math.ceil(Number(first.total || 0) / 100), jobs = [];
       if (count > 30) throw new Error('Western BCA returned too many entries.');
       for (var i = 2; i <= count; i++) jobs.push(page(i));
       return Promise.all(jobs).then(function(rest) {
         return rest.reduce(function(all, next) { return all.concat(next.entries); }, first.entries);
       });
+    }); }
+    loads[cacheKey] = (typeof root.document !== 'undefined' ? bundledEntrySnapshot() : Promise.resolve(null)).then(function(snapshot) {
+      return snapshot ? snapshot.entries.filter(function(entry) {
+        return normal(entry.division) === normal(division);
+      }) : liveEntries();
     }).catch(function(error) { delete loads[cacheKey]; throw error; });
     return loads[cacheKey];
   }
