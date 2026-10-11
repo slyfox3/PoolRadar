@@ -1,0 +1,61 @@
+'use strict';
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const html = fs.readFileSync('index.html', 'utf8');
+function extract(name) {
+  const start = html.indexOf('  function ' + name + '(');
+  assert(start >= 0);
+  return html.slice(start, html.indexOf('\n  }', start) + 4);
+}
+const context = {};
+vm.createContext(context);
+vm.runInContext(['tokenizeName', 'scoreVideoMatch', 'isWbcaEventVideo', 'scoreWbcaVideoMatch', 'matchVideosToMatches', 'getMatchDateRange'].map(extract).join('\n'), context);
+const title = String.raw`CARDOZA\GUAJARDO vs MORENO/EYES - WESTERN BCA 9 BALL 2026 - TABLE 1`;
+const video = { videoId: 'wbca-match-1-2', title, matchTime: Date.parse('2026-10-11T15:57:18Z') };
+function match(opponent) {
+  return { p1: { name: 'Cardoza/Guajardo' }, p2: { name: opponent }, tableName: '1',
+    scheduledTime: '2026-10-11T16:00:00Z', startTime: null };
+}
+assert.equal(context.scoreVideoMatch('Cardoza/Guajardo', 'Moreno/Hurst', title, null, '1', video.matchTime).nameScore, 20);
+const correct = match('Moreno/Hurst');
+context.matchVideosToMatches([correct], [video]);
+assert.equal(correct.videoUrl, 'https://www.youtube.com/watch?v=wbca-match-1-2');
+const unrelated = match('Other/Team');
+context.matchVideosToMatches([unrelated], [video]);
+assert.equal(unrelated.videoUrl, undefined, 'one matching team alone cannot associate a video');
+assert.equal(context.scoreVideoMatch(String.raw`Cardoza\Guajardo`, 'Moreno / Hurst', title, null, '1', video.matchTime).nameScore, 20);
+assert.equal(context.scoreVideoMatch('Douglas (Doug) Dunn', 'John Smith', 'Doug Dunn vs John Smith', null, null, null).nameScore, 20);
+const tournament = { source: 'bracketbeast', slug: '53/488/696', divisionName: 'Scotch Doubles 1100 & Under' };
+const wbcaVideo = { ...video, channelId: 'UCQWD_Dx7oVsWusPOTHuqqwA', tableNum: '1' };
+const tolerant = match('Moreno/Hurst');
+context.matchVideosToMatches([tolerant], [wbcaVideo], tournament);
+assert.equal(tolerant.videoUrl, 'https://www.youtube.com/watch?v=wbca-match-1-2', 'three correct doubles players match a misspelled fourth');
+assert.equal(context.scoreWbcaVideoMatch(match('Moreno/Hurst'), { ...wbcaVideo, title: 'GUAJARDO/CARDOZA vs HURST/MORENO - WESTERN BCA 9 BALL 2026 - TABLE 1' }, tournament).nameScore, 40);
+assert.equal(context.scoreWbcaVideoMatch(match('Moreno/Hurst'), { ...wbcaVideo, title: 'CARDOZA/WRONG vs MORENO/WRONG - WESTERN BCA 9 BALL 2026 - TABLE 1' }, tournament).nameScore, 0, 'two of four do not match');
+assert.equal(context.scoreWbcaVideoMatch(match('Moreno/Hurst'), { ...wbcaVideo, title: 'CARDOZA/GUAJARDO vs WRONG/TEAM - WESTERN BCA 9 BALL 2026 - TABLE 1' }, tournament).nameScore, 0);
+assert.equal(context.scoreWbcaVideoMatch(match('Moreno/Hurst'), { ...wbcaVideo, matchTime: video.matchTime + 5 * 3600000 }, tournament).nameScore, 0, 'same names on a different day/time are not enough');
+assert(!context.isWbcaEventVideo({ ...tournament, slug: '54/488/696' }, wbcaVideo));
+assert(!context.isWbcaEventVideo(tournament, { ...wbcaVideo, channelId: 'another-channel' }));
+const fallbackNames = { ...match('Moreno/Hurst'), p1: { name: 'Cardoza-Guajardo', searchMembers: [{ name: 'First Cardoza' }, { name: 'Second Guajardo' }] } };
+assert.equal(context.scoreWbcaVideoMatch(fallbackNames, wbcaVideo, tournament).nameScore, 30);
+const repeated = { p1: { name: 'Baritua/Brown' }, p2: { name: 'Turner/Turner' }, tableName: '4', startTime: '2026-10-11T06:37:36Z' };
+const finalVideo = { ...wbcaVideo, title: String.raw`BROWN\BARITUA vs TURNER\TURNER - WESTERN BCA 9 BALL 2026 - TABLE 4`, tableNum: '4', matchTime: Date.parse('2026-10-11T06:40:57Z') };
+assert.equal(context.scoreWbcaVideoMatch(repeated, finalVideo, { ...tournament, divisionName: 'Funday Scotch Doubles' }).nameScore, 40);
+assert.equal(context.scoreWbcaVideoMatch(repeated, { ...finalVideo, title: String.raw`BROWN\WRONG vs TURNER - WESTERN BCA 9 BALL 2026 - TABLE 4` }, { ...tournament, divisionName: 'Funday Scotch Doubles' }).nameScore, 0, 'one Turner occurrence cannot count as two people');
+const banks = { ...tournament, divisionName: 'Funday 9Ball Banks' };
+const lateMatch = { p1: { name: 'Somerfield Habener' }, p2: { name: 'Andrew Vincent' }, startTime: '2026-10-11T03:22:39Z', tableName: '2' };
+const lateVideo = { ...wbcaVideo, videoId: 'late-banks', title: 'SOMERFIELD HABENER vs ANDREW VINCENT - WESTERN BCA 9 BALL 2026 - TABLE 2', tableNum: '2', matchTime: Date.parse('2026-10-11T03:59:42Z') };
+context.matchVideosToMatches([lateMatch], [lateVideo], banks);
+assert.equal(lateMatch.videoUrl, 'https://www.youtube.com/watch?v=late-banks', 'exact WBCA names tolerate delayed operator timestamps');
+const ordinaryMatch = { ...lateMatch, videoUrl: null };
+context.matchVideosToMatches([ordinaryMatch], [{ ...lateVideo, channelId: 'another-channel' }], banks);
+assert.equal(ordinaryMatch.videoUrl, null, 'other channels keep their original time window');
+const singles = { p1: { name: 'Linda Carter' }, p2: { name: 'Becky Stillwell' }, startTime: '2026-10-11T05:55:27Z', tableName: '6' };
+const firstNames = { ...wbcaVideo, title: 'LINDA vs BECKY - WESTERN BCA 9 BALL 2026 - TABLE 6', tableNum: '6', matchTime: Date.parse('2026-10-11T05:57:40Z') };
+assert.equal(context.scoreWbcaVideoMatch(singles, firstNames, { ...banks, divisionName: 'Funday Queen of the Hill' }).nameScore, 20);
+assert.equal(context.scoreWbcaVideoMatch(singles, { ...firstNames, matchTime: firstNames.matchTime + 3600000 }, banks).nameScore, 0, 'first names alone need close times');
+const range = context.getMatchDateRange([match('Moreno/Hurst')], {});
+assert.equal(range.from, '2026-10-11T16:00:00.000Z', 'scheduled matches trigger video downloads before the operator marks them playing');
+assert.match(html, /poolradar_yt_ranges_v6/, 'new channel invalidates old video coverage cache');
+console.log('Video matching: WBCA channel scope, three of four players, delimiters, repeated surnames, Funday singles, late timestamps, schedule downloads, and other tournaments passed.');

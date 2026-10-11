@@ -2,6 +2,8 @@ var SHEET_NAME = 'videos';
 var CHANNELS = [
   { id: 'UCTlcpma6Dx7uIZN0dFJJl9w', title: 'EvoSports Streaming' },
   { id: 'UCs4kXOaBLowAWGNBcARjtgw', title: "Skinny Bob's Billiards" },
+  { id: 'UCQWD_Dx7oVsWusPOTHuqqwA', title: 'Western BCA Media' },
+  { id: 'UC42Kp7cvohBsB3Yg4gFVj5w', title: 'On The Wire Creative Media' },
   { id: 'UCOKrmdnCIee9WYvQJFsmRpA', title: 'Excessive English' }
 ];
 

@@ -499,7 +499,9 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
 
   function tokenizeName(name) {
     // "Douglas (Doug) Dunn" → ["douglas", "doug", "dunn"]
-    return name.toLowerCase().replace(/[()]/g, ' ').split(/\s+/).filter(function(t) { return t.length > 1; });
+    // Doubles names use / or \ between partners. Match each surname against
+    // title tokens so a misspelled partner does not hide the whole team.
+    return name.toLowerCase().replace(/[()/\\]/g, ' ').split(/\s+/).filter(function(t) { return t.length > 1; });
   }
 
   function scoreVideoMatch(p1Name, p2Name, title, matchStartTime, matchTable, videoMatchTime) {
@@ -526,6 +528,75 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       var tableMatch = titleLower.match(/table\s+(\d+)/);
       if (tableMatch && matchTable.toLowerCase().indexOf(tableMatch[1]) !== -1) bonus += 10;
     }
+    return { nameScore: nameScore, total: nameScore + bonus };
+  }
+
+  function isWbcaEventVideo(tournament, video) {
+    return tournament && tournament.source === 'bracketbeast' &&
+      (/^53\//.test(tournament.slug || '') || /\/tournament\/53\//.test(tournament.sourceUrl || '')) &&
+      video.channelId === 'UCQWD_Dx7oVsWusPOTHuqqwA' &&
+      /western\s+bca\b/i.test(video.title || '') && /\b2026\b/.test(video.title || '');
+  }
+
+  function scoreWbcaVideoMatch(match, video, tournament) {
+    function nameKey(text) {
+      return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+    // Only the contestants before the event name participate in name matching.
+    var contestants = video.title.split(/\s+-\s+western\s+bca\b/i)[0].split(/\s+vs\.?\s+/i);
+    if (contestants.length !== 2) return { nameScore: 0, total: 0 };
+    var doubles = /^\s*(?:funday scotch doubles|scotch doubles)\b/i.test(tournament.divisionName || '');
+    function teamHits(player, titleSide) {
+      var partners = player.name.split(/[/\\]/).map(function(name) { return name.trim(); }).filter(Boolean);
+      if (partners.length !== 2 && player.searchMembers && player.searchMembers.length === 2) {
+        partners = player.searchMembers.map(function(member) { return member.name.split(/\s+/).slice(-1)[0]; });
+      }
+      if (partners.length !== 2) return 0;
+      var remaining = ' ' + nameKey(titleSide) + ' ', hits = 0;
+      partners.forEach(function(partner) {
+        var key = ' ' + nameKey(partner) + ' ';
+        if (remaining.indexOf(key) !== -1) {
+          hits++;
+          remaining = remaining.replace(key, ' '); // Turner/Turner needs two occurrences
+        }
+      });
+      return hits;
+    }
+    function singlesHit(player, titleSide) {
+      var key = nameKey(player.name), side = nameKey(titleSide);
+      if (!side) return 0;
+      if (key === side) return 3;
+      var tokens = key.split(' '), titleTokens = side.split(' ');
+      // A correct surname can survive a nickname or incorrect first name.
+      if (titleTokens.indexOf(tokens[tokens.length - 1]) !== -1) return 2;
+      return titleTokens.length === 1 && tokens.indexOf(side) !== -1 ? 1 : 0;
+    }
+    var hit = doubles ? teamHits : singlesHit;
+    var orientations = [[contestants[0], contestants[1]], [contestants[1], contestants[0]]];
+    var best = 0;
+    orientations.forEach(function(sides) {
+      var a = hit(match.p1, sides[0]), b = hit(match.p2, sides[1]);
+      if (a && b) best = Math.max(best, a + b);
+    });
+    if (!best || (doubles && best < 3)) return { nameScore: 0, total: 0 };
+    var time = match.startTime || match.scheduledTime;
+    var timeDiff = time && video.matchTime ? Math.abs(Date.parse(time) - video.matchTime) : null;
+    // Strong names allow operator timestamps to lag by up to two hours.
+    // First-name-only singles still need the normal 30-minute window.
+    var windowMs = (doubles || best >= 4 ? 120 : 30) * 60000;
+    if (timeDiff != null && timeDiff > windowMs) return { nameScore: 0, total: 0 };
+    var nameScore = doubles ? best * 10 : 20;
+    var bonus = doubles ? 0 : best;
+    if (timeDiff != null) {
+      if (timeDiff < 10 * 60000) bonus += 15;
+      else if (timeDiff < 30 * 60000) bonus += 10;
+      else if (timeDiff < 60 * 60000) bonus += 5;
+    }
+    var matchTable = String(match.tableName || '').replace(/^Table\s*/i, '').trim();
+    var titleTable = /\btable\s*[:#-]?\s*(\d+)\b/i.exec(video.title);
+    var videoTable = String(video.tableNum || (titleTable && titleTable[1]) || '');
+    if (matchTable && videoTable && Number(matchTable) === Number(videoTable)) bonus += 10;
     return { nameScore: nameScore, total: nameScore + bonus };
   }
 
@@ -572,19 +643,21 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
   }
 
   // Score all matches against the full accumulated video list, assign greedily
-  function matchVideosToMatches(matches, videos) {
+  function matchVideosToMatches(matches, videos, tournament) {
     var candidates = [];
     var usedVideos = {};
     for (var mi = 0; mi < matches.length; mi++) {
       var m = matches[mi];
-      if (m.isBye || m.videoUrl) continue;
+      if (m.isBye || m.videoUrl || !m.p1 || !m.p2) continue;
       for (var vi = 0; vi < videos.length; vi++) {
+        var wbcaVideo = isWbcaEventVideo(tournament, videos[vi]);
         // Skip videos too far in time (>30min) when both timestamps available
-        if (m.startTime && videos[vi].matchTime) {
+        if (!wbcaVideo && m.startTime && videos[vi].matchTime) {
           var td = Math.abs(new Date(m.startTime).getTime() - videos[vi].matchTime);
           if (td > 30 * 60000) continue;
         }
-        var result = scoreVideoMatch(m.p1.name, m.p2.name, videos[vi].title, m.startTime, m.tableName, videos[vi].matchTime);
+        var result = wbcaVideo ? scoreWbcaVideoMatch(m, videos[vi], tournament)
+          : scoreVideoMatch(m.p1.name, m.p2.name, videos[vi].title, m.startTime, m.tableName, videos[vi].matchTime);
         if (result.nameScore >= 20) {
           candidates.push({ mi: mi, vi: vi, nameScore: result.nameScore, total: result.total });
         }
@@ -610,8 +683,9 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
 
   function extractTableNum(s) {
     if (!s) return null;
-    var m = s.match(/(?:table\s*)(\d+)/i);
-    return m ? m[1] : null;
+    var text = String(s).trim();
+    var m = /^\d+$/.test(text) ? [text, text] : text.match(/(?:table\s*)(\d+)/i);
+    return m ? String(Number(m[1])) : null;
   }
 
   function extractVenueFromTitle(title) {
@@ -630,6 +704,14 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
   var GENERIC_VENUE_WORDS = ['bar', 'grill', 'billiards', 'billiard', 'pool', 'hall', 'lounge', 'pub', 'tavern', 'sports', 'club', 'room', 'house', 'table', 'the', 'and', 'pizza', 'kitchen', 'cafe', 'restaurant', 'saloon'];
 
   function getKnownVenueStream(tournament, video) {
+    var eventId = tournament && /^([0-9]+)\//.exec(tournament.slug || '');
+    if (!eventId && tournament) eventId = /\/tournament\/([0-9]+)\//.exec(tournament.sourceUrl || '');
+    var eventStreams = tournament && eventId && KNOWN_EVENT_STREAMS[tournament.source + ':' + eventId[1]];
+    if (eventStreams) {
+      for (var i = 0; i < eventStreams.length; i++) {
+        if (eventStreams[i].channelId === video.channelId) return eventStreams[i];
+      }
+    }
     var venueId = tournament && tournament.venue && tournament.venue.id;
     if (venueId == null) return null;
     var stream = KNOWN_VENUE_STREAMS[String(venueId)];
@@ -665,7 +747,6 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
     var venueTokens = venueName.toLowerCase().split(/\s+/).filter(function(t) {
       return t.length > 2 && GENERIC_VENUE_WORDS.indexOf(t) === -1;
     });
-    if (venueTokens.length === 0) return 0;
 
     var found = 0;
     for (var mi = 0; mi < matches.length; mi++) {
@@ -675,6 +756,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
       var matchTable = extractTableNum(m.tableName);
       if (!matchTable) continue;
       var matchMs = matchTime ? new Date(matchTime).getTime() : null;
+      if (matchMs != null && matchMs > Date.now()) continue;
 
       var bestVideo = null;
       var bestOffset = Infinity;
@@ -711,7 +793,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
         // and before YouTube's effective archive cutoff.
         if (offsetSec >= -300 && offsetSec < MAX_ARCHIVED_LIVESTREAM_OFFSET_SEC && Math.abs(offsetSec) < bestOffset) {
           bestOffset = Math.abs(offsetSec);
-          bestVideo = { videoId: v.videoId, offset: Math.max(0, offsetSec) };
+          bestVideo = { videoId: v.videoId, offset: Math.max(1, offsetSec) };
         }
       }
 
@@ -879,7 +961,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
     var list = loadVideoList();
     if (!list.length) return 0;
     var scoped = filterVideosForMatches(list, currentMatches, currentTournament);
-    var found = matchVideosToMatches(currentMatches, scoped);
+    var found = matchVideosToMatches(currentMatches, scoped, currentTournament);
     found += matchLivestreamsToMatches(currentMatches, scoped, currentTournament);
     currentUnassociatedVideos = findUnassociatedVenueVideos(currentMatches, scoped, currentTournament);
     found += inferStreamTableMatches(currentMatches, bracketByNum, currentUnassociatedVideos);
@@ -899,7 +981,7 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
   // =====================================================
   // Bump when the remote index gains a source so previously covered date
   // ranges are queried once more. The video list itself remains reusable.
-  var VIDEO_RANGE_CACHE_KEY = 'poolradar_yt_ranges_v4';
+  var VIDEO_RANGE_CACHE_KEY = 'poolradar_yt_ranges_v6';
 
   function loadFetchedRanges() {
     try { return JSON.parse(localStorage.getItem(VIDEO_RANGE_CACHE_KEY)) || []; }
@@ -965,8 +1047,8 @@ playerSearch.mountOverlay({hostId:'player-search-mount',overlayId:'player-search
     var minMs = Infinity, maxMs = -Infinity;
     for (var i = 0; i < matches.length; i++) {
       var m = matches[i];
-      if (m.startTime) {
-        var t = new Date(m.startTime).getTime();
+      if (m.startTime || m.scheduledTime) {
+        var t = new Date(m.startTime || m.scheduledTime).getTime();
         if (!isNaN(t)) {
           if (t < minMs) minMs = t;
           if (t > maxMs) maxMs = t;
