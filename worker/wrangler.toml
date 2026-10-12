@@ -2,10 +2,10 @@ name = "wnt-proxy"
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 
-# Secrets are NOT set here — they would end up in git. Use:
-#   wrangler secret put WNT_EMAIL
-#   wrangler secret put WNT_PASSWORD
-# and optionally WNT_SESSION to override with a raw wnt.live.sid cookie.
-# WBCA_TOKEN: add as a Secret in the Cloudflare Dashboard under
+# Secrets are NOT set here — they would end up in git. Add them in the Dashboard:
+# WNT_EMAIL / WNT_PASSWORD, or WNT_SESSION with a raw wnt.live.sid cookie.
+# WBCA_REFRESH_TOKEN: add as a Secret in the Cloudflare Dashboard under
 # Workers & Pages > wnt-proxy > Settings > Variables and Secrets.
-# Use the JWT only, without "Bearer ". Replace it when the login expires.
+# Use the WBCA site's Local Storage refreshToken. Access tokens renew automatically.
+# WBCA_TOKEN is optional legacy mode and still requires manual renewal.
+# Every new credential secret must have a registered TOKEN_HEALTH_CHECKS checker.

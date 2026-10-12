@@ -10,11 +10,20 @@
  *   GET /pbs/events        the PBS tournament calendar, scraped
  *   GET /pbs/event?path=…  a Pro Billiard Series page's CueScore locator
  *   GET /wbca/entries     Western BCA entry players, with pagination/search
+ *   GET /wnt/health       live WNT credential check
+ *   GET /wbca/health      live WBCA credential check (uncached)
+ *   GET /health           all registered credential checks (uncached)
  *
- * Secrets (set with `wrangler secret put`, never in this file or wrangler.toml):
+ * Secrets (set in Cloudflare Dashboard, never in this file or wrangler.toml):
  *   WNT_EMAIL, WNT_PASSWORD  credentials to log in with
  *   WNT_SESSION              optional raw wnt.live.sid, overrides the above
- *   WBCA_TOKEN               Western BCA bearer JWT (replace when expired)
+ *   WBCA_REFRESH_TOKEN       Western BCA refresh token; obtains access tokens automatically
+ *   WBCA_TOKEN               optional legacy access JWT when no refresh token is set
+ *
+ * Whenever adding a new token/credential secret to Cloudflare, also add its
+ * corresponding checking function and health route. Probe the upstream API
+ * without using cached data, and never return the secret in the response.
+ * Register the checker in TOKEN_HEALTH_CHECKS so /health includes it.
  *
  * Mirrors wnt-dev-proxy.py route for route so local and deployed behave alike.
  */
@@ -24,6 +33,10 @@ const PBS_BASE = 'https://probilliardseries.com';
 const PBS_TRANSLATE_BASE = 'https://probilliardseries-com.translate.goog';
 const BRACKETBEAST_BASE = 'https://bracket-beast-prod-app.azurewebsites.net/api';
 const WBCA_BASE = 'https://api.members.westernbca.org/api/v1';
+const TOKEN_HEALTH_CHECKS = {
+  wnt: checkWntCredentials,
+  wbca: checkWbcaToken,
+};
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
@@ -67,16 +80,81 @@ function wbcaEntry(entry) {
   };
 }
 
+// Access tokens live only in the isolate's memory, never in public edge cache.
+// A new isolate obtains its own token with the same reusable refresh token.
+let wbcaAuthState = null;
+let wbcaRefreshJob = null;
+let wbcaRefreshSeed = null;
+
+async function refreshWbcaAccessToken(refreshToken) {
+  const response = await fetch(WBCA_BASE + '/user/refresh-token', {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+    redirect: 'manual',
+    cache: 'no-store',
+  });
+  if (response.status === 401 || response.status === 403 || (response.status >= 300 && response.status < 400)) {
+    throw new AuthError('Western BCA rejected WBCA_REFRESH_TOKEN. Sign in again and update that Worker secret.');
+  }
+  if (!response.ok) throw new Error('Western BCA token refresh returned ' + response.status);
+  const payload = await response.json();
+  const data = payload.data;
+  if (typeof data?.accessToken !== 'string' || !data.accessToken.trim()) {
+    throw new Error('Western BCA refresh response has no access token.');
+  }
+  const token = data.accessToken.trim();
+  const expiry = tokenExpiry(token);
+  let expiresMs = expiry.expiresAt ? Date.parse(expiry.expiresAt) : null;
+  // The official client treats tokenExpireTime as an epoch in milliseconds.
+  if (expiresMs == null && data.tokenExpireTime != null && String(data.tokenExpireTime).trim()) {
+    const value = Number(data.tokenExpireTime);
+    if (Number.isFinite(value) && Number.isFinite(new Date(value).getTime())) expiresMs = value;
+  }
+  if (expiresMs != null && expiresMs <= Date.now()) throw new Error('Western BCA refreshed access token is already expired.');
+  return { seed: refreshToken, token, expiresMs,
+    cacheUntil: expiresMs == null ? Date.now() + 120000 : expiresMs - 60000 };
+}
+
+async function getWbcaAuth(env, forceRefresh = false) {
+  const seed = env.WBCA_REFRESH_TOKEN?.trim();
+  if (!seed) {
+    const token = env.WBCA_TOKEN?.trim();
+    if (!token) throw new AuthError('Set the WBCA_REFRESH_TOKEN Worker secret (or legacy WBCA_TOKEN).');
+    return { token, expiresMs: tokenExpiry(token).expiresAt ? Date.parse(tokenExpiry(token).expiresAt) : null };
+  }
+  if (!forceRefresh && wbcaAuthState?.seed === seed && wbcaAuthState.cacheUntil > Date.now()) return wbcaAuthState;
+  if (wbcaRefreshJob && wbcaRefreshSeed === seed) return wbcaRefreshJob;
+  const job = refreshWbcaAccessToken(seed).then((state) => {
+    wbcaAuthState = state;
+    return state;
+  });
+  wbcaRefreshSeed = seed;
+  wbcaRefreshJob = job;
+  try { return await job; }
+  finally {
+    if (wbcaRefreshJob === job) { wbcaRefreshJob = null; wbcaRefreshSeed = null; }
+  }
+}
+
 async function loadWbcaEntries(params, env) {
-  if (!env.WBCA_TOKEN) throw new AuthError('Set the WBCA_TOKEN Worker secret.');
   const url = new URL(WBCA_BASE + '/eventEntries');
   url.search = new URLSearchParams(params).toString();
-  const response = await fetch(url, {
-    headers: { Accept: 'application/json', Authorization: 'Bearer ' + env.WBCA_TOKEN.trim() },
+  const read = (token) => fetch(url, {
+    headers: { Accept: 'application/json', Authorization: 'Bearer ' + token },
     redirect: 'manual',
+    cache: 'no-store',
   });
+  let auth = await getWbcaAuth(env);
+  let response = await read(auth.token);
+  if ((response.status === 401 || response.status === 403) && env.WBCA_REFRESH_TOKEN?.trim()) {
+    auth = await getWbcaAuth(env, true);
+    response = await read(auth.token); // one retry; never loop on denied access
+  }
   if (response.status === 401 || response.status === 403) {
-    throw new AuthError('Western BCA rejected WBCA_TOKEN. Replace it with a current token from an authorised login.');
+    throw new AuthError(env.WBCA_REFRESH_TOKEN?.trim()
+      ? 'Western BCA rejected the refreshed access token. Check account access or sign in again and update WBCA_REFRESH_TOKEN.'
+      : 'Western BCA rejected WBCA_TOKEN. Replace it with a current token from an authorised login.');
   }
   if (!response.ok) throw new Error('Western BCA returned ' + response.status);
   const payload = await response.json();
@@ -86,6 +164,99 @@ async function loadWbcaEntries(params, env) {
     total: payload.data.total ?? 0,
     page: params.page, limit: params.limit,
   };
+}
+
+function tokenExpiry(token) {
+  const unknown = { expiresAt: null, expiresInSeconds: null };
+  // JWT expiry is metadata, not proof of authentication; the upstream probe
+  // remains authoritative. Opaque sessions do not reveal their expiry.
+  try {
+    const parts = String(token || '').trim().split('.');
+    if (parts.length !== 3) return unknown;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, '=')));
+    if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp)) return unknown;
+    const date = new Date(claims.exp * 1000);
+    if (!Number.isFinite(date.getTime())) return unknown;
+    return { expiresAt: date.toISOString(), expiresInSeconds: Math.max(0, Math.floor(claims.exp - Date.now() / 1000)) };
+  } catch (error) { return unknown; }
+}
+
+async function checkWbcaToken(env) {
+  const present = { WBCA_REFRESH_TOKEN: !!env.WBCA_REFRESH_TOKEN?.trim(), WBCA_TOKEN: !!env.WBCA_TOKEN?.trim() };
+  const refreshExpiry = tokenExpiry(env.WBCA_REFRESH_TOKEN);
+  const out = { credential: present.WBCA_REFRESH_TOKEN ? 'WBCA_REFRESH_TOKEN' : present.WBCA_TOKEN ? 'WBCA_TOKEN' : 'none',
+    present, ...tokenExpiry(env.WBCA_TOKEN), refreshExpiresAt: refreshExpiry.expiresAt,
+    refreshExpiresInSeconds: refreshExpiry.expiresInSeconds, ok: false };
+  try {
+    // Health tests the refresh secret itself as well as the resulting access
+    // token, so a still-valid cached access token cannot hide a revoked refresh.
+    const auth = await getWbcaAuth(env, present.WBCA_REFRESH_TOKEN);
+    if (auth.expiresMs != null) {
+      out.expiresAt = new Date(auth.expiresMs).toISOString();
+      out.expiresInSeconds = Math.max(0, Math.floor((auth.expiresMs - Date.now()) / 1000));
+    }
+    const data = await loadWbcaEntries({ search: 'general:', page: 1, limit: 1 }, env);
+    const usedAuth = await getWbcaAuth(env);
+    if (usedAuth.expiresMs != null) {
+      out.expiresAt = new Date(usedAuth.expiresMs).toISOString();
+      out.expiresInSeconds = Math.max(0, Math.floor((usedAuth.expiresMs - Date.now()) / 1000));
+    }
+    out.ok = true;
+    out.upstreamEntries = data.entries.length;
+    out.upstreamTotal = data.total;
+  } catch (error) {
+    out.error = error instanceof AuthError ? 'auth' : 'upstream';
+    out.message = String(error?.message || error);
+  }
+  return out;
+}
+
+async function checkWntCredentials(env) {
+  const present = {
+    WNT_SESSION: !!env.WNT_SESSION,
+    WNT_EMAIL: !!env.WNT_EMAIL,
+    WNT_PASSWORD: !!env.WNT_PASSWORD,
+  };
+  const out = {
+    credential: present.WNT_SESSION ? 'WNT_SESSION'
+      : (present.WNT_EMAIL && present.WNT_PASSWORD ? 'WNT_EMAIL/WNT_PASSWORD' : 'none'),
+    present,
+    envKeys: Object.keys(env).sort(),
+    ...tokenExpiry(env.WNT_SESSION),
+  };
+  if (env.WNT_SESSION) {
+    const v = env.WNT_SESSION;
+    // A truncated digest of the secret, so a caller that holds a session
+    // can prove this Worker holds the SAME one. Length and prefix cannot:
+    // every session starts s%3A and two of them are often the same length,
+    // so a refresh that had not propagated yet would look identical to one
+    // that had — and since a just-replaced session is usually still valid,
+    // every other check here would pass on the old one too.
+    // Forty-eight bits identifies, and reverses to nothing.
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
+    out.sessionShape = {
+      sha12: [...new Uint8Array(digest)].slice(0, 6)
+        .map((b) => b.toString(16).padStart(2, '0')).join(''),
+      length: v.length,
+      startsWith: v.slice(0, 4),
+      looksUrlEncoded: v.includes('%3A'),
+      hasWhitespace: /\s/.test(v),
+      hasQuotes: /['"]/.test(v),
+      hasCookiePrefix: v.includes('wnt.live.sid'),
+    };
+  }
+  try {
+    sessionCookie = null; // force a fresh read of the env credential
+    const raw = await wntFetch('/events/us-open-pool-championship-2026/group-matches/1/1/0', env);
+    const parsed = JSON.parse(raw);
+    out.ok = true;
+    out.upstreamMatches = (parsed.matches || []).length;
+  } catch (e) {
+    out.ok = false;
+    out.error = String(e && e.message || e);
+  }
+  return out;
 }
 
 async function loadBracketBeast(bracketId) {
@@ -542,53 +713,28 @@ export default {
       });
     }
 
-    // Reports which credential the Worker can see and whether it still works.
-    // Never echoes a secret — only its length and prefix, which is enough to
-    // spot the usual damage: whitespace, quotes, or a decoded %3A.
-    if (url.pathname === '/wnt/health') {
-      const present = {
-        WNT_SESSION: !!env.WNT_SESSION,
-        WNT_EMAIL: !!env.WNT_EMAIL,
-        WNT_PASSWORD: !!env.WNT_PASSWORD,
-      };
-      const out = {
-        credential: present.WNT_SESSION ? 'WNT_SESSION'
-          : (present.WNT_EMAIL && present.WNT_PASSWORD ? 'WNT_EMAIL/WNT_PASSWORD' : 'none'),
-        present,
-        envKeys: Object.keys(env).sort(),
-      };
-      if (env.WNT_SESSION) {
-        const v = env.WNT_SESSION;
-        // A truncated digest of the secret, so a caller that holds a session
-        // can prove this Worker holds the SAME one. Length and prefix cannot:
-        // every session starts s%3A and two of them are often the same length,
-        // so a refresh that had not propagated yet would look identical to one
-        // that had — and since a just-replaced session is usually still valid,
-        // every other check here would pass on the old one too.
-        // Forty-eight bits identifies, and reverses to nothing.
-        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
-        out.sessionShape = {
-          sha12: [...new Uint8Array(digest)].slice(0, 6)
-            .map((b) => b.toString(16).padStart(2, '0')).join(''),
-          length: v.length,
-          startsWith: v.slice(0, 4),
-          looksUrlEncoded: v.includes('%3A'),
-          hasWhitespace: /\s/.test(v),
-          hasQuotes: /['"]/.test(v),
-          hasCookiePrefix: v.includes('wnt.live.sid'),
-        };
-      }
-      try {
-        sessionCookie = null; // force a fresh read of the env credential
-        const raw = await wntFetch('/events/us-open-pool-championship-2026/group-matches/1/1/0', env);
-        const parsed = JSON.parse(raw);
-        out.ok = true;
-        out.upstreamMatches = (parsed.matches || []).length;
-      } catch (e) {
-        out.ok = false;
-        out.error = String(e && e.message || e);
-      }
-      return json(out, out.ok ? 200 : 503, origin);
+    // Health routes stay before the shared cache and never cache responses.
+    // Register every new credential checker in TOKEN_HEALTH_CHECKS so /health
+    // covers it automatically, even if another provider's check fails.
+    if (url.pathname === '/health') {
+      const names = Object.keys(TOKEN_HEALTH_CHECKS);
+      const results = await Promise.allSettled(names.map((name) => TOKEN_HEALTH_CHECKS[name](env)));
+      const checks = Object.fromEntries(names.map((name, i) => [name,
+        results[i].status === 'fulfilled' ? results[i].value
+          : { ok: false, error: 'check', message: String(results[i].reason?.message || results[i].reason) },
+      ]));
+      const out = { ok: Object.values(checks).every((check) => check.ok), checks };
+      const response = json(out, out.ok ? 200 : 503, origin);
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
+    }
+    const healthCheck = url.pathname === '/wnt/health' ? TOKEN_HEALTH_CHECKS.wnt
+      : url.pathname === '/wbca/health' ? TOKEN_HEALTH_CHECKS.wbca : null;
+    if (healthCheck) {
+      const out = await healthCheck(env);
+      const response = json(out, out.ok ? 200 : 503, origin);
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
     }
 
     // Answered before the shared cache below, because its answers are cached a
