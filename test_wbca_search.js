@@ -291,6 +291,14 @@ assert.ok(!indexContext.renderGroupedByPlayer([futureMatch]).includes('class="pl
 indexContext.liveOnly = false;
 indexContext.bracketByNum = {};
 
+// DigitalPool uses its match_number even when a separate identifier exists.
+indexContext.currentSource = 'digitalpool';
+indexContext.bracketByNum = { 1: { num: 1, identifier: '1-50' } };
+assert.match(indexContext.renderGroupedByPlayer([{ ...futureMatch, num: 1 }]), />#1<\/span>/);
+assert.ok(!indexContext.renderGroupedByPlayer([{ ...futureMatch, num: 1 }]).includes('>1-50</span>'));
+indexContext.currentSource = 'bracketbeast';
+indexContext.bracketByNum = {};
+
 async function checkLoading() {
   let requested = [];
   global.fetch = async (url) => {

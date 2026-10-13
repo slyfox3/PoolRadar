@@ -30,6 +30,9 @@ var result = adapter.buildResult({
 
 assert(result.bracketByNum[1].winnerTo === 2, 'winner edge is inferred from feeder');
 assert(result.bracketByNum[1].loserTo === 3, 'loser edge uses consolation match');
+assert(result.bracketByNum[1].identifier === 'W1-1', 'winner-side node label has W prefix');
+assert(result.matches[0].identifier === 'W1-1', 'visible match has the same W label');
+assert(result.bracketByNum[3].identifier === 'L1-1', 'loser-side label is unchanged');
 assert(result.bracketByNum[3].round === -1, 'loser round is canonical negative round');
 assert(result.bracketByNum[3].is_bye, 'empty bye remains a routing node');
 assert(result.matches.length === 1, 'TBD and empty routing rows do not create player cards');
@@ -201,3 +204,18 @@ assert(advancedResult('Scheduled', 0, 0).bracketByNum[501].status === 'NOT_START
 assert(advancedResult('Scheduled', 1, 1).bracketByNum[501].status === 'NOT_STARTED', 'conflicting destinations do not fabricate a winner');
 assert(advancedResult('WinnerPlayer2', 1, 0).bracketByNum[501].p2Won, 'explicit published result remains authoritative');
 console.log('Bracket Beast advancement-derived winners: passed');
+
+var labelResult = adapter.buildResult({ rounds: [
+  { roundName: '1', roundSequence: 1, isWinnerRound: true, matches: [match(601, 'W1-1', null, null, 'Scheduled', 'Alice', 'Bob')] },
+  { roundName: 'F1', roundSequence: 2, isWinnerRound: true, matches: [match(602, 'F1-1', null, null, 'Scheduled', null, null)] },
+  { roundName: 'F2', roundSequence: 3, isWinnerRound: true, matches: [match(603, 'F2-1', null, null, 'Scheduled', null, null)] },
+] });
+assert(labelResult.bracketByNum[601].identifier === 'W1-1', 'existing W prefix is not doubled');
+assert(labelResult.bracketByNum[602].identifier === 'F1-1', 'first final label is unchanged');
+assert(labelResult.bracketByNum[603].identifier === 'F2-1', 'reset final label is unchanged');
+console.log('Bracket Beast winner/loser/final labels: passed');
+
+flatContext.currentSource = 'digitalpool';
+var dpNumberHtml = flatContext.renderFlatMatches([tableMatch(1, 'COMPLETED', '4', 5, 3)]);
+assert(dpNumberHtml.includes('class="fm-num">#1</span>'), 'DigitalPool By Match # uses match_number instead of identifier');
+flatContext.currentSource = 'bracketbeast';

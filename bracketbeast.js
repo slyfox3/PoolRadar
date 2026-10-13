@@ -95,12 +95,16 @@
       var p2Won = code === 'WinnerPlayer2' || code === 'ForfeitPlayer1';
       var isBye = m.matchStatus === 'Bye';
       var finalNo = /^F(\d+)$/i.exec(r.roundName || '');
+      var identifier = m.matchName || r.roundName || null;
+      // Match IDs and routing stay numeric; only the visible winner-side
+      // label gains W. Finals keep their existing F1/F2 labels.
+      if (r.isWinnerRound && !finalNo && identifier && !/^W/i.test(identifier)) identifier = 'W' + identifier;
       var roundNumber = r.isWinnerRound
         ? (finalNo ? lastWinnerRound + Number(finalNo[1]) : (Number(r.roundName) || Number(r.roundSequence)))
         : -(Number(r.roundName.replace(/^L/i, '')) || r.roundSequence);
       bracketByNum[m.id] = {
         num: m.id, status: status, is_bye: isBye,
-        identifier: m.matchName || r.roundName || null, round: roundNumber,
+        identifier: identifier, round: roundNumber,
         p1: p1, p2: p2, s1: m.divisionPlayerId1Score, s2: m.divisionPlayerId2Score,
         p1Won: p1Won, p2Won: p2Won,
         minimumPlace: r.minimumPlace, maximumPlace: r.maximumPlace,
@@ -125,7 +129,7 @@
         startTime: status === 'NOT_STARTED' ? null : started,
         scheduledTime: status === 'NOT_STARTED' ? started : null,
         updatedAt: ended, round: roundNumber,
-        identifier: m.matchName || r.roundName || null,
+        identifier: identifier,
         isForfeit: /^Forfeit/.test(code || ''), isBye: isBye,
       });
     }
