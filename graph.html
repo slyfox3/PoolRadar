@@ -795,10 +795,13 @@ async function fetchBracketBeast(path) {
 }
 
 function bracketBeastRows(result) {
+  // Graph labels use DigitalPool's skill_level field; the shared adapter and
+  // WBCA enrichment expose the same rating as player.rating.
+  const graphPlayer = player => player ? { ...player, skill_level: player.rating } : null;
   return Object.values(result.bracketByNum).map(r => ({
     match_number: r.num, round: r.round, round_label: null,
     identifier: r.identifier, status: r.status, is_bye: r.is_bye,
-    challenger1: r.p1, challenger2: r.p2,
+    challenger1: graphPlayer(r.p1), challenger2: graphPlayer(r.p2),
     challenger1_score: r.s1, challenger2_score: r.s2,
     challenger1_is_winner: r.p1Won, challenger2_is_winner: r.p2Won,
     winner_to_num: r.winnerTo, loser_to_num: r.loserTo,
@@ -940,7 +943,7 @@ function nodeLabel(r, idx, dropTo, wide, pid) {
     // column layout. Stacked it leaves the name entirely and goes on the shared
     // ratings row, which is the whole point of that shape: the box ends up as
     // wide as the longest name and no wider.
-    const rt = c.skill_level ? mmEsc('(' + c.skill_level + ')') : '';
+    const rt = c.skill_level != null && String(c.skill_level).trim() !== '' ? mmEsc('(' + c.skill_level + ')') : '';
     const nm = mmEsc(c.name);
     const sc = score == null ? '' : ' ' + score;
     // The winner is always gold. What a selection changes is handled in CSS:

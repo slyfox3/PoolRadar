@@ -38,7 +38,8 @@
     return snapshotLoad;
   }
   function normal(value) {
-    return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/\s+/g, ' ').trim();
   }
   function teamKey(name) {
     return normal(name).split('/').map(function(part) { return part.replace(/[\s,]/g, ''); }).sort().join('/');

@@ -38,7 +38,17 @@ async function checkDivision(division, kind, teamName, players, alternates) {
     ['fetchBracketBeast', 'bracketBeastRows', 'buildPlayerView', 'setRows', 'rankPlayers', 'activateEntry', 'renderResults'].map(extract).join('\n'), c);
   const result = await c.fetchBracketBeast('53/777/888');
   assert.equal(requestedKind, kind);
-  c.setRows(c.bracketBeastRows(result));
+  const rows = c.bracketBeastRows(result);
+  const expectedRating = players.reduce((sum, p) => sum + p.fargoRate, 0);
+  assert.equal(rows[0].challenger1.skill_level, expectedRating, 'graph label receives the enriched rating');
+  c.setRows(rows);
+  Object.assign(c, { flagHtml: () => '', mmEsc: value => String(value), tableLabel: value => String(value), timeLabel: () => '' });
+  vm.runInContext(extract('nodeLabel'), c);
+  const labelIndex = { rev: {}, byNum: {} };
+  for (const wide of [true, false]) {
+    const label = c.nodeLabel(rows[0], labelIndex, null, wide, () => 1);
+    assert.ok(label.includes('(' + expectedRating + ')'), 'rating appears in both graph layouts');
+  }
   c.buildSearchEntries = query => c.rankPlayers(query).map(player => ({ kind: 'player', player }));
   c.renderResults();
   const resultHtml = elements['player-list'].innerHTML.replace(/<[^>]*>/g, '');
@@ -80,5 +90,14 @@ assert.equal(schedulePlayer.scheduledMatch, undefined);
     { firstName: 'Jeff', lastName: 'Heiss', fargoRate: 300 },
     { firstName: 'Darla', lastName: 'Rundle', fargoRate: 300 },
   ], [{ firstName: 'Alex', lastName: 'Alternate', fargoRate: 250 }]);
-  console.log('Graph member search passed: doubles, future Teams brackets, alternates, and team selection.');
+  await checkDivision('Singles Gold', 'Singles', 'Riley Test', [
+    { firstName: 'Riley', lastName: 'Test', fargoRate: 523 },
+  ], []);
+  await checkDivision('Singles Iron', 'Singles', 'Zero Test', [
+    { firstName: 'Zero', lastName: 'Test', fargoRate: 0 },
+  ], []);
+  await checkDivision('Singles Gold', 'Singles', 'Mike  Dryden', [
+    { firstName: 'Mike', lastName: 'Dryden', fargoRate: 526 },
+  ], []);
+  console.log('Graph member search and rating labels passed: doubles, Teams, alternates, Singles Gold, zero ratings, both layouts, and selection.');
 })();
