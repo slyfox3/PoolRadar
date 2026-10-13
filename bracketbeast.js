@@ -103,6 +103,7 @@
         identifier: m.matchName || r.roundName || null, round: roundNumber,
         p1: p1, p2: p2, s1: m.divisionPlayerId1Score, s2: m.divisionPlayerId2Score,
         p1Won: p1Won, p2Won: p2Won,
+        minimumPlace: r.minimumPlace, maximumPlace: r.maximumPlace,
         winnerTo: winnerTo[m.id] || null, loserTo: m.consolationMatchId || null,
         scheduledTime: status === 'NOT_STARTED' ? started : null,
         startTime: status === 'NOT_STARTED' ? null : started,
@@ -162,6 +163,51 @@
       match.s1 = row.s1;
       match.s2 = row.s2;
       match.inferredWinnerFromAdvancement = true;
+    });
+
+    // Round placement bands describe the loser only when that loss ends the
+    // run. Share the final place across every appearance of the participant,
+    // which is the same player.place contract used by the DigitalPool view.
+    var places = {}, winnerBracketChampion = null;
+    raw.forEach(function(item) {
+      var row = bracketByNum[item.match.id];
+      if (item.round.isWinnerRound && Number(item.round.roundName) === lastWinnerRound &&
+          row.status === 'COMPLETED' && (row.p1Won || row.p2Won)) {
+        winnerBracketChampion = row.p1Won ? row.p1 : row.p2;
+      }
+    });
+    raw.forEach(function(item) {
+      var row = bracketByNum[item.match.id], r = item.round;
+      if (row.is_bye || row.status !== 'COMPLETED' || !row.p1 || !row.p2 || (!row.p1Won && !row.p2Won)) return;
+      var lo = Number(r.minimumPlace), hi = Number(r.maximumPlace);
+      if (!Number.isInteger(lo) || !Number.isInteger(hi) || lo < 1 || hi < lo) return;
+      var winner = row.p1Won ? row.p1 : row.p2;
+      var loser = row.p1Won ? row.p2 : row.p1;
+      if (lo === 1 && hi === 2) {
+        var conditional = r.roundOutputType === 'ConditionalFinal' ||
+          (/^F1$/i.test(r.roundName || '') && raw.some(function(next) {
+            return /^F2$/i.test(next.round.roundName || '') || next.round.isDoubleFinal;
+          }));
+        if (conditional) {
+          // F1 settles the title only if the undefeated finalist wins. A
+          // challenger win requires the reset final; do not award places yet.
+          if (!winnerBracketChampion || winnerBracketChampion.id !== winner.id) return;
+          if (raw.some(function(next) {
+            return (next.round.isDoubleFinal || /^F2$/i.test(next.round.roundName || '')) &&
+              bracketByNum[next.match.id].status === 'COMPLETED' &&
+              (bracketByNum[next.match.id].p1Won || bracketByNum[next.match.id].p2Won);
+          })) return;
+        } else if (row.winnerTo && bracketByNum[row.winnerTo]) return;
+        places[winner.id] = '1';
+        places[loser.id] = '2';
+      } else if (!row.loserTo) {
+        places[loser.id] = lo === hi ? String(lo) : lo + '-' + hi;
+      }
+    });
+    Object.keys(bracketByNum).forEach(function(num) {
+      [bracketByNum[num].p1, bracketByNum[num].p2].forEach(function(participant) {
+        if (participant) participant.place = places[participant.id] || null;
+      });
     });
     anyLive = Object.keys(bracketByNum).some(function(num) { return bracketByNum[num].status === 'IN_PROGRESS'; });
     allDone = raw.length > 0 && Object.keys(bracketByNum).every(function(num) { return bracketByNum[num].status === 'COMPLETED'; });
